@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calderra</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Custom title bar -->
+  <div id="titlebar">
+    <span id="app-name">Calderra</span>
+    <div id="win-controls">
+      <button id="btn-theme" title="Toggle dark mode">&#9790;</button>
+      <button id="btn-min" title="Minimize">&#8211;</button>
+      <button id="btn-max" title="Maximize">&#9633;</button>
+      <button id="btn-close" title="Close">&#10005;</button>
+    </div>
+  </div>
+
+  <!-- Month timeline strip -->
+  <div id="month-strip">
+    <div id="month-nav-area">
+      <button id="prev-year" class="nav-arrow" title="Previous year">&#171;</button>
+      <button id="prev-month" class="nav-arrow" title="Previous month">&#8249;</button>
+      <span id="current-label"></span>
+      <button id="next-month" class="nav-arrow" title="Next month">&#8250;</button>
+      <button id="next-year" class="nav-arrow" title="Next year">&#187;</button>
+    </div>
+    <div id="month-tabs">
+      <button class="month-tab" data-month="0">Jan</button>
+      <button class="month-tab" data-month="1">Feb</button>
+      <button class="month-tab" data-month="2">Mar</button>
+      <button class="month-tab" data-month="3">Apr</button>
+      <button class="month-tab" data-month="4">May</button>
+      <button class="month-tab" data-month="5">Jun</button>
+      <button class="month-tab" data-month="6">Jul</button>
+      <button class="month-tab" data-month="7">Aug</button>
+      <button class="month-tab" data-month="8">Sep</button>
+      <button class="month-tab" data-month="9">Oct</button>
+      <button class="month-tab" data-month="10">Nov</button>
+      <button class="month-tab" data-month="11">Dec</button>
+    </div>
+  </div>
+
+  <!-- Calendar grid -->
+  <div id="calendar-wrapper">
+    <div id="calendar-header">
+      <span>Sun</span><span>Mon</span><span>Tue</span>
+      <span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+    </div>
+    <div id="calendar-grid"></div>
+  </div>
+
+  <!-- Day detail modal -->
+  <div id="modal-overlay" class="hidden">
+    <div id="modal">
+      <button id="modal-close">&#10005;</button>
+      <div id="modal-header">
+        <h2 id="modal-date"></h2>
+        <button id="btn-add-event">+ Add Event</button>
+      </div>
+      <div id="event-cards"></div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 /* ────────────────────────────────────────────────────────
-   Calderra – renderer.js
+   Caldera – renderer.js
    Multi-event calendar: each day holds an array of events.
    Data shape per day:
      { events: [{ id, image, time, notes }], featuredId }

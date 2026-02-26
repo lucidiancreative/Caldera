@@ -40,6 +40,16 @@ html, body {
   z-index: 100;
 }
 
+#app-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  opacity: 0.55;
+  margin-right: 6px;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
 #app-name {
   font-size: 13px;
   font-weight: 600;

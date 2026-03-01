@@ -10,6 +10,7 @@
   --accent:      #4f6ef7;
   --accent-soft: #e8ecff;
   --today-ring:  #e03030;
+  --star:        #f0a500;
   --titlebar-h:  36px;
   --strip-h:     56px;
   --header-h:    36px;
@@ -76,7 +77,7 @@ html, body {
   transition: background 0.15s;
 }
 #win-controls button:hover { background: #e0e0e0; }
-#btn-close:hover { background: #e03030 !important; color: #fff !important; }
+#win-controls #btn-close:hover { background: var(--today-ring); color: #fff; }
 
 /* ── Month strip ──────────────────────────────────────── */
 #month-strip {
@@ -421,8 +422,8 @@ body.dark #event-cards::-webkit-scrollbar-thumb:hover { background: #636366; }
   line-height: 1;
   transition: color 0.12s, transform 0.1s;
 }
-.btn-cover:hover { color: #f0a500; transform: scale(1.15); }
-.event-card.featured .btn-cover { color: #f0a500; cursor: default; }
+.btn-cover:hover { color: var(--star); transform: scale(1.15); }
+.event-card.featured .btn-cover { color: var(--star); cursor: default; }
 
 .cover-label {
   font-size: 10px;
@@ -449,10 +450,10 @@ body.dark #event-cards::-webkit-scrollbar-thumb:hover { background: #636366; }
   border-color: var(--accent);
   color: var(--accent);
 }
-.btn-del-card:hover {
-  background: #fdf0ef !important;
-  border-color: #e03030 !important;
-  color: #e03030 !important;
+.card-toolbar .btn-del-card:hover {
+  background: #fdf0ef;
+  border-color: var(--today-ring);
+  color: var(--today-ring);
 }
 
 .card-image-area {
@@ -585,7 +586,6 @@ body.dark #modal                      { box-shadow: 0 24px 64px rgba(0,0,0,0.6);
 body.dark .event-card                 { background: #111113; }
 body.dark .card-toolbar               { background: #1c1c1e; }
 
-/* Dark mode toggle */
-#btn-theme { font-size: 14px !important; }
-#btn-theme:hover { background: #e8ecff !important; color: var(--accent) !important; }
-body.dark #btn-theme:hover { background: var(--accent-soft) !important; color: var(--accent) !important; }
+/* Dark mode toggle — higher specificity beats #win-controls button rules */
+#win-controls #btn-theme { font-size: 14px; }
+#win-controls #btn-theme:hover { background: var(--accent-soft); color: var(--accent); }

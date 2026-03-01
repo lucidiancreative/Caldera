@@ -14,9 +14,6 @@ let viewMonth     = new Date().getMonth();
 let modalDate     = null;
 let pasteCellDate = null;
 
-const today    = new Date();
-const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
-
 // ── Boot ───────────────────────────────────────────────
 async function init() {
   applyTheme(localStorage.getItem('theme') === 'dark');
@@ -58,8 +55,20 @@ function formatTime12h(t) {
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
+// Returns today's date key — computed fresh each call so the app
+// stays correct if left open past midnight.
+function getTodayKey() {
+  const t = new Date();
+  return dateKey(t.getFullYear(), t.getMonth(), t.getDate());
+}
+
 async function save() {
   await api.saveData(calData);
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
 // ── Migration: old single-event format → new multi-event ──
@@ -111,10 +120,13 @@ function renderStrip() {
 }
 
 // ── Grid ───────────────────────────────────────────────
+// Cells are built synchronously first, then all resolveImage calls
+// fire in parallel via Promise.all so the grid never waits 31× in series.
 async function renderGrid() {
   const grid = document.getElementById('calendar-grid');
   grid.innerHTML = '';
 
+  const todayKey    = getTodayKey();
   const firstDay    = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
@@ -123,6 +135,8 @@ async function renderGrid() {
     blank.className = 'day-cell empty';
     grid.appendChild(blank);
   }
+
+  const imageResolves = [];
 
   for (let d = 1; d <= daysInMonth; d++) {
     const key  = dateKey(viewYear, viewMonth, d);
@@ -139,11 +153,15 @@ async function renderGrid() {
     const featured = getFeaturedEvent(key);
     if (featured?.image) {
       cell.classList.add('has-image');
-      const fullPath = await api.resolveImage(featured.image);
       const bg = document.createElement('div');
       bg.className = 'cell-bg';
-      bg.style.backgroundImage = `url("${fileUrl(fullPath)}")`;
       cell.insertBefore(bg, dayNum);
+      // Collect resolve promise — all will run concurrently below
+      imageResolves.push(
+        api.resolveImage(featured.image).then(fullPath => {
+          bg.style.backgroundImage = `url("${fileUrl(fullPath)}")`;
+        })
+      );
     }
 
     const count = calData[key]?.events?.length || 0;
@@ -171,6 +189,9 @@ async function renderGrid() {
 
     grid.appendChild(cell);
   }
+
+  // Resolve all image paths concurrently
+  await Promise.all(imageResolves);
 }
 
 async function refreshCell(key) {
@@ -517,7 +538,8 @@ function buildEventCard(key, ev, isFeatured) {
   notes.className   = 'card-notes';
   notes.placeholder = 'Notes\u2026';
   notes.value       = ev.notes || '';
-  notes.addEventListener('input', () => saveEventField(key, ev.id, 'notes', notes.value.trim()));
+  const saveNotes = debounce(() => saveEventField(key, ev.id, 'notes', notes.value.trim()), 400);
+  notes.addEventListener('input', saveNotes);
 
   fields.append(timeRow, notes);
   card.append(toolbar, imgArea, fields);

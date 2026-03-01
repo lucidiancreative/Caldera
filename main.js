@@ -62,7 +62,12 @@ ipcMain.handle('load-data', () => {
 
 // --- IPC: save data ---
 ipcMain.handle('save-data', (_event, data) => {
-  fs.writeFileSync(getDataPath(), JSON.stringify(data, null, 2), 'utf8');
+  try {
+    fs.writeFileSync(getDataPath(), JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[save-data] write failed:', err);
+    throw err;
+  }
 });
 
 // --- IPC: copy image file to userData/images ---
@@ -88,13 +93,19 @@ ipcMain.handle('save-image-buffer', (_event, buffer, fileName, ext) => {
 
 // --- IPC: delete image ---
 ipcMain.handle('delete-image', (_event, relPath) => {
-  const full = path.join(app.getPath('userData'), relPath);
+  const base = path.resolve(app.getPath('userData'));
+  const full = path.resolve(base, relPath);
+  // Guard against path-traversal (e.g. relPath = '../../sensitive')
+  if (!full.startsWith(base + path.sep)) return;
   if (fs.existsSync(full)) fs.unlinkSync(full);
 });
 
 // --- IPC: get full path for display ---
 ipcMain.handle('resolve-image', (_event, relPath) => {
-  return path.join(app.getPath('userData'), relPath);
+  const base = path.resolve(app.getPath('userData'));
+  const full = path.resolve(base, relPath);
+  if (!full.startsWith(base + path.sep)) throw new Error('Invalid image path');
+  return full;
 });
 
 // --- IPC: open file dialog ---

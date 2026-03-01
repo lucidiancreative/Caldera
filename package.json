@@ -23,7 +23,7 @@
       "build/icon.png"
     ],
     "win": {
-      "target": "nsis",
+      "target": "portable",
       "icon": "build/icon.png"
     },
     "nsis": {
@@ -32,6 +32,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^40.6.1"
+    "electron": "^40.6.1",
+    "electron-builder": "^25.1.8"
   }
 }

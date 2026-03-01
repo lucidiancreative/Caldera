@@ -1,7 +1,7 @@
 {
   "name": "caldera",
   "version": "1.0.0",
-  "description": "A minimal desktop calendar with image-per-day support",
+  "description": "A simple visual event calendar with drap and drop support",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

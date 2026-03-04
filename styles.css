@@ -559,6 +559,47 @@ body.dark #event-cards::-webkit-scrollbar-thumb:hover { background: #636366; }
   font-weight: 600;
 }
 
+/* ── Lightbox ─────────────────────────────────────────── */
+#lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  cursor: zoom-out;
+}
+#lightbox-overlay.hidden { display: none; }
+
+#lightbox-img {
+  max-width: 94vw;
+  max-height: 94vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+  cursor: default;
+  pointer-events: none;
+}
+
+#lightbox-close {
+  position: absolute;
+  top: 16px; right: 16px;
+  background: rgba(255,255,255,0.12);
+  border: none;
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  font-size: 14px;
+  color: #fff;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+  pointer-events: all;
+}
+#lightbox-close:hover { background: rgba(255,255,255,0.25); }
+
+.card-image-area.has-image { cursor: zoom-in; }
+
 /* ── Dark mode ────────────────────────────────────────── */
 body.dark {
   --bg:          #111113;

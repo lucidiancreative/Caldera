@@ -380,6 +380,17 @@ async function removeEventImage(key, eventId) {
   if (modalDate === key) renderEventCards(key);
 }
 
+// ── Lightbox ───────────────────────────────────────────
+function openLightbox(url) {
+  document.getElementById('lightbox-img').src = url;
+  document.getElementById('lightbox-overlay').classList.remove('hidden');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox-overlay').classList.add('hidden');
+  document.getElementById('lightbox-img').src = '';
+}
+
 // ── Modal ──────────────────────────────────────────────
 function openModal(key) {
   modalDate = key;
@@ -498,7 +509,9 @@ function buildEventCard(key, ev, isFeatured) {
   imgArea.append(img, noImg);
 
   if (ev.image) {
+    imgArea.classList.add('has-image');
     api.resolveImage(ev.image).then(p => { img.src = fileUrl(p); });
+    imgArea.addEventListener('click', () => { if (img.src) openLightbox(img.src); });
   }
 
   // Drag-drop on card image area → replaces this event's image
@@ -577,8 +590,17 @@ function bindUI() {
   document.getElementById('modal-overlay').addEventListener('click', (e) => {
     if (e.target === document.getElementById('modal-overlay')) closeModal();
   });
+
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+  document.getElementById('lightbox-overlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('lightbox-overlay')) closeLightbox();
+  });
+
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modalDate) closeModal();
+    if (e.key === 'Escape') {
+      if (!document.getElementById('lightbox-overlay').classList.contains('hidden')) closeLightbox();
+      else if (modalDate) closeModal();
+    }
   });
 
   document.getElementById('btn-add-event').addEventListener('click', () => {

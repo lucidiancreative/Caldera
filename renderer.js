@@ -8,11 +8,12 @@
 const api = window.calAPI;
 
 // ── State ──────────────────────────────────────────────
-let calData       = {};
-let viewYear      = new Date().getFullYear();
-let viewMonth     = new Date().getMonth();
-let modalDate     = null;
-let pasteCellDate = null;
+let calData         = {};
+let viewYear        = new Date().getFullYear();
+let viewMonth       = new Date().getMonth();
+let modalDate       = null;
+let pasteCellDate   = null;
+let renderedTodayKey = null;
 
 // ── Boot ───────────────────────────────────────────────
 async function init() {
@@ -127,6 +128,7 @@ async function renderGrid() {
   grid.innerHTML = '';
 
   const todayKey    = getTodayKey();
+  renderedTodayKey  = todayKey;
   const firstDay    = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
@@ -598,5 +600,15 @@ function changeYear(delta) {
   renderGrid();
 }
 
+// ── Day-change watcher ─────────────────────────────────
+// Polls every 60 s so the today-highlight updates correctly after
+// midnight or when the system wakes from sleep.
+function startDayChangeWatcher() {
+  setInterval(() => {
+    if (getTodayKey() !== renderedTodayKey) renderGrid();
+  }, 60_000);
+}
+
 // ── Start ──────────────────────────────────────────────
 init();
+startDayChangeWatcher();

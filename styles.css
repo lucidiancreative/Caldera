@@ -289,6 +289,7 @@ html, body {
 
 .day-cell.today .day-num {
   color: var(--today-ring);
+  font-size: 26px;
 }
 .day-cell.today.has-image .day-num {
   background: rgba(224, 48, 48, 0.75);

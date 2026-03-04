@@ -2,6 +2,9 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// Suppress Chromium GPU shader disk-cache errors on Windows
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+
 let mainWindow;
 
 function createWindow() {

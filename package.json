@@ -23,7 +23,7 @@
       "build/icon.png"
     ],
     "win": {
-      "target": "dir",
+      "target": ["nsis", "dir"],
       "icon": "build/icon.png"
     },
     "nsis": {

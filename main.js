@@ -41,77 +41,74 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// --- userData paths ---
-function getDataPath() {
-  return path.join(app.getPath('userData'), 'calendar-data.json');
-}
+// ---- Paths & helpers ----
 
-function getImagesDir() {
+const DATA_PATH = () => path.join(app.getPath('userData'), 'calendar-data.json');
+const IMAGES_DIR = () => {
   const dir = path.join(app.getPath('userData'), 'images');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
+};
+
+const ALLOWED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
+
+/** Resolve a relative path under userData and guard against path-traversal. */
+function resolveUserDataPath(relPath) {
+  const base = path.resolve(app.getPath('userData'));
+  const full = path.resolve(base, relPath);
+  if (!full.startsWith(base + path.sep)) throw new Error('Invalid path');
+  return full;
 }
 
-// --- IPC: load data ---
+/** Write content to the images dir and return the portable relative path. */
+function writeImage(destName, writeFn) {
+  const destPath = path.join(IMAGES_DIR(), destName);
+  writeFn(destPath);
+  return `images/${destName}`;
+}
+
+// ---- IPC: data persistence ----
+
 ipcMain.handle('load-data', () => {
-  const p = getDataPath();
-  if (!fs.existsSync(p)) return {};
+  const dataPath = DATA_PATH();
+  if (!fs.existsSync(dataPath)) return {};
   try {
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    return JSON.parse(fs.readFileSync(dataPath, 'utf8'));
   } catch {
     return {};
   }
 });
 
-// --- IPC: save data ---
 ipcMain.handle('save-data', (_event, data) => {
   try {
-    fs.writeFileSync(getDataPath(), JSON.stringify(data, null, 2), 'utf8');
+    fs.writeFileSync(DATA_PATH(), JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('[save-data] write failed:', err);
     throw err;
   }
 });
 
-// --- IPC: copy image file to userData/images ---
-// fileName = "YYYY-MM-DD-<eventId>" (no extension); extension taken from source
+// ---- IPC: image management ----
+
 ipcMain.handle('copy-image', (_event, sourcePath, fileName) => {
   const ext = path.extname(sourcePath).toLowerCase();
-  const allowed = ['.png', '.jpg', '.jpeg', '.webp'];
-  if (!allowed.includes(ext)) throw new Error('Unsupported file type');
-
-  const destName = `${fileName}${ext}`;
-  const destPath = path.join(getImagesDir(), destName);
-  fs.copyFileSync(sourcePath, destPath);
-  return `images/${destName}`;
+  if (!ALLOWED_IMAGE_EXTS.includes(ext)) throw new Error('Unsupported file type');
+  return writeImage(`${fileName}${ext}`, (dest) => fs.copyFileSync(sourcePath, dest));
 });
 
-// --- IPC: save image from buffer (paste) ---
 ipcMain.handle('save-image-buffer', (_event, buffer, fileName, ext) => {
-  const destName = `${fileName}${ext}`;
-  const destPath = path.join(getImagesDir(), destName);
-  fs.writeFileSync(destPath, Buffer.from(buffer));
-  return `images/${destName}`;
+  return writeImage(`${fileName}${ext}`, (dest) => fs.writeFileSync(dest, Buffer.from(buffer)));
 });
 
-// --- IPC: delete image ---
 ipcMain.handle('delete-image', (_event, relPath) => {
-  const base = path.resolve(app.getPath('userData'));
-  const full = path.resolve(base, relPath);
-  // Guard against path-traversal (e.g. relPath = '../../sensitive')
-  if (!full.startsWith(base + path.sep)) return;
+  const full = resolveUserDataPath(relPath);
   if (fs.existsSync(full)) fs.unlinkSync(full);
 });
 
-// --- IPC: get full path for display ---
 ipcMain.handle('resolve-image', (_event, relPath) => {
-  const base = path.resolve(app.getPath('userData'));
-  const full = path.resolve(base, relPath);
-  if (!full.startsWith(base + path.sep)) throw new Error('Invalid image path');
-  return full;
+  return resolveUserDataPath(relPath);
 });
 
-// --- IPC: open file dialog ---
 ipcMain.handle('open-file-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
@@ -121,7 +118,8 @@ ipcMain.handle('open-file-dialog', async () => {
   return result.filePaths[0];
 });
 
-// --- IPC: window controls ---
+// ---- IPC: window controls ----
+
 ipcMain.on('win-minimize', () => mainWindow.minimize());
 ipcMain.on('win-maximize', () => {
   if (mainWindow.isMaximized()) mainWindow.unmaximize();

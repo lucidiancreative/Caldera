@@ -819,6 +819,7 @@ function renderScheduleView(key) {
   const visibleBlocks = allBlocks.filter(b => b.ampm === clockAmPm);
   const svg           = buildClockSVG(key, visibleBlocks);
   area.appendChild(svg);
+  updateClockHand();
 
   renderBlockLegend(key, visibleBlocks, svg);
   renderTaskList(key, allBlocks, svg);
@@ -890,7 +891,6 @@ function buildClockSVG(key, blocks) {
   // Center dot
   svg.appendChild(el('circle', { class: 'clock-hand-dot', cx, cy, r: 5 }));
 
-  updateClockHand();
   bindClockInteraction(svg, cx, cy, r1, r2, key);
   return svg;
 }

@@ -841,6 +841,10 @@ function buildClockSVG(key, blocks) {
     return e;
   }
 
+  // Defs (for arc label text paths)
+  const defs = el('defs', {});
+  svg.appendChild(defs);
+
   // Clock face
   svg.appendChild(el('circle', { class: 'clock-face', cx, cy, r: R }));
 
@@ -878,6 +882,32 @@ function buildClockSVG(key, blocks) {
       showBlockPopup('edit', block, key, svg, cx, cy, R);
     });
     svg.appendChild(path);
+
+    // Curved label along the arc midline
+    const spanMin = (block.endMin - block.startMin + 720) % 720;
+    if (spanMin >= 30 && block.label) {
+      const rMid    = (r1 + r2) / 2;
+      const arcLen  = (spanMin / 720) * 2 * Math.PI * rMid;
+      const maxChars = Math.max(1, Math.floor(arcLen / 7));
+      const display  = block.label.length > maxChars
+        ? block.label.slice(0, maxChars - 1) + '\u2026'
+        : block.label;
+
+      const startAng = (block.startMin / 720) * 2 * Math.PI - Math.PI / 2;
+      const endAng   = startAng + (spanMin / 720) * 2 * Math.PI;
+      const large    = spanMin > 360 ? 1 : 0;
+      const lx1 = cx + rMid * Math.cos(startAng), ly1 = cy + rMid * Math.sin(startAng);
+      const lx2 = cx + rMid * Math.cos(endAng),   ly2 = cy + rMid * Math.sin(endAng);
+      const pathId = `arc-label-path-${block.id}`;
+
+      defs.appendChild(el('path', { id: pathId, d: `M ${lx1} ${ly1} A ${rMid} ${rMid} 0 ${large} 1 ${lx2} ${ly2}` }));
+
+      const tp = el('textPath', { href: `#${pathId}`, startOffset: '50%', 'text-anchor': 'middle' });
+      tp.textContent = display;
+      const textEl = el('text', { class: 'clock-block-label' });
+      textEl.appendChild(tp);
+      svg.appendChild(textEl);
+    }
   });
 
   // Preview arc (empty until drag)

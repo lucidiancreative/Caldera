@@ -922,6 +922,7 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 .clock-hand-dot { fill: var(--today-ring); }
 .clock-block-arc { opacity: 0.82; cursor: pointer; transition: opacity 0.1s; }
 .clock-block-arc:hover { opacity: 1; }
+.clock-block-label { font-size: 10px; font-weight: 700; fill: rgba(255,255,255,0.92); pointer-events: none; }
 .clock-preview  { opacity: 0.45; pointer-events: none; }
 .clock-ring-zone { fill: none; stroke: transparent; stroke-width: 52; cursor: crosshair; }
 

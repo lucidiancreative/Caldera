@@ -1,101 +1,89 @@
-# 🌋 Caldera
+# Caldera
 
-**Your calendar forgot what matters.**
+A lightweight, privacy-first desktop calendar for Windows that treats images as first-class data. Every day on the grid can display a photo, turning the calendar into a visual timeline. Includes a built-in analog clock scheduler for daily time blocking.
 
-Every calendar app wants to schedule your life — meetings, reminders, alerts. But nobody built one for the moments you actually want to remember. The photo your kid drew. The sunset from that Tuesday in October. The first day of a project that changed everything.
-
-So you scatter those moments across camera rolls, cloud folders, and notes apps you'll never reopen. Months pass. The memories blur. The timeline of your life lives nowhere.
-
-**Caldera puts it back in one place.**
-
-A free, lightweight desktop calendar for Windows where every day holds photos, notes, and events — turning your calendar into a living visual timeline you can see at a glance. See something worth remembering? Screenshot it, click a day, `Ctrl+V`. Done. Your calendar updates instantly with the image. No file dialogs, no imports, no friction.
-
-No accounts. No cloud. No subscriptions. Just your story, on your machine, forever.
+Built with Electron and vanilla HTML/CSS/JavaScript — no UI frameworks, no external dependencies.
 
 ---
 
-## ✦ What It Does
+## Core Features
 
-### 📋 Instant Screenshot Capture
-See it. Screenshot it. Paste it. Hit `Ctrl+V` on any day and your screenshot is immediately attached — the fastest way to log a moment, save a reference, or capture anything on your screen straight into your timeline.
+### Visual Calendar Grid
 
-### 🖼️ Visual-First Calendar
-Every day on the grid can display a photo — making your calendar a timeline you *see*, not just read.
+Each calendar cell can display a cover image, giving an at-a-glance visual summary of any month. Days with multiple events show a count badge and optional time label. Hovering over any cell with images triggers an animated scroll strip that cycles through all attached images in a seamless loop, with per-image segment heights calculated from natural aspect ratios to properly handle both portrait and landscape content.
 
-### 📅 Multiple Events Per Day
-Stack as many events as you need on any day, each with its own image, time, and notes. Choose which one shows as the **cover** on the grid.
+### Multi-Event Day System
 
-### 🖱️ Three Ways to Add Images
-- ↓ &nbsp; Drag and drop directly onto any day
-- ⌨️ &nbsp; Paste from clipboard
-- 📂 &nbsp; Browse with a file picker
+Each day supports an unlimited number of events, each with its own image, timestamp, and notes. One event per day can be designated as the **featured** event — its image becomes the cover shown on the calendar grid. Opening any day launches a detail modal with scrollable event cards, inline editing, and event management controls.
 
-### 📝 Rich Day Detail
-Click any day to open a full event view. Scroll through event cards, set cover priority, add or remove events on the fly.
+### Image Input
 
-### 🌙 Dark Mode
-A carefully designed dark theme, toggled instantly from the titlebar. Your preference is remembered between sessions.
+Three methods for attaching images to events:
 
-### 🔒 Completely Private
-All data — entries, images, everything — is stored locally in your Windows user folder. Nothing is ever sent anywhere.
+- **Clipboard paste** — copy any image, click a cell, `Ctrl+V`
+- **Drag and drop** — drag files directly onto any calendar cell or into the event modal
+- **File picker** — browse and select via the Assign button on any event card
 
-### ⚡ Minimal and Fast
-No bloat. No frameworks. Opens instantly and stays out of your way.
+Images are copied into a local data directory on attachment. A lightbox viewer is available for full-resolution inspection.
 
----
+### Analog Clock Scheduler
 
-## ✦ Getting Started
+A tab toggle switches between the calendar grid and an SVG-rendered analog clock face tied to the currently selected day. Time blocks are created by click-dragging arcs on a 12-hour ring. Each block supports a label, which renders as curved text along the arc midline using SVG `<textPath>` elements. Labels are auto-truncated when the arc span is too narrow. Blocks are color-coded and listed in a legend strip below the clock for quick editing and deletion.
 
-```
-1. Download Caldera.exe
-2. Run it — no installation required
-3. Click any day to open it
-4. Drag a photo onto the calendar or into the event modal
-5. Add notes and a time if you want
-6. That's it.
-```
+### Dark Mode
 
-> ⚠️ **First launch:** Windows may show a SmartScreen prompt since Caldera isn't signed by a paid certificate authority. Click **"More info"** → **"Run anyway"** — this only happens once.
+A dark theme is toggled from the titlebar and persisted to `localStorage` between sessions.
+
+### Local-Only Storage
+
+All data — event entries, images, preferences — is stored in the user's local app data directory. Nothing is transmitted externally. No accounts, no cloud sync, no telemetry.
 
 ---
 
-## ✦ Keyboard & Mouse
+## Controls
 
-| Action | How |
+| Action | Input |
 |---|---|
-| 📂 Open a day | Click any calendar cell |
-| 🖼️ Add image | Drag & drop onto cell or modal |
-| 📋 Paste image | Copy an image → click a cell → `Ctrl+V` |
-| 🔍 Browse for image | Click **Assign** on any event card |
-| ➕ Add event | Click **+ Add Event** in the modal |
-| ⭐ Set cover image | Click the ★ on any event card |
-| ◀ ▶ Switch month | Click a month tab or use the arrows |
-| « » Switch year | Click the outer arrows |
-| 🌙 Toggle dark mode | Click the moon / sun icon in the titlebar |
+| Open a day | Click any calendar cell |
+| Add image (clipboard) | Copy image → click cell → `Ctrl+V` |
+| Add image (drag & drop) | Drag file onto cell or modal |
+| Add image (file picker) | Click **Assign** on event card |
+| Add event | Click **+ Add Event** in the day modal |
+| Set cover image | Click the ★ on an event card |
+| Navigate months | Click month tabs or `‹` / `›` arrows |
+| Navigate years | Click `«` / `»` arrows |
+| Toggle dark mode | Click the moon/sun icon in the titlebar |
+| Toggle clock view | Click the clock tab |
+| Create time block | Click-drag an arc on the clock face |
 
 ---
 
-## ✦ System Requirements
+## System Requirements
 
-```
-OS      Windows 10 or later (64-bit)
-Space   ~150 MB
-RAM     ~120 MB while running
-```
-
----
-
-## ✦ Built With
-
-- ⚛️ &nbsp;[Electron](https://www.electronjs.org/) — cross-platform desktop runtime
-- 🍦 &nbsp;Vanilla HTML, CSS & JavaScript — zero UI frameworks, zero dependencies
+| | |
+|---|---|
+| **OS** | Windows 10+ (64-bit) |
+| **Disk** | ~150 MB |
+| **RAM** | ~120 MB at runtime |
 
 ---
 
-## ✦ License
+## Tech Stack
 
-MIT — free to use, share, and modify.
+- **Runtime:** [Electron](https://www.electronjs.org/)
+- **UI:** Vanilla HTML, CSS, JavaScript (zero framework dependencies)
+- **Clock renderer:** Inline SVG with computed arc geometry and `<textPath>` labels
+- **Animations:** CSS keyframe-driven scroll strips with per-image segment sizing
+- **Data persistence:** JSON flat file + local image directory via Electron IPC
 
 ---
 
-**[Download Caldera →](#)**
+## Installation
+
+Download and run `Caldera.exe` — no installation required. On first launch, Windows SmartScreen may prompt since the binary is unsigned; click **More info → Run anyway**.
+
+---
+
+## License
+
+MIT

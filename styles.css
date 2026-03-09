@@ -231,6 +231,28 @@ html, body {
 }
 .day-cell:hover .cell-bg { opacity: 1; }
 
+/* ── Today cell – vertical scroll strip ──────────────────── */
+.cell-scroll-strip {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  pointer-events: none;
+  will-change: transform;
+  opacity: 0.85;
+  transition: opacity 0.12s;
+}
+.day-cell:hover .cell-scroll-strip { opacity: 1; }
+
+.cell-scroll-segment {
+  width: 100%;
+  background-size: cover;
+  background-position: center;
+}
+
+@keyframes today-strip-scroll {
+  from { transform: translateY(0); }
+  to   { transform: translateY(var(--today-scroll-dist, 0px)); }
+}
+
 /* day number */
 .day-cell .day-num {
   position: absolute;

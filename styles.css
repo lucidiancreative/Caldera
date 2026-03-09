@@ -248,9 +248,9 @@ html, body {
   background-position: center;
 }
 
-@keyframes today-strip-scroll {
+@keyframes cell-strip-scroll {
   from { transform: translateY(0); }
-  to   { transform: translateY(var(--today-scroll-dist, 0px)); }
+  to   { transform: translateY(var(--scroll-dist, 0px)); }
 }
 
 /* day number */

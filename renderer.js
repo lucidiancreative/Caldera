@@ -14,7 +14,7 @@ let viewMonth       = new Date().getMonth();
 let modalDate       = null;
 let pasteCellDate   = null;
 let renderedTodayKey = null;
-let todayScrollObserver = null;
+let hoverCell = null;
 
 // ── Boot ───────────────────────────────────────────────
 async function init() {
@@ -135,9 +135,8 @@ function renderStrip() {
 // ── Grid ───────────────────────────────────────────────
 // Cells are built synchronously first, then all resolveImage calls
 // fire in parallel via Promise.all so the grid never waits 31× in series.
-// Today's cell is handled separately by setupTodayScrollStrip.
 async function renderGrid() {
-  if (todayScrollObserver) { todayScrollObserver.disconnect(); todayScrollObserver = null; }
+  hoverCell = null;
 
   const grid = document.getElementById('calendar-grid');
   grid.innerHTML = '';
@@ -154,15 +153,13 @@ async function renderGrid() {
   }
 
   const imageResolves = [];
-  let todayCellEl = null;
 
   for (let d = 1; d <= daysInMonth; d++) {
-    const key     = dateKey(viewYear, viewMonth, d);
-    const isToday = key === todayKey;
-    const cell    = document.createElement('div');
+    const key  = dateKey(viewYear, viewMonth, d);
+    const cell = document.createElement('div');
     cell.className    = 'day-cell';
     cell.dataset.date = key;
-    if (isToday) { cell.classList.add('today'); todayCellEl = cell; }
+    if (key === todayKey) cell.classList.add('today');
 
     const dayNum = document.createElement('span');
     dayNum.className = 'day-num';
@@ -170,9 +167,7 @@ async function renderGrid() {
     cell.appendChild(dayNum);
 
     const featured = getFeaturedEvent(key);
-
-    // Today's image is handled by setupTodayScrollStrip after the grid renders
-    if (!isToday && featured?.image) {
+    if (featured?.image) {
       cell.classList.add('has-image');
       const bg = document.createElement('div');
       bg.className = 'cell-bg';
@@ -205,46 +200,46 @@ async function renderGrid() {
     cell.addEventListener('dragleave', onCellDragLeave);
     cell.addEventListener('drop',      onDrop);
     cell.addEventListener('click',     () => openModal(key));
-    cell.addEventListener('mouseenter', () => { pasteCellDate = key; });
-    cell.addEventListener('mouseleave', () => { pasteCellDate = null; });
+    cell.addEventListener('mouseenter', () => {
+      pasteCellDate = key;
+      if (calData[key]?.events?.some(e => e.image)) {
+        setupHoverScrollStrip(cell, key).catch(console.error);
+      }
+    });
+    cell.addEventListener('mouseleave', () => {
+      pasteCellDate = null;
+      teardownHoverScrollStrip(cell);
+    });
 
     grid.appendChild(cell);
   }
 
-  // Resolve all non-today image paths concurrently
+  // Resolve all image paths concurrently
   await Promise.all(imageResolves);
-
-  // Set up today's scroll strip (async; does not block grid display)
-  if (todayCellEl) setupTodayScrollStrip(todayCellEl, todayKey).catch(console.error);
 }
 
 async function refreshCell(key) {
   const cell = document.querySelector(`.day-cell[data-date="${key}"]`);
   if (!cell) return;
 
-  const isToday  = key === getTodayKey();
-  const featured = getFeaturedEvent(key);
+  // If this cell has an active hover strip, cancel it
+  if (hoverCell === cell) hoverCell = null;
 
   cell.querySelector('.cell-bg')?.remove();
   cell.querySelector('.cell-scroll-strip')?.remove();
   cell.querySelector('.cell-time')?.remove();
   cell.querySelector('.cell-count')?.remove();
 
-  if (isToday) {
-    if (todayScrollObserver) { todayScrollObserver.disconnect(); todayScrollObserver = null; }
-    cell.classList.remove('has-image');
-    await setupTodayScrollStrip(cell, key);
+  const featured = getFeaturedEvent(key);
+  if (featured?.image) {
+    cell.classList.add('has-image');
+    const fullPath = await api.resolveImage(featured.image);
+    const bg = document.createElement('div');
+    bg.className = 'cell-bg';
+    bg.style.backgroundImage = `url("${fileUrl(fullPath)}")`;
+    cell.insertBefore(bg, cell.querySelector('.day-num'));
   } else {
-    if (featured?.image) {
-      cell.classList.add('has-image');
-      const fullPath = await api.resolveImage(featured.image);
-      const bg = document.createElement('div');
-      bg.className = 'cell-bg';
-      bg.style.backgroundImage = `url("${fileUrl(fullPath)}")`;
-      cell.insertBefore(bg, cell.querySelector('.day-num'));
-    } else {
-      cell.classList.remove('has-image');
-    }
+    cell.classList.remove('has-image');
   }
 
   const count = calData[key]?.events?.length || 0;
@@ -263,15 +258,18 @@ async function refreshCell(key) {
   }
 }
 
-// ── Today scroll strip ──────────────────────────────────
-// Builds a vertically-scrolling strip of all images for today's cell.
+// ── Hover scroll strip ──────────────────────────────────
+// On mouseenter: builds a vertically-scrolling strip over the hovered cell.
 // Each segment height = max(cellHeight, cellWidth × imgH/imgW) so portrait
 // images scroll through more content at the same px/s rate.
-async function setupTodayScrollStrip(cell, key) {
+// Cell size is stable during hover, so we measure once — no ResizeObserver needed.
+async function setupHoverScrollStrip(cell, key) {
+  hoverCell = cell;
+
   const day = calData[key];
   if (!day?.events?.length) return;
 
-  // All events that have images, featured image first
+  // All events with images, featured image first
   const withImages = day.events.filter(e => e.image);
   if (!withImages.length) return;
   withImages.sort((a, b) => {
@@ -279,8 +277,6 @@ async function setupTodayScrollStrip(cell, key) {
     if (b.id === day.featuredId) return 1;
     return 0;
   });
-
-  cell.classList.add('has-image');
 
   const strip = document.createElement('div');
   strip.className = 'cell-scroll-strip';
@@ -295,7 +291,8 @@ async function setupTodayScrollStrip(cell, key) {
     })
   );
 
-  const isMulti = imageInfo.length > 1;
+  // Bail if the mouse left this cell while images were loading
+  if (hoverCell !== cell) return;
 
   // One segment per image
   const segments = imageInfo.map(({ url }) => {
@@ -306,56 +303,38 @@ async function setupTodayScrollStrip(cell, key) {
     return seg;
   });
 
-  // Clone of first segment appended at the end for a seamless loop
-  let clone = null;
-  if (isMulti) {
-    clone = document.createElement('div');
-    clone.className = 'cell-scroll-segment';
-    clone.style.backgroundImage = `url("${imageInfo[0].url}")`;
-    strip.appendChild(clone);
-  }
+  // Clone of first segment for seamless continuous loop
+  const clone = document.createElement('div');
+  clone.className = 'cell-scroll-segment';
+  clone.style.backgroundImage = `url("${imageInfo[0].url}")`;
+  strip.appendChild(clone);
 
+  // Remove any stale strip before inserting (handles rapid re-hover on same cell)
+  cell.querySelector('.cell-scroll-strip')?.remove();
   cell.insertBefore(strip, cell.querySelector('.day-num'));
 
-  // Measure cell and (re)start animation whenever the cell is resized
-  if (todayScrollObserver) todayScrollObserver.disconnect();
-  todayScrollObserver = new ResizeObserver(debounce(() => {
-    const cellH = cell.offsetHeight;
-    const cellW = cell.offsetWidth;
-    if (cellH <= 0 || cellW <= 0) return;
+  // Measure cell once — size is stable for the duration of the hover
+  const cellH = cell.offsetHeight;
+  const cellW = cell.offsetWidth;
 
-    // Segment height = natural image height scaled to cell width,
-    // minimum cellH so landscape images still fill the cell.
-    const segHeights = imageInfo.map(({ size }) =>
-      Math.max(cellH, size.w > 0 ? Math.round(cellW * size.h / size.w) : cellH)
-    );
+  // Segment height = natural image height scaled to cell width,
+  // minimum cellH so landscape images still fill the cell.
+  const segHeights = imageInfo.map(({ size }) =>
+    Math.max(cellH, size.w > 0 ? Math.round(cellW * size.h / size.w) : cellH)
+  );
 
-    segments.forEach((seg, i) => { seg.style.height = segHeights[i] + 'px'; });
-    if (clone) clone.style.height = segHeights[0] + 'px';
+  segments.forEach((seg, i) => { seg.style.height = segHeights[i] + 'px'; });
+  clone.style.height = segHeights[0] + 'px';
 
-    // Flush any existing animation before restarting
-    strip.style.animation = 'none';
-    strip.offsetHeight; // force reflow
+  const totalTravel = segHeights.reduce((a, b) => a + b, 0);
+  const duration    = (totalTravel / SCROLL_PX_PER_SEC).toFixed(2);
+  strip.style.setProperty('--scroll-dist', `-${totalTravel}px`);
+  strip.style.animation = `cell-strip-scroll ${duration}s linear infinite`;
+}
 
-    if (isMulti) {
-      // Scroll through all segments then seamlessly loop via the clone
-      const totalTravel = segHeights.reduce((a, b) => a + b, 0);
-      const duration    = (totalTravel / SCROLL_PX_PER_SEC).toFixed(2);
-      strip.style.setProperty('--today-scroll-dist', `-${totalTravel}px`);
-      strip.style.animation = `today-strip-scroll ${duration}s linear infinite`;
-    } else {
-      // Single image: pan from top to bottom and back
-      const travel = segHeights[0] - cellH;
-      if (travel > 1) {
-        const duration = (travel / SCROLL_PX_PER_SEC).toFixed(2);
-        strip.style.setProperty('--today-scroll-dist', `-${travel}px`);
-        strip.style.animation = `today-strip-scroll ${duration}s ease-in-out infinite alternate`;
-      }
-      // Landscape images (travel ≤ 1) show no animation — expected behaviour
-    }
-  }, 150));
-
-  todayScrollObserver.observe(cell);
+function teardownHoverScrollStrip(cell) {
+  hoverCell = null;
+  cell.querySelector('.cell-scroll-strip')?.remove();
 }
 
 // ── Drag & Drop (cells) ────────────────────────────────

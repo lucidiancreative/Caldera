@@ -43,6 +43,10 @@
       <button class="month-tab" data-month="10">Nov</button>
       <button class="month-tab" data-month="11">Dec</button>
     </div>
+    <div id="view-tabs">
+      <button class="view-tab active" data-view="calendar">Calendar</button>
+      <button class="view-tab" data-view="schedule">Schedule</button>
+    </div>
   </div>
 
   <!-- Calendar grid -->
@@ -52,6 +56,38 @@
       <span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
     </div>
     <div id="calendar-grid"></div>
+  </div>
+
+  <!-- Schedule view -->
+  <div id="schedule-view" class="hidden">
+    <div id="schedule-date-nav">
+      <button id="sched-prev-day" class="nav-arrow" title="Previous day">&#8249;</button>
+      <span id="sched-date-label"></span>
+      <button id="sched-next-day" class="nav-arrow" title="Next day">&#8250;</button>
+    </div>
+    <div id="schedule-content">
+      <div id="task-list"></div>
+      <div id="clock-column">
+        <div id="reschedule-banner" class="hidden">
+          Move &#8220;<span id="reschedule-label"></span>&#8221; to:
+          <input id="reschedule-date-input" type="date" />
+          <button id="reschedule-confirm">Move</button>
+          <button id="reschedule-cancel">&#10005;</button>
+        </div>
+        <div id="ampm-toggle">
+          <button class="ampm-btn active" data-ampm="AM">AM</button>
+          <button class="ampm-btn" data-ampm="PM">PM</button>
+        </div>
+        <div id="clock-area"></div>
+        <div id="block-legend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Block label popup -->
+  <div id="block-label-popup" class="hidden">
+    <input id="block-label-input" type="text" placeholder="Label this block…" autocomplete="off" />
+    <button id="block-label-del" title="Delete block">&#10005;</button>
   </div>
 
   <!-- Day detail modal -->

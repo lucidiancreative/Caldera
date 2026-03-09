@@ -748,6 +748,11 @@ function bindUI() {
   document.getElementById('btn-add-event').addEventListener('click', () => {
     if (modalDate) addEmptyEvent(modalDate);
   });
+
+  document.getElementById('btn-schedule-day').addEventListener('click', () => {
+    closeModal();
+    switchView('schedule');
+  });
 }
 
 function changeMonth(delta) {

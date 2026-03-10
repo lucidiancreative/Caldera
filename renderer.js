@@ -21,6 +21,10 @@ let clockDrag       = null;
 let popupState      = null;
 let clockAmPm       = 'AM';
 let rescheduleBlock = null;
+let hoveredBlock    = null; // { block, key } – block the cursor is over on the clock face
+const undoStack     = [];
+const redoStack     = [];
+const MAX_HISTORY   = 50;
 const BLOCK_COLORS = ['#4f6ef7', '#e03030', '#2eb67d', '#f0a500', '#a259ff', '#ff6b35'];
 
 // ── Boot ───────────────────────────────────────────────
@@ -75,6 +79,22 @@ async function save() {
   await api.saveData(calData);
 }
 
+function pushHistory() {
+  undoStack.push(JSON.stringify(calData));
+  if (undoStack.length > MAX_HISTORY) undoStack.shift();
+  redoStack.length = 0; // clear redo on any new action
+}
+
+async function applyHistory(snapshot) {
+  calData = JSON.parse(snapshot);
+  await save();
+  renderGrid();
+  renderStrip();
+  if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
+  if (modalDate && !document.getElementById('modal-overlay').classList.contains('hidden'))
+    renderEventCards(modalDate);
+}
+
 function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
@@ -95,6 +115,10 @@ function getImageNaturalSize(url) {
 function migrateData(raw) {
   const out = {};
   for (const [key, val] of Object.entries(raw)) {
+    if (key === '_recurring') {
+      out._recurring = Array.isArray(val) ? val : [];
+      continue;
+    }
     if (val.events) {
       out[key] = val;
       if (!out[key].timeBlocks) out[key].timeBlocks = [];
@@ -110,6 +134,7 @@ function migrateData(raw) {
       };
     }
   }
+  if (!out._recurring) out._recurring = [];
   return out;
 }
 
@@ -118,6 +143,18 @@ function getDay(key) {
   if (!calData[key]) calData[key] = { events: [], featuredId: null, timeBlocks: [] };
   if (!calData[key].timeBlocks) calData[key].timeBlocks = [];
   return calData[key];
+}
+
+function getRecurringBlocksForDate(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return (calData._recurring || []).filter(b => {
+    if (b.excludedDates?.includes(key)) return false;
+    if (b.recurrence === 'daily')   return true;
+    if (b.recurrence === 'weekly')  return date.getDay() === b.dayOfWeek;
+    if (b.recurrence === 'monthly') return d === b.dayOfMonth;
+    return false;
+  });
 }
 
 function getFeaturedEvent(key) {
@@ -422,6 +459,7 @@ async function addEventWithImage(key, id, relPath) {
 }
 
 async function addEmptyEvent(key) {
+  pushHistory();
   const day = getDay(key);
   const id  = genId();
   day.events.push({ id, image: null, notes: '', time: '' });
@@ -431,6 +469,7 @@ async function addEmptyEvent(key) {
 }
 
 async function removeEvent(key, eventId) {
+  pushHistory();
   const day = calData[key];
   if (!day) return;
 
@@ -447,6 +486,7 @@ async function removeEvent(key, eventId) {
 }
 
 async function setFeatured(key, eventId) {
+  pushHistory();
   const day = calData[key];
   if (!day) return;
   day.featuredId = eventId;
@@ -456,6 +496,7 @@ async function setFeatured(key, eventId) {
 }
 
 async function saveEventField(key, eventId, field, value) {
+  pushHistory();
   const day = calData[key];
   if (!day) return;
   const ev = day.events.find(e => e.id === eventId);
@@ -742,6 +783,38 @@ function bindUI() {
       if (!document.getElementById('lightbox-overlay').classList.contains('hidden')) closeLightbox();
       else if (modalDate) closeModal();
       else if (rescheduleBlock) cancelReschedule();
+      return;
+    }
+
+    const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+
+    // Backspace over a hovered clock block → delete it
+    if (e.key === 'Backspace' && hoveredBlock && !inInput) {
+      e.preventDefault();
+      const { block, key } = hoveredBlock;
+      hoveredBlock = null;
+      deleteTimeBlock(key, block.id, block._recurring ? 'all' : undefined);
+      return;
+    }
+
+    // Ctrl+Z → undo
+    if (e.ctrlKey && e.key === 'z' && !e.shiftKey && !inInput) {
+      e.preventDefault();
+      if (undoStack.length) {
+        redoStack.push(JSON.stringify(calData));
+        applyHistory(undoStack.pop());
+      }
+      return;
+    }
+
+    // Ctrl+Shift+Z → redo
+    if (e.ctrlKey && e.shiftKey && e.key === 'Z' && !inInput) {
+      e.preventDefault();
+      if (redoStack.length) {
+        undoStack.push(JSON.stringify(calData));
+        applyHistory(redoStack.pop());
+      }
+      return;
     }
   });
 
@@ -815,8 +888,14 @@ function renderScheduleView(key) {
   const area = document.getElementById('clock-area');
   area.innerHTML = '';
 
-  const allBlocks     = calData[key]?.timeBlocks || [];
-  const visibleBlocks = allBlocks.filter(b => b.ampm === clockAmPm);
+  const allDateBlocks = calData[key]?.timeBlocks || [];
+  const recurBlocks   = getRecurringBlocksForDate(key).map(b => ({
+    ...b,
+    completed:  b.completedDates?.includes(key) || false,
+    _recurring: true,
+  }));
+  const allBlocks     = [...allDateBlocks, ...recurBlocks];
+  const visibleBlocks = allBlocks; // all blocks shown on both AM and PM clock views
   const svg           = buildClockSVG(key, visibleBlocks);
   area.appendChild(svg);
   updateClockHand();
@@ -872,16 +951,26 @@ function buildClockSVG(key, blocks) {
   // Existing time blocks (drawn below preview + hand)
   blocks.forEach(block => {
     const isRescheduling = rescheduleBlock?.id === block.id;
-    const path = el('path', {
-      class: 'clock-block-arc' + (isRescheduling ? ' rescheduling-arc' : ''),
-      d:     arcPath(cx, cy, r1, r2, block.startMin, block.endMin),
-      fill:  block.color,
+    const isCrossover    = block.ampm !== clockAmPm;
+
+    // Wrap arc + label in a group so opacity applies to both
+    const g = el('g', {
+      class: (isRescheduling ? 'rescheduling-arc' : '') +
+             (isCrossover    ? ' crossover-arc'    : ''),
     });
-    path.addEventListener('click', (e) => {
+    g.addEventListener('click', (e) => {
       e.stopPropagation();
       showBlockPopup('edit', block, key, svg, cx, cy, R);
     });
-    svg.appendChild(path);
+    g.addEventListener('mouseenter', () => { hoveredBlock = { block, key }; });
+    g.addEventListener('mouseleave', () => { hoveredBlock = null; });
+
+    const path = el('path', {
+      class: 'clock-block-arc' + (block._recurring ? ' recurring-arc' : ''),
+      d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin),
+      fill: block.color,
+    });
+    g.appendChild(path);
 
     // Curved label along the arc midline
     const spanMin = (block.endMin - block.startMin + 720) % 720;
@@ -906,8 +995,10 @@ function buildClockSVG(key, blocks) {
       tp.textContent = display;
       const textEl = el('text', { class: 'clock-block-label' });
       textEl.appendChild(tp);
-      svg.appendChild(textEl);
+      g.appendChild(textEl);
     }
+
+    svg.appendChild(g);
   });
 
   // Preview arc (empty until drag)
@@ -1003,13 +1094,26 @@ function bindClockInteraction(svg, cx, cy, r1, r2, key) {
 
 // ── Block popup ─────────────────────────────────────────
 function showBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
-  const popup  = document.getElementById('block-label-popup');
-  const input  = document.getElementById('block-label-input');
-  const delBtn = document.getElementById('block-label-del');
+  const popup          = document.getElementById('block-label-popup');
+  const input          = document.getElementById('block-label-input');
+  const confirmBtn     = document.getElementById('block-label-confirm');
+  const delBtn         = document.getElementById('block-label-del');
+  const recurSel       = document.getElementById('block-recurrence-select');
+  const scopeRow       = document.getElementById('block-scope-row');
   const { startMin, endMin, id, label } = blockOrData;
+  const isRecurring    = !!blockOrData._recurring;
 
   popupState = { mode, key, startMin, endMin, id };
-  input.value = label || '';
+  input.value    = label || '';
+  recurSel.value = isRecurring ? (blockOrData.recurrence || 'daily') : 'none';
+
+  // Scope row: visible only when editing an existing recurring block
+  if (mode === 'edit' && isRecurring) {
+    scopeRow.classList.remove('hidden');
+    scopeRow.querySelector('input[value="all"]').checked = true;
+  } else {
+    scopeRow.classList.add('hidden');
+  }
 
   // Position near arc midpoint (SVG → screen)
   const spanMin = (endMin - startMin + 720) % 720;
@@ -1021,23 +1125,29 @@ function showBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
   const sy      = rect.top  + (cy + r * Math.sin(ang)) * (rect.height / 400);
 
   popup.style.left = Math.min(sx - 10,  window.innerWidth  - 260) + 'px';
-  popup.style.top  = Math.min(sy - 20,  window.innerHeight - 60)  + 'px';
+  popup.style.top  = Math.min(sy - 20,  window.innerHeight - 180) + 'px';
   delBtn.title = mode === 'new' ? 'Cancel' : 'Delete block';
 
   popup.classList.remove('hidden');
   input.focus();
 
+  function getScope() {
+    return scopeRow.querySelector('input[name="block-scope"]:checked')?.value || 'all';
+  }
+
   function commit() {
-    const lbl = input.value.trim();
+    const lbl        = input.value.trim();
+    const recurrence = recurSel.value;
+    const scope      = getScope();
     closeBlockPopup();
     if (!lbl) {
-      if (mode === 'edit' && id) deleteTimeBlock(key, id);
+      if (mode === 'edit' && id) deleteTimeBlock(key, id, isRecurring ? scope : undefined);
       return;
     }
     if (mode === 'new') {
-      saveTimeBlock(key, { startMin, endMin, label: lbl });
+      saveTimeBlock(key, { startMin, endMin, label: lbl }, recurrence);
     } else if (mode === 'edit' && id) {
-      updateTimeBlockLabel(key, id, lbl);
+      updateTimeBlock(key, id, lbl, recurrence, scope);
     }
   }
 
@@ -1045,18 +1155,37 @@ function showBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
     if (ev.key === 'Enter')  { ev.preventDefault(); commit(); }
     if (ev.key === 'Escape') { closeBlockPopup(); }
   }
-  // Delay blur so the delete-button click fires first
-  function onBlur() { setTimeout(() => { if (popupState) commit(); }, 150); }
-  function onDel()  { closeBlockPopup(); if (mode === 'edit' && id) deleteTimeBlock(key, id); }
+  // Delay blur so the delete-button click fires first;
+  // only commit if focus has moved outside the popup entirely (not to the select/radios inside it)
+  function onBlur() { setTimeout(() => { if (popupState && !popup.contains(document.activeElement)) commit(); }, 150); }
+  function onDel()  {
+    const scope = getScope();
+    closeBlockPopup();
+    if (mode === 'edit' && id) deleteTimeBlock(key, id, isRecurring ? scope : undefined);
+  }
 
-  input.addEventListener('keydown', onKeyDown);
-  input.addEventListener('blur',    onBlur);
-  delBtn.addEventListener('click',  onDel);
+  input.addEventListener('keydown',    onKeyDown);
+  input.addEventListener('blur',       onBlur);
+  confirmBtn.addEventListener('click', commit);
+  delBtn.addEventListener('click',     onDel);
+
+  // When recurrence select changes, show/hide scope row accordingly
+  function onRecurChange() {
+    if (mode === 'edit' && isRecurring) {
+      // scope row stays visible regardless (block is already recurring)
+    } else {
+      // for new blocks or non-recurring edits, no scope needed
+      scopeRow.classList.add('hidden');
+    }
+  }
+  recurSel.addEventListener('change', onRecurChange);
 
   popupState._cleanup = () => {
-    input.removeEventListener('keydown', onKeyDown);
-    input.removeEventListener('blur',    onBlur);
-    delBtn.removeEventListener('click',  onDel);
+    input.removeEventListener('keydown',    onKeyDown);
+    input.removeEventListener('blur',       onBlur);
+    confirmBtn.removeEventListener('click', commit);
+    delBtn.removeEventListener('click',     onDel);
+    recurSel.removeEventListener('change',  onRecurChange);
   };
 }
 
@@ -1068,23 +1197,111 @@ function closeBlockPopup() {
 }
 
 // ── Time block data operations ──────────────────────────
-function saveTimeBlock(key, { startMin, endMin, label }) {
-  const day   = getDay(key);
-  const color = BLOCK_COLORS[day.timeBlocks.length % BLOCK_COLORS.length];
-  day.timeBlocks.push({ id: genId(), startMin, endMin, label, color, ampm: clockAmPm, completed: false });
+function saveTimeBlock(key, { startMin, endMin, label }, recurrence = 'none') {
+  pushHistory();
+  if (recurrence === 'none') {
+    const day   = getDay(key);
+    const color = BLOCK_COLORS[day.timeBlocks.length % BLOCK_COLORS.length];
+    day.timeBlocks.push({ id: genId(), startMin, endMin, label, color, ampm: clockAmPm, completed: false });
+  } else {
+    if (!calData._recurring) calData._recurring = [];
+    const color = BLOCK_COLORS[calData._recurring.length % BLOCK_COLORS.length];
+    const [y, m, d] = key.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    calData._recurring.push({
+      id: genId(), startMin, endMin, label, color, ampm: clockAmPm,
+      recurrence,
+      dayOfWeek:  date.getDay(),
+      dayOfMonth: d,
+      completedDates: [],
+      excludedDates:  [],
+    });
+  }
   save();
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
-function updateTimeBlockLabel(key, blockId, label) {
-  const block = calData[key]?.timeBlocks?.find(b => b.id === blockId);
-  if (!block) return;
-  block.label = label;
+function updateTimeBlock(key, blockId, label, recurrence, scope) {
+  pushHistory();
+  const recurring    = calData._recurring || [];
+  const rIdx         = recurring.findIndex(b => b.id === blockId);
+  const isRecurring  = rIdx !== -1;
+
+  if (isRecurring) {
+    const block = recurring[rIdx];
+    if (scope === 'today') {
+      // Exclude today from recurrence; create a one-off override on this date
+      if (!block.excludedDates) block.excludedDates = [];
+      block.excludedDates.push(key);
+      const day = getDay(key);
+      day.timeBlocks.push({
+        id: genId(), startMin: block.startMin, endMin: block.endMin,
+        label, color: block.color, ampm: block.ampm, completed: false,
+      });
+    } else {
+      // Update the template for all occurrences
+      block.label = label;
+      if (recurrence === 'none') {
+        // Convert to a one-off block on the current view date
+        recurring.splice(rIdx, 1);
+        const day = getDay(key);
+        const completed = block.completedDates?.includes(key) || false;
+        day.timeBlocks.push({
+          id: block.id, startMin: block.startMin, endMin: block.endMin,
+          label, color: block.color, ampm: block.ampm, completed,
+        });
+      } else {
+        block.recurrence = recurrence;
+        const [y, m, d] = key.split('-').map(Number);
+        const date = new Date(y, m - 1, d);
+        block.dayOfWeek  = date.getDay();
+        block.dayOfMonth = d;
+      }
+    }
+  } else {
+    // Date-specific block
+    const block = calData[key]?.timeBlocks?.find(b => b.id === blockId);
+    if (!block) return;
+    block.label = label;
+    if (recurrence !== 'none') {
+      // Promote to recurring
+      calData[key].timeBlocks = calData[key].timeBlocks.filter(b => b.id !== blockId);
+      if (!calData._recurring) calData._recurring = [];
+      const [y, m, d] = key.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      calData._recurring.push({
+        id: block.id, startMin: block.startMin, endMin: block.endMin,
+        label, color: block.color, ampm: block.ampm,
+        recurrence,
+        dayOfWeek:  date.getDay(),
+        dayOfMonth: d,
+        completedDates: block.completed ? [key] : [],
+        excludedDates:  [],
+      });
+    }
+  }
   save();
-  if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
+  if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
 }
 
-function deleteTimeBlock(key, blockId) {
+function deleteTimeBlock(key, blockId, scope) {
+  pushHistory();
+  const recurring = calData._recurring || [];
+  const rIdx      = recurring.findIndex(b => b.id === blockId);
+  if (rIdx !== -1) {
+    // scope: 'today' = exclude this date; 'all' or undefined = remove template
+    // 'prompt' = called from task list delete button (treat same as 'all' — popup handles scoping)
+    if (scope === 'today') {
+      const block = recurring[rIdx];
+      if (!block.excludedDates) block.excludedDates = [];
+      block.excludedDates.push(key);
+    } else {
+      recurring.splice(rIdx, 1);
+    }
+    save();
+    if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
+    return;
+  }
   const day = calData[key];
   if (!day?.timeBlocks) return;
   day.timeBlocks = day.timeBlocks.filter(b => b.id !== blockId);
@@ -1108,7 +1325,7 @@ function renderBlockLegend(key, blocks, svg) {
   blocks.forEach(block => {
     const chip = document.createElement('span');
     chip.className   = 'block-chip';
-    chip.textContent = block.label;
+    chip.textContent = block._recurring ? block.label + ' \u21BB' : block.label;
     chip.style.background = block.color;
     chip.title = `${formatMin(block.startMin)} – ${formatMin(block.endMin, block.ampm)}`;
     chip.addEventListener('click', () => showBlockPopup('edit', block, key, svg, 200, 200, 170));
@@ -1159,8 +1376,14 @@ function renderTaskList(key, allBlocks, svg) {
     body.className = 'task-body';
 
     const lbl = document.createElement('div');
-    lbl.className   = 'task-label';
+    lbl.className = 'task-label';
     lbl.textContent = block.label;
+    if (block._recurring) {
+      const badge = document.createElement('span');
+      badge.className   = 'task-recur-badge';
+      badge.textContent = '\u21BB'; // ↻
+      lbl.appendChild(badge);
+    }
 
     const timeEl = document.createElement('div');
     timeEl.className   = 'task-time';
@@ -1182,12 +1405,41 @@ function renderTaskList(key, allBlocks, svg) {
     btnReschedule.title       = 'Move to another day';
     btnReschedule.textContent = '\u29C9'; // ⧉ (move/copy icon)
     btnReschedule.addEventListener('click', () => startReschedule(block, key));
+    if (block._recurring) btnReschedule.style.display = 'none';
 
     const btnDel = document.createElement('button');
     btnDel.className   = 'task-btn task-btn-del';
     btnDel.title       = 'Delete block';
     btnDel.textContent = '\u00D7'; // ×
-    btnDel.addEventListener('click', () => deleteTimeBlock(key, block.id));
+    btnDel.addEventListener('click', () => {
+      if (block._recurring) {
+        // Show inline scope choice: Today / All / Cancel
+        const todayBtn = document.createElement('button');
+        todayBtn.className   = 'task-btn';
+        todayBtn.textContent = 'Today';
+        todayBtn.title       = 'Remove just from this day';
+        todayBtn.addEventListener('click', () => deleteTimeBlock(key, block.id, 'today'));
+
+        const allBtn = document.createElement('button');
+        allBtn.className   = 'task-btn task-btn-del';
+        allBtn.textContent = 'All';
+        allBtn.title       = 'Remove from all days';
+        allBtn.addEventListener('click', () => deleteTimeBlock(key, block.id, 'all'));
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className   = 'task-btn';
+        cancelBtn.textContent = '\u21A9'; // ↩
+        cancelBtn.title       = 'Cancel';
+        cancelBtn.addEventListener('click', () => {
+          if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
+        });
+
+        actions.innerHTML = '';
+        actions.append(todayBtn, allBtn, cancelBtn);
+      } else {
+        deleteTimeBlock(key, block.id);
+      }
+    });
 
     actions.append(btnComplete, btnReschedule, btnDel);
     item.append(swatch, body, actions);
@@ -1204,6 +1456,17 @@ function isPastBlock(block) {
 }
 
 function toggleCompleted(key, blockId) {
+  pushHistory();
+  const rBlock = (calData._recurring || []).find(b => b.id === blockId);
+  if (rBlock) {
+    if (!rBlock.completedDates) rBlock.completedDates = [];
+    const idx = rBlock.completedDates.indexOf(key);
+    if (idx === -1) rBlock.completedDates.push(key);
+    else            rBlock.completedDates.splice(idx, 1);
+    save();
+    if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
+    return;
+  }
   const block = calData[key]?.timeBlocks?.find(b => b.id === blockId);
   if (!block) return;
   block.completed = !block.completed;
@@ -1236,6 +1499,7 @@ function updateRescheduleBanner() {
 
 function confirmReschedule() {
   if (!rescheduleBlock) return;
+  pushHistory();
   const input   = document.getElementById('reschedule-date-input');
   const newKey  = input.value;
   if (!newKey || newKey === rescheduleBlock._key) { cancelReschedule(); return; }
@@ -1267,7 +1531,8 @@ function cancelReschedule() {
 }
 
 // ── Current time hand ───────────────────────────────────
-function updateClockHand() {
+// fromInterval=true only when called from setInterval — prevents overriding manual AM/PM toggles
+function updateClockHand(fromInterval = false) {
   const hand = document.getElementById('clock-hand');
   if (!hand) return;
   const now = new Date();
@@ -1279,9 +1544,20 @@ function updateClockHand() {
   hand.setAttribute('y1', cy + 10 * Math.sin(ang));
   hand.setAttribute('x2', cx + r1 * Math.cos(ang));
   hand.setAttribute('y2', cy + r1 * Math.sin(ang));
+
+  // Auto-switch AM/PM only from the interval timer, so manual toggles are respected
+  if (fromInterval) {
+    const expected = now.getHours() < 12 ? 'AM' : 'PM';
+    if (clockAmPm !== expected) {
+      clockAmPm = expected;
+      document.querySelectorAll('.ampm-btn')
+        .forEach(b => b.classList.toggle('active', b.dataset.ampm === clockAmPm));
+      if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
+    }
+  }
 }
 
 // ── Start ──────────────────────────────────────────────
 init();
 startDayChangeWatcher();
-setInterval(updateClockHand, 60_000);
+setInterval(() => updateClockHand(true), 60_000);

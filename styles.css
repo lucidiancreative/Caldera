@@ -909,7 +909,10 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 }
 
 /* Faded arc for block currently being rescheduled */
-.clock-block-arc.rescheduling-arc { opacity: 0.2; }
+.rescheduling-arc { opacity: 0.2; }
+
+/* Faded arc + label for blocks belonging to the other AM/PM half */
+.crossover-arc { opacity: 0.07; pointer-events: none; }
 
 /* Clock face elements */
 .clock-face     { fill: var(--surface); stroke: var(--border); stroke-width: 2; }
@@ -953,14 +956,21 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 8px 10px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.2);
   z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 210px;
+}
+#block-label-popup.hidden { display: none; }
+
+.popup-row {
   display: flex;
   gap: 6px;
   align-items: center;
 }
-#block-label-popup.hidden { display: none; }
 
 #block-label-input {
   border: 1px solid var(--border);
@@ -995,5 +1005,61 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 }
 body.dark #block-label-del:hover { background: #3a1a1a; }
 
+#block-label-confirm {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 26px; height: 26px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+#block-label-confirm:hover {
+  background: #edf7f0;
+  border-color: #2eb67d;
+  color: #2eb67d;
+}
+body.dark #block-label-confirm:hover { background: #1a3a28; }
+
 /* Dark mode for popup */
 body.dark #block-label-popup { box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+
+#block-recurrence-select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  width: 100%;
+}
+#block-recurrence-select:focus { border-color: var(--accent); }
+
+#block-scope-row {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 2px 0;
+}
+#block-scope-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+#block-scope-row.hidden { display: none; }
+
+/* Recurring arc — dashed outline to distinguish from one-off blocks */
+.clock-block-arc.recurring-arc {
+  stroke: rgba(255,255,255,0.35);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+/* Recurring indicator badge in task list and legend */
+.task-recur-badge {
+  font-size: 10px;
+  opacity: 0.65;
+  margin-left: 4px;
+}

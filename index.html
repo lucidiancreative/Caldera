@@ -86,8 +86,21 @@
 
   <!-- Block label popup -->
   <div id="block-label-popup" class="hidden">
-    <input id="block-label-input" type="text" placeholder="Label this block…" autocomplete="off" />
-    <button id="block-label-del" title="Delete block">&#10005;</button>
+    <div class="popup-row">
+      <input id="block-label-input" type="text" placeholder="Label this block…" autocomplete="off" />
+      <button id="block-label-confirm" title="Save block">&#10003;</button>
+      <button id="block-label-del" title="Delete block">&#10005;</button>
+    </div>
+    <select id="block-recurrence-select">
+      <option value="none">No repeat</option>
+      <option value="daily">Every day</option>
+      <option value="weekly">Every week</option>
+      <option value="monthly">Every month</option>
+    </select>
+    <div id="block-scope-row" class="hidden">
+      <label><input type="radio" name="block-scope" value="all" checked> All occurrences</label>
+      <label><input type="radio" name="block-scope" value="today"> Just today</label>
+    </div>
   </div>
 
   <!-- Day detail modal -->

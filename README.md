@@ -86,4 +86,4 @@ Download and run `Caldera.exe` — no installation required. On first launch, Wi
 
 ## License
 
-MIT
+Proprietary — see [LICENSE](LICENSE) for the full End User License Agreement.

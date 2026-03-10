@@ -19,7 +19,7 @@ let activeView      = 'calendar';
 let scheduleDate    = null;
 let clockDrag       = null;
 let popupState      = null;
-let clockAmPm       = 'AM';
+let clockAmPm       = new Date().getHours() >= 12 ? 'PM' : 'AM';
 let rescheduleBlock = null;
 let hoveredBlock    = null; // { block, key } – block the cursor is over on the clock face
 const undoStack     = [];
@@ -863,7 +863,8 @@ function switchView(view) {
   );
   if (view === 'schedule') {
     if (!scheduleDate) scheduleDate = getTodayKey();
-    clockAmPm = new Date().getHours() >= 12 ? 'PM' : 'AM';
+    // clockAmPm is intentionally NOT reset here — it's set at startup and
+    // auto-switched at noon/midnight by the interval, or toggled manually.
     document.querySelectorAll('.ampm-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.ampm === clockAmPm)
     );
@@ -895,7 +896,7 @@ function renderScheduleView(key) {
     _recurring: true,
   }));
   const allBlocks     = [...allDateBlocks, ...recurBlocks];
-  const visibleBlocks = allBlocks; // all blocks shown on both AM and PM clock views
+  const visibleBlocks = allBlocks.filter(b => b.ampm === clockAmPm);
   const svg           = buildClockSVG(key, visibleBlocks);
   area.appendChild(svg);
   updateClockHand();
@@ -951,12 +952,12 @@ function buildClockSVG(key, blocks) {
   // Existing time blocks (drawn below preview + hand)
   blocks.forEach(block => {
     const isRescheduling = rescheduleBlock?.id === block.id;
-    const isCrossover    = block.ampm !== clockAmPm;
+    const isPast         = isPastBlock(block);
 
-    // Wrap arc + label in a group so opacity applies to both
+    // Wrap arc + label in a group so opacity/pointer-events apply to both
     const g = el('g', {
       class: (isRescheduling ? 'rescheduling-arc' : '') +
-             (isCrossover    ? ' crossover-arc'    : ''),
+             (isPast          ? ' crossover-arc'   : ''),
     });
     g.addEventListener('click', (e) => {
       e.stopPropagation();

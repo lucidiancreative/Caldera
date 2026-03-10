@@ -12,6 +12,9 @@ Built with Electron and vanilla HTML/CSS/JavaScript — no UI frameworks, no ext
 
 Each calendar cell can display a cover image, giving an at-a-glance visual summary of any month. Days with multiple events show a count badge and optional time label. Hovering over any cell with images triggers an animated scroll strip that cycles through all attached images in a seamless loop, with per-image segment heights calculated from natural aspect ratios to properly handle both portrait and landscape content.
 
+<img width="1609" height="1377" alt="image" src="https://github.com/user-attachments/assets/4a2c453b-f76a-46cd-8723-6f819ad2951e" />
+
+
 ### Multi-Event Day System
 
 Each day supports an unlimited number of events, each with its own image, timestamp, and notes. One event per day can be designated as the **featured** event — its image becomes the cover shown on the calendar grid. Opening any day launches a detail modal with scrollable event cards, inline editing, and event management controls.
@@ -29,6 +32,9 @@ Images are copied into a local data directory on attachment. A lightbox viewer i
 ### Analog Clock Scheduler
 
 A tab toggle switches between the calendar grid and an SVG-rendered analog clock face tied to the currently selected day. Time blocks are created by click-dragging arcs on a 12-hour ring. Each block supports a label, which renders as curved text along the arc midline using SVG `<textPath>` elements. Labels are auto-truncated when the arc span is too narrow. Blocks are color-coded and listed in a legend strip below the clock for quick editing and deletion.
+
+<img width="1616" height="1381" alt="image" src="https://github.com/user-attachments/assets/0fbac8d7-8c08-4a02-8504-4ad88841a72d" />
+
 
 ### Dark Mode
 

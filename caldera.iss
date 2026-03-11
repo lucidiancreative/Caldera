@@ -4,10 +4,10 @@
 ; Workflow:
 ;   1. npm run dist:win          <- builds dist\win-unpacked\
 ;   2. Open this file in Inno Setup Compiler and press Compile (Ctrl+F9)
-;   3. Installer is written to installer\Caldera-Setup-1.0.0.exe
+;   3. Installer is written to installer\Caldera-Setup-1.1.0.exe
 
 #define AppName      "Caldera"
-#define AppVersion   "1.0.0"
+#define AppVersion   "1.1.0"
 #define AppPublisher "Lucidian Creative"
 #define AppURL       "https://github.com/lucidiancreative/Caldera"
 #define AppExeName   "Caldera.exe"

@@ -1,7 +1,7 @@
 {
   "name": "caldera",
-  "version": "1.0.0",
-  "description": "A simple visual event calendar with drap and drop support",
+  "version": "1.1.0",
+  "description": "A simple visual event calendar with drag and drop support",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -9,8 +9,8 @@
     "dist:win": "electron-builder --win"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Lucidian Creative",
+  "license": "SEE LICENSE IN LICENSE",
   "build": {
     "appId": "com.caldera.app",
     "productName": "Caldera",

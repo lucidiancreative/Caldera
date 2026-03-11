@@ -18,11 +18,32 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
     titleBarStyle: 'hidden',
     frame: false,
     show: false,
   });
+
+  // Content Security Policy
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; img-src 'self' file: data:; connect-src 'none';",
+        ],
+      },
+    });
+  });
+
+  // Block navigation away from the local app file
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) event.preventDefault();
+  });
+
+  // Block any attempt to open new windows
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
   mainWindow.loadFile('index.html');
 
@@ -62,9 +83,11 @@ function resolveUserDataPath(relPath) {
 
 /** Write content to the images dir and return the portable relative path. */
 function writeImage(destName, writeFn) {
-  const destPath = path.join(IMAGES_DIR(), destName);
+  const imagesDir = IMAGES_DIR();
+  const destPath  = path.resolve(imagesDir, destName);
+  if (!destPath.startsWith(imagesDir + path.sep)) throw new Error('Invalid image path');
   writeFn(destPath);
-  return `images/${destName}`;
+  return 'images/' + path.basename(destPath);
 }
 
 // ---- IPC: data persistence ----
@@ -97,6 +120,7 @@ ipcMain.handle('copy-image', (_event, sourcePath, fileName) => {
 });
 
 ipcMain.handle('save-image-buffer', (_event, buffer, fileName, ext) => {
+  if (!ALLOWED_IMAGE_EXTS.includes(ext)) throw new Error('Unsupported file type');
   return writeImage(`${fileName}${ext}`, (dest) => fs.writeFileSync(dest, Buffer.from(buffer)));
 });
 

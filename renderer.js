@@ -210,6 +210,7 @@ async function renderGrid() {
     cell.className    = 'day-cell';
     cell.dataset.date = key;
     if (key === todayKey) cell.classList.add('today');
+    if (key < todayKey)   cell.classList.add('past');
 
     const dayNum = document.createElement('span');
     dayNum.className = 'day-num';

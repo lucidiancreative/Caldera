@@ -232,6 +232,8 @@ html, body {
   pointer-events: none;
 }
 .day-cell:hover .cell-bg { opacity: 1; }
+.day-cell.past .cell-bg { opacity: 0.15; }
+.day-cell.past:hover .cell-bg { opacity: 0.5; }
 
 /* ── Today cell – vertical scroll strip ──────────────────── */
 .cell-scroll-strip {

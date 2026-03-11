@@ -2,8 +2,6 @@
 
 A lightweight, privacy-first desktop calendar for Windows that treats images as first-class data. Every day on the grid can display a photo, turning the calendar into a visual timeline. Includes a built-in analog clock scheduler for daily time blocking.
 
-Built with Electron and vanilla HTML/CSS/JavaScript — no UI frameworks, no external dependencies.
-
 ---
 
 ## Core Features

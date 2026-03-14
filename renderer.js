@@ -752,7 +752,13 @@ function bindUI() {
   });
 
   document.querySelectorAll('.view-tab').forEach(btn => {
-    btn.addEventListener('click', () => switchView(btn.dataset.view));
+    btn.addEventListener('click', () => {
+      if (btn.dataset.view === 'schedule') {
+        scheduleDate = getTodayKey();
+        clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
+      }
+      switchView(btn.dataset.view);
+    });
   });
   document.getElementById('sched-prev-day').addEventListener('click', () => stepScheduleDay(-1));
   document.getElementById('sched-next-day').addEventListener('click', () => stepScheduleDay(1));
@@ -824,7 +830,10 @@ function bindUI() {
   });
 
   document.getElementById('btn-schedule-day').addEventListener('click', () => {
+    const targetDate = modalDate;
     closeModal();
+    scheduleDate = targetDate;
+    clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
     switchView('schedule');
   });
 }
@@ -864,8 +873,6 @@ function switchView(view) {
   );
   if (view === 'schedule') {
     if (!scheduleDate) scheduleDate = getTodayKey();
-    // clockAmPm is intentionally NOT reset here — it's set at startup and
-    // auto-switched at noon/midnight by the interval, or toggled manually.
     document.querySelectorAll('.ampm-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.ampm === clockAmPm)
     );

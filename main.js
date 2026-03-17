@@ -5,10 +5,10 @@ const fs = require('fs');
 // Suppress Chromium GPU shader disk-cache errors on Windows
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
-let mainWindow;
+let calderaWindow;
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
+function createCalderaWindow() {
+  calderaWindow = new BrowserWindow({
     width: 1200,
     height: 820,
     minWidth: 900,
@@ -25,8 +25,8 @@ function createWindow() {
     show: false,
   });
 
-  // Content Security Policy
-  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+  // Lock down resource loading: calendar images are local files or inline data URIs; no remote fetches should ever be needed
+  calderaWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
@@ -38,65 +38,65 @@ function createWindow() {
   });
 
   // Block navigation away from the local app file
-  mainWindow.webContents.on('will-navigate', (event, url) => {
+  calderaWindow.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('file://')) event.preventDefault();
   });
 
   // Block any attempt to open new windows
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  calderaWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  mainWindow.loadFile('index.html');
+  calderaWindow.loadFile('index.html');
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+  calderaWindow.once('ready-to-show', () => {
+    calderaWindow.show();
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(createCalderaWindow);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (BrowserWindow.getAllWindows().length === 0) createCalderaWindow();
 });
 
 // ---- Paths & helpers ----
 
-const DATA_PATH = () => path.join(app.getPath('userData'), 'calendar-data.json');
-const IMAGES_DIR = () => {
-  const dir = path.join(app.getPath('userData'), 'images');
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  return dir;
+const calendarDataFilePath = () => path.join(app.getPath('userData'), 'calendar-data.json');
+const calendarImagesDir = () => {
+  const imagesDirPath = path.join(app.getPath('userData'), 'images');
+  if (!fs.existsSync(imagesDirPath)) fs.mkdirSync(imagesDirPath, { recursive: true });
+  return imagesDirPath;
 };
 
 const ALLOWED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
 
-/** Resolve a relative path under userData and guard against path-traversal. */
-function resolveUserDataPath(relPath) {
-  const base = path.resolve(app.getPath('userData'));
-  const full = path.resolve(base, relPath);
-  if (!full.startsWith(base + path.sep)) throw new Error('Invalid path');
-  return full;
+/** relPath arrives via IPC from the renderer — validate it stays inside userData so a crafted path like ../../sensitive can't escape the sandbox. */
+function resolveCalendarStoragePath(relPath) {
+  const userDataBasePath = path.resolve(app.getPath('userData'));
+  const resolvedFullPath = path.resolve(userDataBasePath, relPath);
+  if (!resolvedFullPath.startsWith(userDataBasePath + path.sep)) throw new Error('Invalid path');
+  return resolvedFullPath;
 }
 
-/** Write content to the images dir and return the portable relative path. */
-function writeImage(destName, writeFn) {
-  const imagesDir = IMAGES_DIR();
-  const destPath  = path.resolve(imagesDir, destName);
-  if (!destPath.startsWith(imagesDir + path.sep)) throw new Error('Invalid image path');
-  writeFn(destPath);
-  return 'images/' + path.basename(destPath);
+/** Returns a relative path (not absolute) so stored image references in calendar-data.json remain valid if userData moves between machines or installs. */
+function saveImageToCalendarStore(destName, writeFn) {
+  const imagesDirPath = calendarImagesDir();
+  const destAbsPath   = path.resolve(imagesDirPath, destName);
+  if (!destAbsPath.startsWith(imagesDirPath + path.sep)) throw new Error('Invalid image path');
+  writeFn(destAbsPath);
+  return 'images/' + path.basename(destAbsPath);
 }
 
 // ---- IPC: data persistence ----
 
 ipcMain.handle('load-data', () => {
-  const dataPath = DATA_PATH();
-  if (!fs.existsSync(dataPath)) return {};
+  const calendarDataPath = calendarDataFilePath();
+  if (!fs.existsSync(calendarDataPath)) return {};
   try {
-    return JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+    return JSON.parse(fs.readFileSync(calendarDataPath, 'utf8'));
   } catch {
     return {};
   }
@@ -104,7 +104,7 @@ ipcMain.handle('load-data', () => {
 
 ipcMain.handle('save-data', (_event, data) => {
   try {
-    fs.writeFileSync(DATA_PATH(), JSON.stringify(data, null, 2), 'utf8');
+    fs.writeFileSync(calendarDataFilePath(), JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('[save-data] write failed:', err);
     throw err;
@@ -116,37 +116,37 @@ ipcMain.handle('save-data', (_event, data) => {
 ipcMain.handle('copy-image', (_event, sourcePath, fileName) => {
   const ext = path.extname(sourcePath).toLowerCase();
   if (!ALLOWED_IMAGE_EXTS.includes(ext)) throw new Error('Unsupported file type');
-  return writeImage(`${fileName}${ext}`, (dest) => fs.copyFileSync(sourcePath, dest));
+  return saveImageToCalendarStore(`${fileName}${ext}`, (dest) => fs.copyFileSync(sourcePath, dest));
 });
 
 ipcMain.handle('save-image-buffer', (_event, buffer, fileName, ext) => {
   if (!ALLOWED_IMAGE_EXTS.includes(ext)) throw new Error('Unsupported file type');
-  return writeImage(`${fileName}${ext}`, (dest) => fs.writeFileSync(dest, Buffer.from(buffer)));
+  return saveImageToCalendarStore(`${fileName}${ext}`, (dest) => fs.writeFileSync(dest, Buffer.from(buffer)));
 });
 
 ipcMain.handle('delete-image', (_event, relPath) => {
-  const full = resolveUserDataPath(relPath);
-  if (fs.existsSync(full)) fs.unlinkSync(full);
+  const resolvedStoragePath = resolveCalendarStoragePath(relPath);
+  if (fs.existsSync(resolvedStoragePath)) fs.unlinkSync(resolvedStoragePath);
 });
 
 ipcMain.handle('resolve-image', (_event, relPath) => {
-  return resolveUserDataPath(relPath);
+  return resolveCalendarStoragePath(relPath);
 });
 
 ipcMain.handle('open-file-dialog', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const fileDialogResult = await dialog.showOpenDialog(calderaWindow, {
     properties: ['openFile'],
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
   });
-  if (result.canceled || !result.filePaths.length) return null;
-  return result.filePaths[0];
+  if (fileDialogResult.canceled || !fileDialogResult.filePaths.length) return null;
+  return fileDialogResult.filePaths[0];
 });
 
 // ---- IPC: window controls ----
 
-ipcMain.on('win-minimize', () => mainWindow.minimize());
+ipcMain.on('win-minimize', () => calderaWindow.minimize());
 ipcMain.on('win-maximize', () => {
-  if (mainWindow.isMaximized()) mainWindow.unmaximize();
-  else mainWindow.maximize();
+  if (calderaWindow.isMaximized()) calderaWindow.unmaximize();
+  else calderaWindow.maximize();
 });
-ipcMain.on('win-close', () => mainWindow.close());
+ipcMain.on('win-close', () => calderaWindow.close());

@@ -5,7 +5,7 @@
      { events: [{ id, image, time, notes }], featuredId }
 ──────────────────────────────────────────────────────── */
 
-const api = window.calAPI;
+const calBridge = window.calAPI;
 
 // ── State ──────────────────────────────────────────────
 let calData         = {};
@@ -14,36 +14,36 @@ let viewMonth       = new Date().getMonth();
 let modalDate       = null;
 let pasteCellDate   = null;
 let renderedTodayKey = null;
-let hoverCell = null;
+let hoveredGridCell = null;
 let activeView      = 'calendar';
 let scheduleDate    = null;
-let clockDrag       = null;
-let popupState      = null;
+let clockDragState       = null;
+let timeBlockPopupState      = null;
 let clockAmPm       = new Date().getHours() >= 12 ? 'PM' : 'AM';
 let rescheduleBlock = null;
-let hoveredBlock    = null; // { block, key } – block the cursor is over on the clock face
+let hoveredClockBlock    = null; // { block, key } – block the cursor is over on the clock face
 const undoStack     = [];
 const redoStack     = [];
 const MAX_HISTORY   = 50;
 const BLOCK_COLORS = ['#4f6ef7', '#e03030', '#2eb67d', '#f0a500', '#a259ff', '#ff6b35'];
 
 // ── Boot ───────────────────────────────────────────────
-async function init() {
-  applyTheme(localStorage.getItem('theme') === 'dark');
-  const raw = await api.loadData();
-  calData = migrateData(raw);
-  renderStrip();
-  renderGrid();
-  bindUI();
+async function initCalendarApp() {
+  applyCalendarTheme(localStorage.getItem('theme') === 'dark');
+  const raw = await calBridge.loadData();
+  calData = migrateCalendarDataFormat(raw);
+  renderMonthStrip();
+  renderCalendarGrid();
+  bindCalendarUIEvents();
 }
 
-function applyTheme(dark) {
-  document.body.classList.toggle('dark', dark);
-  document.getElementById('btn-theme').textContent = dark ? '\u2600' : '\u263E';
+function applyCalendarTheme(isDarkMode) {
+  document.body.classList.toggle('dark', isDarkMode);
+  document.getElementById('btn-theme').textContent = isDarkMode ? '\u2600' : '\u263E';
 }
 
 // ── Helpers ────────────────────────────────────────────
-function genId() {
+function generateCalendarEntryId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
@@ -58,7 +58,7 @@ function formatDisplayDate(key) {
   });
 }
 
-function fileUrl(absPath) {
+function toElectronFileUrl(absPath) {
   return 'file:///' + absPath.replace(/\\/g, '/');
 }
 
@@ -75,21 +75,21 @@ function getTodayKey() {
   return dateKey(t.getFullYear(), t.getMonth(), t.getDate());
 }
 
-async function save() {
-  await api.saveData(calData);
+async function saveCalendarData() {
+  await calBridge.saveData(calData);
 }
 
-function pushHistory() {
+function pushCalendarSnapshot() {
   undoStack.push(JSON.stringify(calData));
   if (undoStack.length > MAX_HISTORY) undoStack.shift();
-  redoStack.length = 0; // clear redo on any new action
+  redoStack.length = 0; // any new user action invalidates the redo chain
 }
 
-async function applyHistory(snapshot) {
+async function applyCalendarSnapshot(snapshot) {
   calData = JSON.parse(snapshot);
-  await save();
-  renderGrid();
-  renderStrip();
+  await saveCalendarData();
+  renderCalendarGrid();
+  renderMonthStrip();
   if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
   if (modalDate && !document.getElementById('modal-overlay').classList.contains('hidden'))
     renderEventCards(modalDate);
@@ -100,9 +100,9 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
-const SCROLL_PX_PER_SEC = 20;
+const CELL_HOVER_SCROLL_PX_PER_SEC = 20;
 
-function getImageNaturalSize(url) {
+function measureImageNaturalDimensions(url) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
@@ -112,7 +112,7 @@ function getImageNaturalSize(url) {
 }
 
 // ── Migration: old single-event format → new multi-event ──
-function migrateData(raw) {
+function migrateCalendarDataFormat(raw) {
   const out = {};
   for (const [key, val] of Object.entries(raw)) {
     if (key === '_recurring') {
@@ -127,7 +127,7 @@ function migrateData(raw) {
         if (b.completed == null) b.completed = false;
       });
     } else {
-      const id = genId();
+      const id = generateCalendarEntryId();
       out[key] = {
         events:     [{ id, image: val.image || null, notes: val.notes || '', time: val.time || '' }],
         featuredId: val.image ? id : null,
@@ -139,7 +139,7 @@ function migrateData(raw) {
 }
 
 // ── Day data helpers ────────────────────────────────────
-function getDay(key) {
+function getOrInitDayData(key) {
   if (!calData[key]) calData[key] = { events: [], featuredId: null, timeBlocks: [] };
   if (!calData[key].timeBlocks) calData[key].timeBlocks = [];
   return calData[key];
@@ -163,7 +163,7 @@ function getFeaturedEvent(key) {
   return day.events.find(e => e.id === day.featuredId) || day.events[0];
 }
 
-function normaliseDay(key) {
+function pruneEmptyDayEntry(key) {
   const day = calData[key];
   if (!day) return;
   if (!day.events.length) { delete calData[key]; return; }
@@ -173,7 +173,7 @@ function normaliseDay(key) {
 }
 
 // ── Strip ──────────────────────────────────────────────
-function renderStrip() {
+function renderMonthStrip() {
   const months = ['January','February','March','April','May','June',
                   'July','August','September','October','November','December'];
   document.getElementById('current-label').textContent = `${months[viewMonth]} ${viewYear}`;
@@ -185,8 +185,8 @@ function renderStrip() {
 // ── Grid ───────────────────────────────────────────────
 // Cells are built synchronously first, then all resolveImage calls
 // fire in parallel via Promise.all so the grid never waits 31× in series.
-async function renderGrid() {
-  hoverCell = null;
+async function renderCalendarGrid() {
+  hoveredGridCell = null;
 
   const grid = document.getElementById('calendar-grid');
   grid.innerHTML = '';
@@ -225,8 +225,8 @@ async function renderGrid() {
       cell.insertBefore(bg, dayNum);
       // Collect resolve promise — all will run concurrently below
       imageResolves.push(
-        api.resolveImage(featured.image).then(fullPath => {
-          bg.style.backgroundImage = `url("${fileUrl(fullPath)}")`;
+        calBridge.resolveImage(featured.image).then(fullPath => {
+          bg.style.backgroundImage = `url("${toElectronFileUrl(fullPath)}")`;
         })
       );
     }
@@ -247,13 +247,13 @@ async function renderGrid() {
     }
 
     cell.addEventListener('dragenter', onCellDragEnter);
-    cell.addEventListener('dragover',  onDragOver);
+    cell.addEventListener('dragover',  onCellDragOver);
     cell.addEventListener('dragleave', onCellDragLeave);
-    cell.addEventListener('drop',      onDrop);
+    cell.addEventListener('drop',      onCalendarCellDrop);
     cell.addEventListener('click', () => {
       scheduleDate = key;
       if (activeView === 'schedule') renderScheduleView(key);
-      openModal(key);
+      openDayDetailModal(key);
     });
     cell.addEventListener('mouseenter', () => {
       pasteCellDate = key;
@@ -273,12 +273,12 @@ async function renderGrid() {
   await Promise.all(imageResolves);
 }
 
-async function refreshCell(key) {
+async function refreshCalendarCell(key) {
   const cell = document.querySelector(`.day-cell[data-date="${key}"]`);
   if (!cell) return;
 
   // If this cell has an active hover strip, cancel it
-  if (hoverCell === cell) hoverCell = null;
+  if (hoveredGridCell === cell) hoveredGridCell = null;
 
   cell.querySelector('.cell-bg')?.remove();
   cell.querySelector('.cell-scroll-strip')?.remove();
@@ -288,10 +288,10 @@ async function refreshCell(key) {
   const featured = getFeaturedEvent(key);
   if (featured?.image) {
     cell.classList.add('has-image');
-    const fullPath = await api.resolveImage(featured.image);
+    const fullPath = await calBridge.resolveImage(featured.image);
     const bg = document.createElement('div');
     bg.className = 'cell-bg';
-    bg.style.backgroundImage = `url("${fileUrl(fullPath)}")`;
+    bg.style.backgroundImage = `url("${toElectronFileUrl(fullPath)}")`;
     cell.insertBefore(bg, cell.querySelector('.day-num'));
   } else {
     cell.classList.remove('has-image');
@@ -319,7 +319,7 @@ async function refreshCell(key) {
 // images scroll through more content at the same px/s rate.
 // Cell size is stable during hover, so we measure once — no ResizeObserver needed.
 async function setupHoverScrollStrip(cell, key) {
-  hoverCell = cell;
+  hoveredGridCell = cell;
 
   const day = calData[key];
   if (!day?.events?.length) return;
@@ -339,17 +339,17 @@ async function setupHoverScrollStrip(cell, key) {
   // Resolve all image paths and measure natural dimensions concurrently
   const imageInfo = await Promise.all(
     withImages.map(async ev => {
-      const fullPath = await api.resolveImage(ev.image);
-      const url      = fileUrl(fullPath);
-      const size     = await getImageNaturalSize(url);
+      const fullPath = await calBridge.resolveImage(ev.image);
+      const url      = toElectronFileUrl(fullPath);
+      const size     = await measureImageNaturalDimensions(url);
       return { url, size };
     })
   );
 
   // Bail if the mouse left this cell while images were loading
-  if (hoverCell !== cell) return;
+  if (hoveredGridCell !== cell) return;
 
-  // One segment per image
+  // Each image gets its own segment so the strip can scroll through multiple photos independently
   const segments = imageInfo.map(({ url }) => {
     const seg = document.createElement('div');
     seg.className = 'cell-scroll-segment';
@@ -382,13 +382,13 @@ async function setupHoverScrollStrip(cell, key) {
   clone.style.height = segHeights[0] + 'px';
 
   const totalTravel = segHeights.reduce((a, b) => a + b, 0);
-  const duration    = (totalTravel / SCROLL_PX_PER_SEC).toFixed(2);
+  const duration    = (totalTravel / CELL_HOVER_SCROLL_PX_PER_SEC).toFixed(2);
   strip.style.setProperty('--scroll-dist', `-${totalTravel}px`);
   strip.style.animation = `cell-strip-scroll ${duration}s linear infinite`;
 }
 
 function teardownHoverScrollStrip(cell) {
-  hoverCell = null;
+  hoveredGridCell = null;
   cell.querySelector('.cell-scroll-strip')?.remove();
 }
 
@@ -401,14 +401,14 @@ function onCellDragEnter(e) {
   dragCounters.set(cell, (dragCounters.get(cell) || 0) + 1);
   cell.classList.add('drag-over');
 }
-function onDragOver(e) { e.preventDefault(); }
+function onCellDragOver(e) { e.preventDefault(); }
 function onCellDragLeave(e) {
   const cell  = e.currentTarget;
   const count = (dragCounters.get(cell) || 1) - 1;
   dragCounters.set(cell, count);
   if (count <= 0) { dragCounters.set(cell, 0); cell.classList.remove('drag-over'); }
 }
-async function onDrop(e) {
+async function onCalendarCellDrop(e) {
   e.preventDefault();
   const cell = e.currentTarget;
   dragCounters.set(cell, 0);
@@ -418,7 +418,7 @@ async function onDrop(e) {
   if (!file) return;
   if (!['image/png','image/jpeg','image/webp'].includes(file.type)) return;
 
-  await addEventFromPath(cell.dataset.date, api.getPathForFile(file));
+  await addEventFromPath(cell.dataset.date, calBridge.getPathForFile(file));
 }
 
 // ── Paste ──────────────────────────────────────────────
@@ -432,10 +432,10 @@ document.addEventListener('paste', async (e) => {
     if (!blob) continue;
 
     const ext      = item.type === 'image/png' ? '.png' : item.type === 'image/webp' ? '.webp' : '.jpg';
-    const id       = genId();
+    const id       = generateCalendarEntryId();
     const fileName = `${targetKey}-${id}`;
     const buf      = await blob.arrayBuffer();
-    const relPath  = await api.saveImageBuffer(Array.from(new Uint8Array(buf)), fileName, ext);
+    const relPath  = await calBridge.saveImageBuffer(Array.from(new Uint8Array(buf)), fileName, ext);
     await addEventWithImage(targetKey, id, relPath);
     break;
   }
@@ -443,68 +443,68 @@ document.addEventListener('paste', async (e) => {
 
 // ── Event management ───────────────────────────────────
 async function addEventFromPath(key, srcPath) {
-  const id       = genId();
+  const id       = generateCalendarEntryId();
   const fileName = `${key}-${id}`;
-  const relPath  = await api.copyImage(srcPath, fileName);
+  const relPath  = await calBridge.copyImage(srcPath, fileName);
   await addEventWithImage(key, id, relPath);
 }
 
 async function addEventWithImage(key, id, relPath) {
-  const day = getDay(key);
+  const day = getOrInitDayData(key);
   day.events.push({ id, image: relPath, notes: '', time: '' });
   // Auto-feature the very first event on a day
   if (!day.featuredId) day.featuredId = id;
-  await save();
-  await refreshCell(key);
+  await saveCalendarData();
+  await refreshCalendarCell(key);
   if (modalDate === key) renderEventCards(key);
 }
 
 async function addEmptyEvent(key) {
-  pushHistory();
-  const day = getDay(key);
-  const id  = genId();
+  pushCalendarSnapshot();
+  const day = getOrInitDayData(key);
+  const id  = generateCalendarEntryId();
   day.events.push({ id, image: null, notes: '', time: '' });
   if (!day.featuredId) day.featuredId = id;
-  await save();
+  await saveCalendarData();
   if (modalDate === key) renderEventCards(key);
 }
 
 async function removeEvent(key, eventId) {
-  pushHistory();
+  pushCalendarSnapshot();
   const day = calData[key];
   if (!day) return;
 
   const ev = day.events.find(e => e.id === eventId);
-  if (ev?.image) await api.deleteImage(ev.image);
+  if (ev?.image) await calBridge.deleteImage(ev.image);
 
   day.events = day.events.filter(e => e.id !== eventId);
   if (day.featuredId === eventId) day.featuredId = day.events[0]?.id || null;
 
-  normaliseDay(key);
-  await save();
-  await refreshCell(key);
+  pruneEmptyDayEntry(key);
+  await saveCalendarData();
+  await refreshCalendarCell(key);
   if (modalDate === key) renderEventCards(key);
 }
 
-async function setFeatured(key, eventId) {
-  pushHistory();
+async function setFeaturedCalendarEvent(key, eventId) {
+  pushCalendarSnapshot();
   const day = calData[key];
   if (!day) return;
   day.featuredId = eventId;
-  await save();
-  await refreshCell(key);
+  await saveCalendarData();
+  await refreshCalendarCell(key);
   if (modalDate === key) renderEventCards(key);
 }
 
 async function saveEventField(key, eventId, field, value) {
-  pushHistory();
+  pushCalendarSnapshot();
   const day = calData[key];
   if (!day) return;
   const ev = day.events.find(e => e.id === eventId);
   if (!ev) return;
   if (value) ev[field] = value; else delete ev[field];
-  if (field === 'time' && day.featuredId === eventId) await refreshCell(key);
-  await save();
+  if (field === 'time' && day.featuredId === eventId) await refreshCalendarCell(key);
+  await saveCalendarData();
 }
 
 async function assignEventImage(key, eventId, srcPath) {
@@ -512,16 +512,16 @@ async function assignEventImage(key, eventId, srcPath) {
   const ev  = day?.events.find(e => e.id === eventId);
   if (!ev) return;
 
-  if (ev.image) await api.deleteImage(ev.image);
+  if (ev.image) await calBridge.deleteImage(ev.image);
   const fileName = `${key}-${eventId}`;
-  ev.image = await api.copyImage(srcPath, fileName);
+  ev.image = await calBridge.copyImage(srcPath, fileName);
 
   // If the day has no featured image yet, promote this event
   const hasFeaturedImg = day.events.find(e => e.id === day.featuredId)?.image;
   if (!hasFeaturedImg) day.featuredId = eventId;
 
-  await save();
-  await refreshCell(key);
+  await saveCalendarData();
+  await refreshCalendarCell(key);
   if (modalDate === key) renderEventCards(key);
 }
 
@@ -530,7 +530,7 @@ async function removeEventImage(key, eventId) {
   const ev  = day?.events.find(e => e.id === eventId);
   if (!ev?.image) return;
 
-  await api.deleteImage(ev.image);
+  await calBridge.deleteImage(ev.image);
   ev.image = null;
 
   // If this was the featured event, find another with an image
@@ -539,8 +539,8 @@ async function removeEventImage(key, eventId) {
     day.featuredId = other?.id || day.events.find(e => e.id !== eventId)?.id || null;
   }
 
-  await save();
-  await refreshCell(key);
+  await saveCalendarData();
+  await refreshCalendarCell(key);
   if (modalDate === key) renderEventCards(key);
 }
 
@@ -556,14 +556,14 @@ function closeLightbox() {
 }
 
 // ── Modal ──────────────────────────────────────────────
-function openModal(key) {
+function openDayDetailModal(key) {
   modalDate = key;
   document.getElementById('modal-date').textContent = formatDisplayDate(key);
   renderEventCards(key);
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
-function closeModal() {
+function closeDayDetailModal() {
   modalDate = null;
   document.getElementById('modal-overlay').classList.add('hidden');
 }
@@ -604,7 +604,7 @@ function renderEventCards(key) {
     if (!modalDate) return;
     const file = e.dataTransfer.files[0];
     if (!file || !['image/png','image/jpeg','image/webp'].includes(file.type)) return;
-    await addEventFromPath(modalDate, api.getPathForFile(file));
+    await addEventFromPath(modalDate, calBridge.getPathForFile(file));
   });
 
   container.appendChild(zone);
@@ -623,7 +623,7 @@ function buildEventCard(key, ev, isFeatured) {
   btnCover.className = 'btn-cover';
   btnCover.title     = isFeatured ? 'Calendar cover' : 'Set as calendar cover';
   btnCover.textContent = isFeatured ? '\u2605' : '\u2606'; // ★ / ☆
-  if (!isFeatured) btnCover.addEventListener('click', () => setFeatured(key, ev.id));
+  if (!isFeatured) btnCover.addEventListener('click', () => setFeaturedCalendarEvent(key, ev.id));
 
   const coverLabel = document.createElement('span');
   coverLabel.className   = 'cover-label';
@@ -638,7 +638,7 @@ function buildEventCard(key, ev, isFeatured) {
   btnAssign.textContent = '\uD83D\uDCF7 Assign';
   btnAssign.title       = 'Assign image via file dialog';
   btnAssign.addEventListener('click', async () => {
-    const srcPath = await api.openFileDialog();
+    const srcPath = await calBridge.openFileDialog();
     if (srcPath) await assignEventImage(key, ev.id, srcPath);
   });
 
@@ -674,7 +674,7 @@ function buildEventCard(key, ev, isFeatured) {
 
   if (ev.image) {
     imgArea.classList.add('has-image');
-    api.resolveImage(ev.image).then(p => { img.src = fileUrl(p); });
+    calBridge.resolveImage(ev.image).then(p => { img.src = toElectronFileUrl(p); });
     imgArea.addEventListener('click', () => { if (img.src) openLightbox(img.src); });
   }
 
@@ -695,7 +695,7 @@ function buildEventCard(key, ev, isFeatured) {
     imgArea.classList.remove('drag-over');
     const file = e.dataTransfer.files[0];
     if (!file || !['image/png','image/jpeg','image/webp'].includes(file.type)) return;
-    await assignEventImage(key, ev.id, api.getPathForFile(file));
+    await assignEventImage(key, ev.id, calBridge.getPathForFile(file));
   });
 
   // ── Fields ───────────────────────────────────────────
@@ -726,10 +726,10 @@ function buildEventCard(key, ev, isFeatured) {
 }
 
 // ── UI bindings ────────────────────────────────────────
-function bindUI() {
-  document.getElementById('btn-min').addEventListener('click', () => api.winMinimize());
-  document.getElementById('btn-max').addEventListener('click', () => api.winMaximize());
-  document.getElementById('btn-close').addEventListener('click', () => api.winClose());
+function bindCalendarUIEvents() {
+  document.getElementById('btn-min').addEventListener('click', () => calBridge.winMinimize());
+  document.getElementById('btn-max').addEventListener('click', () => calBridge.winMaximize());
+  document.getElementById('btn-close').addEventListener('click', () => calBridge.winClose());
 
   document.getElementById('btn-theme').addEventListener('click', () => {
     const isDark = document.body.classList.toggle('dark');
@@ -745,9 +745,9 @@ function bindUI() {
   document.querySelectorAll('.month-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       viewMonth = parseInt(btn.dataset.month);
-      renderStrip();
-      renderGrid();
-      if (activeView !== 'calendar') switchView('calendar');
+      renderMonthStrip();
+      renderCalendarGrid();
+      if (activeView !== 'calendar') switchCalendarView('calendar');
     });
   });
 
@@ -757,7 +757,7 @@ function bindUI() {
         scheduleDate = getTodayKey();
         clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
       }
-      switchView(btn.dataset.view);
+      switchCalendarView(btn.dataset.view);
     });
   });
   document.getElementById('sched-prev-day').addEventListener('click', () => stepScheduleDay(-1));
@@ -777,7 +777,7 @@ function bindUI() {
 
   document.getElementById('modal-close').addEventListener('click', closeModal);
   document.getElementById('modal-overlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('modal-overlay')) closeModal();
+    if (e.target === document.getElementById('modal-overlay')) closeDayDetailModal();
   });
 
   document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
@@ -788,7 +788,7 @@ function bindUI() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (!document.getElementById('lightbox-overlay').classList.contains('hidden')) closeLightbox();
-      else if (modalDate) closeModal();
+      else if (modalDate) closeDayDetailModal();
       else if (rescheduleBlock) cancelReschedule();
       return;
     }
@@ -796,30 +796,30 @@ function bindUI() {
     const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
 
     // Backspace over a hovered clock block → delete it
-    if (e.key === 'Backspace' && hoveredBlock && !inInput) {
+    if (e.key === 'Backspace' && hoveredClockBlock && !inInput) {
       e.preventDefault();
-      const { block, key } = hoveredBlock;
-      hoveredBlock = null;
+      const { block, key } = hoveredClockBlock;
+      hoveredClockBlock = null;
       deleteTimeBlock(key, block.id, block._recurring ? 'all' : undefined);
       return;
     }
 
-    // Ctrl+Z → undo
+    // Ctrl+Z — matches the undo convention users expect from native desktop apps
     if (e.ctrlKey && e.key === 'z' && !e.shiftKey && !inInput) {
       e.preventDefault();
       if (undoStack.length) {
         redoStack.push(JSON.stringify(calData));
-        applyHistory(undoStack.pop());
+        applyCalendarSnapshot(undoStack.pop());
       }
       return;
     }
 
-    // Ctrl+Shift+Z → redo
+    // Ctrl+Shift+Z — matches the redo convention; Ctrl+Y intentionally not supported to keep it simple
     if (e.ctrlKey && e.shiftKey && e.key === 'Z' && !inInput) {
       e.preventDefault();
       if (redoStack.length) {
         undoStack.push(JSON.stringify(calData));
-        applyHistory(redoStack.pop());
+        applyCalendarSnapshot(redoStack.pop());
       }
       return;
     }
@@ -831,10 +831,10 @@ function bindUI() {
 
   document.getElementById('btn-schedule-day').addEventListener('click', () => {
     const targetDate = modalDate;
-    closeModal();
+    closeDayDetailModal();
     scheduleDate = targetDate;
     clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
-    switchView('schedule');
+    switchCalendarView('schedule');
   });
 }
 
@@ -842,16 +842,16 @@ function changeMonth(delta) {
   viewMonth += delta;
   if (viewMonth < 0)  { viewMonth = 11; viewYear--; }
   if (viewMonth > 11) { viewMonth = 0;  viewYear++; }
-  renderStrip();
-  renderGrid();
-  if (activeView !== 'calendar') switchView('calendar');
+  renderMonthStrip();
+  renderCalendarGrid();
+  if (activeView !== 'calendar') switchCalendarView('calendar');
 }
 
 function changeYear(delta) {
   viewYear += delta;
-  renderStrip();
-  renderGrid();
-  if (activeView !== 'calendar') switchView('calendar');
+  renderMonthStrip();
+  renderCalendarGrid();
+  if (activeView !== 'calendar') switchCalendarView('calendar');
 }
 
 // ── Day-change watcher ─────────────────────────────────
@@ -859,12 +859,12 @@ function changeYear(delta) {
 // midnight or when the system wakes from sleep.
 function startDayChangeWatcher() {
   setInterval(() => {
-    if (getTodayKey() !== renderedTodayKey) renderGrid();
+    if (getTodayKey() !== renderedTodayKey) renderCalendarGrid();
   }, 60_000);
 }
 
 // ── View switching ──────────────────────────────────────
-function switchView(view) {
+function switchCalendarView(view) {
   activeView = view;
   document.getElementById('calendar-wrapper').classList.toggle('hidden', view !== 'calendar');
   document.getElementById('schedule-view').classList.toggle('hidden', view !== 'schedule');
@@ -923,18 +923,18 @@ function buildClockSVG(key, blocks) {
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${VB} ${VB}`);
 
-  function el(tag, attrs) {
+  function svgEl(tag, attrs) {
     const e = document.createElementNS(NS, tag);
     for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
     return e;
   }
 
   // Defs (for arc label text paths)
-  const defs = el('defs', {});
+  const defs = svgEl('defs', {});
   svg.appendChild(defs);
 
-  // Clock face
-  svg.appendChild(el('circle', { class: 'clock-face', cx, cy, r: R }));
+  // Background circle that defines the clock's visual boundary
+  svg.appendChild(svgEl('circle', { class: 'clock-face', cx, cy, r: R }));
 
   // Hour ticks + numbers (1–11 in loop, 12 separate)
   for (let h = 0; h < 12; h++) {
@@ -944,7 +944,7 @@ function buildClockSVG(key, blocks) {
     const tickIn   = R * (isMajor ? 0.88 : 0.91);
     const tickOut  = R * 0.975;
 
-    svg.appendChild(el('line', {
+    svg.appendChild(svgEl('line', {
       class: isMajor ? 'clock-tick clock-tick-major' : 'clock-tick',
       x1: cx + tickIn * cos,  y1: cy + tickIn * sin,
       x2: cx + tickOut * cos, y2: cy + tickOut * sin,
@@ -952,7 +952,7 @@ function buildClockSVG(key, blocks) {
 
     const label = h === 0 ? '12' : String(h);
     const numR  = R * 0.73;
-    const txt   = el('text', { class: 'clock-num', x: cx + numR * cos, y: cy + numR * sin });
+    const txt   = svgEl('text', { class: 'clock-num', x: cx + numR * cos, y: cy + numR * sin });
     txt.textContent = label;
     svg.appendChild(txt);
   }
@@ -963,25 +963,25 @@ function buildClockSVG(key, blocks) {
     const isPast         = isPastBlock(block);
 
     // Wrap arc + label in a group so opacity/pointer-events apply to both
-    const g = el('g', {
+    const g = svgEl('g', {
       class: (isRescheduling ? 'rescheduling-arc' : '') +
              (isPast          ? ' crossover-arc'   : ''),
     });
     g.addEventListener('click', (e) => {
       e.stopPropagation();
-      showBlockPopup('edit', block, key, svg, cx, cy, R);
+      showTimeBlockPopup('edit', block, key, svg, cx, cy, R);
     });
-    g.addEventListener('mouseenter', () => { hoveredBlock = { block, key }; });
-    g.addEventListener('mouseleave', () => { hoveredBlock = null; });
+    g.addEventListener('mouseenter', () => { hoveredClockBlock = { block, key }; });
+    g.addEventListener('mouseleave', () => { hoveredClockBlock = null; });
 
-    const path = el('path', {
+    const path = svgEl('path', {
       class: 'clock-block-arc' + (block._recurring ? ' recurring-arc' : ''),
       d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin),
       fill: block.color,
     });
     g.appendChild(path);
 
-    // Curved label along the arc midline
+    // Label follows the arc's curve so text reads naturally inside the block's shape
     const spanMin = (block.endMin - block.startMin + 720) % 720;
     if (spanMin >= 30 && block.label) {
       const rMid    = (r1 + r2) / 2;
@@ -998,11 +998,11 @@ function buildClockSVG(key, blocks) {
       const lx2 = cx + rMid * Math.cos(endAng),   ly2 = cy + rMid * Math.sin(endAng);
       const pathId = `arc-label-path-${block.id}`;
 
-      defs.appendChild(el('path', { id: pathId, d: `M ${lx1} ${ly1} A ${rMid} ${rMid} 0 ${large} 1 ${lx2} ${ly2}` }));
+      defs.appendChild(svgEl('path', { id: pathId, d: `M ${lx1} ${ly1} A ${rMid} ${rMid} 0 ${large} 1 ${lx2} ${ly2}` }));
 
-      const tp = el('textPath', { href: `#${pathId}`, startOffset: '50%', 'text-anchor': 'middle' });
+      const tp = svgEl('textPath', { href: `#${pathId}`, startOffset: '50%', 'text-anchor': 'middle' });
       tp.textContent = display;
-      const textEl = el('text', { class: 'clock-block-label' });
+      const textEl = svgEl('text', { class: 'clock-block-label' });
       textEl.appendChild(tp);
       g.appendChild(textEl);
     }
@@ -1010,16 +1010,16 @@ function buildClockSVG(key, blocks) {
     svg.appendChild(g);
   });
 
-  // Preview arc (empty until drag)
-  const preview = el('path', { id: 'clock-preview-arc', class: 'clock-preview', fill: '#888', d: '' });
+  // Pre-created path updated during drag so we don't create/destroy SVG nodes on every mousemove
+  const preview = svgEl('path', { id: 'clock-preview-arc', class: 'clock-preview', fill: '#888', d: '' });
   svg.appendChild(preview);
 
-  // Current-time hand
-  const hand = el('line', { id: 'clock-hand', class: 'clock-hand', x1: cx, y1: cy, x2: cx, y2: cy });
+  // Drawn above blocks so the hand is always visible regardless of how many arcs are stacked
+  const hand = svgEl('line', { id: 'clock-hand', class: 'clock-hand', x1: cx, y1: cy, x2: cx, y2: cy });
   svg.appendChild(hand);
 
-  // Center dot
-  svg.appendChild(el('circle', { class: 'clock-hand-dot', cx, cy, r: 5 }));
+  // Covers the arc endpoints that converge at center, hiding the jagged joins
+  svg.appendChild(svgEl('circle', { class: 'clock-hand-dot', cx, cy, r: 5 }));
 
   bindClockInteraction(svg, cx, cy, r1, r2, key);
   return svg;
@@ -1063,7 +1063,7 @@ function minutesFromPoint(cx, cy, px, py) {
 // ── Clock drag interaction ──────────────────────────────
 function bindClockInteraction(svg, cx, cy, r1, r2, key) {
   svg.addEventListener('mousedown', (e) => {
-    if (popupState) return;
+    if (timeBlockPopupState) return;
     const pt   = svgPoint(svg, e);
     const dist = Math.hypot(pt.x - cx, pt.y - cy);
     if (dist < r1 - 10 || dist > r2 + 10) return;
@@ -1075,34 +1075,34 @@ function bindClockInteraction(svg, cx, cy, r1, r2, key) {
 
     let lastMin = startMin;
 
-    function onMove(ev) {
+    function onClockDragMove(ev) {
       const pt2 = svgPoint(svg, ev);
       lastMin   = minutesFromPoint(cx, cy, pt2.x, pt2.y);
       const span = (lastMin - startMin + 720) % 720;
       previewPath.setAttribute('d', span >= 15 ? arcPath(cx, cy, r1, r2, startMin, lastMin) : '');
     }
 
-    function onUp() {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+    function onClockDragEnd() {
+      document.removeEventListener('mousemove', onClockDragMove);
+      document.removeEventListener('mouseup', onClockDragEnd);
       previewPath.setAttribute('d', '');
-      clockDrag = null;
+      clockDragState = null;
 
       const endMin = lastMin;
       const span   = (endMin - startMin + 720) % 720;
       if (span < 15) return;
-      showBlockPopup('new', { startMin, endMin }, key, svg, cx, cy, 170);
+      showTimeBlockPopup('new', { startMin, endMin }, key, svg, cx, cy, 170);
     }
 
-    clockDrag = { startMin, svg };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    clockDragState = { startMin, svg };
+    document.addEventListener('mousemove', onClockDragMove);
+    document.addEventListener('mouseup', onClockDragEnd);
     e.preventDefault();
   });
 }
 
 // ── Block popup ─────────────────────────────────────────
-function showBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
+function showTimeBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
   const popup          = document.getElementById('block-label-popup');
   const input          = document.getElementById('block-label-input');
   const confirmBtn     = document.getElementById('block-label-confirm');
@@ -1112,7 +1112,7 @@ function showBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
   const { startMin, endMin, id, label } = blockOrData;
   const isRecurring    = !!blockOrData._recurring;
 
-  popupState = { mode, key, startMin, endMin, id };
+  timeBlockPopupState = { mode, key, startMin, endMin, id };
   input.value    = label || '';
   recurSel.value = isRecurring ? (blockOrData.recurrence || 'daily') : 'none';
 
@@ -1140,15 +1140,15 @@ function showBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
   popup.classList.remove('hidden');
   input.focus();
 
-  function getScope() {
+  function getSelectedBlockScope() {
     return scopeRow.querySelector('input[name="block-scope"]:checked')?.value || 'all';
   }
 
-  function commit() {
+  function commitBlockEdit() {
     const lbl        = input.value.trim();
     const recurrence = recurSel.value;
-    const scope      = getScope();
-    closeBlockPopup();
+    const scope      = getSelectedBlockScope();
+    closeTimeBlockPopup();
     if (!lbl) {
       if (mode === 'edit' && id) deleteTimeBlock(key, id, isRecurring ? scope : undefined);
       return;
@@ -1160,26 +1160,26 @@ function showBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
     }
   }
 
-  function onKeyDown(ev) {
-    if (ev.key === 'Enter')  { ev.preventDefault(); commit(); }
-    if (ev.key === 'Escape') { closeBlockPopup(); }
+  function onBlockLabelKeyDown(ev) {
+    if (ev.key === 'Enter')  { ev.preventDefault(); commitBlockEdit(); }
+    if (ev.key === 'Escape') { closeTimeBlockPopup(); }
   }
   // Delay blur so the delete-button click fires first;
   // only commit if focus has moved outside the popup entirely (not to the select/radios inside it)
-  function onBlur() { setTimeout(() => { if (popupState && !popup.contains(document.activeElement)) commit(); }, 150); }
-  function onDel()  {
-    const scope = getScope();
-    closeBlockPopup();
+  function onBlockLabelBlur() { setTimeout(() => { if (timeBlockPopupState && !popup.contains(document.activeElement)) commitBlockEdit(); }, 150); }
+  function onBlockDeleteClick()  {
+    const scope = getSelectedBlockScope();
+    closeTimeBlockPopup();
     if (mode === 'edit' && id) deleteTimeBlock(key, id, isRecurring ? scope : undefined);
   }
 
-  input.addEventListener('keydown',    onKeyDown);
-  input.addEventListener('blur',       onBlur);
-  confirmBtn.addEventListener('click', commit);
-  delBtn.addEventListener('click',     onDel);
+  input.addEventListener('keydown',    onBlockLabelKeyDown);
+  input.addEventListener('blur',       onBlockLabelBlur);
+  confirmBtn.addEventListener('click', commitBlockEdit);
+  delBtn.addEventListener('click',     onBlockDeleteClick);
 
   // When recurrence select changes, show/hide scope row accordingly
-  function onRecurChange() {
+  function onBlockRecurrenceChange() {
     if (mode === 'edit' && isRecurring) {
       // scope row stays visible regardless (block is already recurring)
     } else {
@@ -1187,38 +1187,38 @@ function showBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
       scopeRow.classList.add('hidden');
     }
   }
-  recurSel.addEventListener('change', onRecurChange);
+  recurSel.addEventListener('change', onBlockRecurrenceChange);
 
-  popupState._cleanup = () => {
-    input.removeEventListener('keydown',    onKeyDown);
-    input.removeEventListener('blur',       onBlur);
-    confirmBtn.removeEventListener('click', commit);
-    delBtn.removeEventListener('click',     onDel);
-    recurSel.removeEventListener('change',  onRecurChange);
+  timeBlockPopupState._cleanup = () => {
+    input.removeEventListener('keydown',    onBlockLabelKeyDown);
+    input.removeEventListener('blur',       onBlockLabelBlur);
+    confirmBtn.removeEventListener('click', commitBlockEdit);
+    delBtn.removeEventListener('click',     onBlockDeleteClick);
+    recurSel.removeEventListener('change',  onBlockRecurrenceChange);
   };
 }
 
-function closeBlockPopup() {
+function closeTimeBlockPopup() {
   const popup = document.getElementById('block-label-popup');
   popup.classList.add('hidden');
-  if (popupState?._cleanup) popupState._cleanup();
-  popupState = null;
+  if (timeBlockPopupState?._cleanup) timeBlockPopupState._cleanup();
+  timeBlockPopupState = null;
 }
 
 // ── Time block data operations ──────────────────────────
 function saveTimeBlock(key, { startMin, endMin, label }, recurrence = 'none') {
-  pushHistory();
+  pushCalendarSnapshot();
   if (recurrence === 'none') {
-    const day   = getDay(key);
+    const day   = getOrInitDayData(key);
     const color = BLOCK_COLORS[day.timeBlocks.length % BLOCK_COLORS.length];
-    day.timeBlocks.push({ id: genId(), startMin, endMin, label, color, ampm: clockAmPm, completed: false });
+    day.timeBlocks.push({ id: generateCalendarEntryId(), startMin, endMin, label, color, ampm: clockAmPm, completed: false });
   } else {
     if (!calData._recurring) calData._recurring = [];
     const color = BLOCK_COLORS[calData._recurring.length % BLOCK_COLORS.length];
     const [y, m, d] = key.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     calData._recurring.push({
-      id: genId(), startMin, endMin, label, color, ampm: clockAmPm,
+      id: generateCalendarEntryId(), startMin, endMin, label, color, ampm: clockAmPm,
       recurrence,
       dayOfWeek:  date.getDay(),
       dayOfMonth: d,
@@ -1226,12 +1226,12 @@ function saveTimeBlock(key, { startMin, endMin, label }, recurrence = 'none') {
       excludedDates:  [],
     });
   }
-  save();
+  saveCalendarData();
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
 function updateTimeBlock(key, blockId, label, recurrence, scope) {
-  pushHistory();
+  pushCalendarSnapshot();
   const recurring    = calData._recurring || [];
   const rIdx         = recurring.findIndex(b => b.id === blockId);
   const isRecurring  = rIdx !== -1;
@@ -1242,9 +1242,9 @@ function updateTimeBlock(key, blockId, label, recurrence, scope) {
       // Exclude today from recurrence; create a one-off override on this date
       if (!block.excludedDates) block.excludedDates = [];
       block.excludedDates.push(key);
-      const day = getDay(key);
+      const day = getOrInitDayData(key);
       day.timeBlocks.push({
-        id: genId(), startMin: block.startMin, endMin: block.endMin,
+        id: generateCalendarEntryId(), startMin: block.startMin, endMin: block.endMin,
         label, color: block.color, ampm: block.ampm, completed: false,
       });
     } else {
@@ -1253,7 +1253,7 @@ function updateTimeBlock(key, blockId, label, recurrence, scope) {
       if (recurrence === 'none') {
         // Convert to a one-off block on the current view date
         recurring.splice(rIdx, 1);
-        const day = getDay(key);
+        const day = getOrInitDayData(key);
         const completed = block.completedDates?.includes(key) || false;
         day.timeBlocks.push({
           id: block.id, startMin: block.startMin, endMin: block.endMin,
@@ -1268,12 +1268,12 @@ function updateTimeBlock(key, blockId, label, recurrence, scope) {
       }
     }
   } else {
-    // Date-specific block
+    // Block lives on a single date in calData[key].timeBlocks, not in calData._recurring
     const block = calData[key]?.timeBlocks?.find(b => b.id === blockId);
     if (!block) return;
     block.label = label;
     if (recurrence !== 'none') {
-      // Promote to recurring
+      // Move the block out of date-specific storage and into calData._recurring
       calData[key].timeBlocks = calData[key].timeBlocks.filter(b => b.id !== blockId);
       if (!calData._recurring) calData._recurring = [];
       const [y, m, d] = key.split('-').map(Number);
@@ -1289,12 +1289,12 @@ function updateTimeBlock(key, blockId, label, recurrence, scope) {
       });
     }
   }
-  save();
+  saveCalendarData();
   if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
 }
 
 function deleteTimeBlock(key, blockId, scope) {
-  pushHistory();
+  pushCalendarSnapshot();
   const recurring = calData._recurring || [];
   const rIdx      = recurring.findIndex(b => b.id === blockId);
   if (rIdx !== -1) {
@@ -1307,14 +1307,14 @@ function deleteTimeBlock(key, blockId, scope) {
     } else {
       recurring.splice(rIdx, 1);
     }
-    save();
+    saveCalendarData();
     if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
     return;
   }
   const day = calData[key];
   if (!day?.timeBlocks) return;
   day.timeBlocks = day.timeBlocks.filter(b => b.id !== blockId);
-  save();
+  saveCalendarData();
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
@@ -1336,13 +1336,13 @@ function renderBlockLegend(key, blocks, svg) {
     chip.className   = 'block-chip';
     chip.textContent = block._recurring ? block.label + ' \u21BB' : block.label;
     chip.style.background = block.color;
-    chip.title = `${formatMin(block.startMin)} – ${formatMin(block.endMin, block.ampm)}`;
-    chip.addEventListener('click', () => showBlockPopup('edit', block, key, svg, 200, 200, 170));
+    chip.title = `${formatClockMinutes(block.startMin)} – ${formatClockMinutes(block.endMin, block.ampm)}`;
+    chip.addEventListener('click', () => showTimeBlockPopup('edit', block, key, svg, 200, 200, 170));
     legend.appendChild(chip);
   });
 }
 
-function formatMin(min, ampm = '') {
+function formatClockMinutes(min, ampm = '') {
   const h = Math.floor(min / 60) % 12 || 12;
   const m = min % 60;
   const base = `${h}:${String(m).padStart(2, '0')}`;
@@ -1396,7 +1396,7 @@ function renderTaskList(key, allBlocks, svg) {
 
     const timeEl = document.createElement('div');
     timeEl.className   = 'task-time';
-    timeEl.textContent = `${formatMin(block.startMin)} – ${formatMin(block.endMin, block.ampm)}`;
+    timeEl.textContent = `${formatClockMinutes(block.startMin)} – ${formatClockMinutes(block.endMin, block.ampm)}`;
 
     body.append(lbl, timeEl);
 
@@ -1407,7 +1407,7 @@ function renderTaskList(key, allBlocks, svg) {
     btnComplete.className   = 'task-btn';
     btnComplete.title       = block.completed ? 'Mark incomplete' : 'Mark complete';
     btnComplete.textContent = block.completed ? '\u21BA' : '\u2713'; // ↺ / ✓
-    btnComplete.addEventListener('click', () => toggleCompleted(key, block.id));
+    btnComplete.addEventListener('click', () => toggleBlockCompleted(key, block.id));
 
     const btnReschedule = document.createElement('button');
     btnReschedule.className   = 'task-btn';
@@ -1464,22 +1464,22 @@ function isPastBlock(block) {
   return nowMin >= endMin;
 }
 
-function toggleCompleted(key, blockId) {
-  pushHistory();
+function toggleBlockCompleted(key, blockId) {
+  pushCalendarSnapshot();
   const rBlock = (calData._recurring || []).find(b => b.id === blockId);
   if (rBlock) {
     if (!rBlock.completedDates) rBlock.completedDates = [];
     const idx = rBlock.completedDates.indexOf(key);
     if (idx === -1) rBlock.completedDates.push(key);
     else            rBlock.completedDates.splice(idx, 1);
-    save();
+    saveCalendarData();
     if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
     return;
   }
   const block = calData[key]?.timeBlocks?.find(b => b.id === blockId);
   if (!block) return;
   block.completed = !block.completed;
-  save();
+  saveCalendarData();
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
@@ -1508,7 +1508,7 @@ function updateRescheduleBanner() {
 
 function confirmReschedule() {
   if (!rescheduleBlock) return;
-  pushHistory();
+  pushCalendarSnapshot();
   const input   = document.getElementById('reschedule-date-input');
   const newKey  = input.value;
   if (!newKey || newKey === rescheduleBlock._key) { cancelReschedule(); return; }
@@ -1523,11 +1523,11 @@ function confirmReschedule() {
   }
 
   // Add to new day (keep same id so it's clearly the same block)
-  const newDay = getDay(newKey);
+  const newDay = getOrInitDayData(newKey);
   newDay.timeBlocks.push({ id, startMin, endMin, label, color, ampm, completed: completed || false });
 
   rescheduleBlock = null;
-  save();
+  saveCalendarData();
   renderScheduleView(scheduleDate); // stay on current day view; new day visible when navigated
 }
 
@@ -1567,6 +1567,6 @@ function updateClockHand(fromInterval = false) {
 }
 
 // ── Start ──────────────────────────────────────────────
-init();
+initCalendarApp();
 startDayChangeWatcher();
 setInterval(() => updateClockHand(true), 60_000);

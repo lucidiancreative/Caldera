@@ -916,6 +916,9 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 /* Past blocks stay visible so clock layout doesn't shift as the hand crosses noon; near-zero opacity signals they're done */
 .crossover-arc { opacity: 0.07; pointer-events: none; }
 
+/* AM events carried over to the PM clock — visible but clearly secondary */
+.am-overlay-arc { opacity: 0.3; pointer-events: none; }
+
 /* All SVG clock primitives use CSS variables so they theme correctly in dark mode */
 .clock-face     { fill: var(--surface); stroke: var(--border); stroke-width: 2; }
 .clock-tick     { stroke: var(--border); stroke-width: 1.5; stroke-linecap: round; }

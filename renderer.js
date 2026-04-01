@@ -227,7 +227,7 @@ async function renderCalendarGrid() {
       imageResolves.push(
         calBridge.resolveImage(featured.image).then(fullPath => {
           bg.style.backgroundImage = `url("${toElectronFileUrl(fullPath)}")`;
-        })
+        }).catch(err => console.error(`Failed to resolve featured image for ${key}:`, err))
       );
     }
 
@@ -674,7 +674,9 @@ function buildEventCard(key, ev, isFeatured) {
 
   if (ev.image) {
     imgArea.classList.add('has-image');
-    calBridge.resolveImage(ev.image).then(p => { img.src = toElectronFileUrl(p); });
+    calBridge.resolveImage(ev.image)
+      .then(p => { img.src = toElectronFileUrl(p); })
+      .catch(err => console.error(`Failed to resolve event image for event ${ev.id}:`, err));
     imgArea.addEventListener('click', () => { if (img.src) openLightbox(img.src); });
   }
 
@@ -775,7 +777,7 @@ function bindCalendarUIEvents() {
   document.getElementById('reschedule-confirm').addEventListener('click', confirmReschedule);
   document.getElementById('reschedule-cancel').addEventListener('click', cancelReschedule);
 
-  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-close').addEventListener('click', closeDayDetailModal);
   document.getElementById('modal-overlay').addEventListener('click', (e) => {
     if (e.target === document.getElementById('modal-overlay')) closeDayDetailModal();
   });
@@ -905,7 +907,14 @@ function renderScheduleView(key) {
   }));
   const allBlocks     = [...allDateBlocks, ...recurBlocks];
   const visibleBlocks = allBlocks.filter(b => b.ampm === clockAmPm);
-  const svg           = buildClockSVG(key, visibleBlocks);
+  // PM clock also renders AM blocks as dimmed overlays — they're always in the past and
+  // occupy the same angular positions as their PM counterparts (startMin/endMin are shared
+  // 12-hr coordinates). Draw them first so PM blocks layer on top.
+  const clockBlocks = clockAmPm === 'PM'
+    ? [...allBlocks.filter(b => b.ampm === 'AM').map(b => ({ ...b, _amOverlay: true })),
+       ...visibleBlocks]
+    : visibleBlocks;
+  const svg           = buildClockSVG(key, clockBlocks);
   area.appendChild(svg);
   updateClockHand();
 
@@ -962,17 +971,25 @@ function buildClockSVG(key, blocks) {
     const isRescheduling = rescheduleBlock?.id === block.id;
     const isPast         = isPastBlock(block);
 
-    // Wrap arc + label in a group so opacity/pointer-events apply to both
+    // Wrap arc + label in a group so opacity/pointer-events apply to both.
+    // AM overlays on PM clock get their own class (readable dimmed opacity).
+    // Regular past blocks use crossover-arc (near-zero — signals done).
+    const dimClass = block._amOverlay ? 'am-overlay-arc'
+                   : isPast           ? 'crossover-arc'
+                   :                    '';
     const g = svgEl('g', {
-      class: (isRescheduling ? 'rescheduling-arc' : '') +
-             (isPast          ? ' crossover-arc'   : ''),
+      class: [isRescheduling ? 'rescheduling-arc' : '', dimClass].filter(Boolean).join(' '),
     });
-    g.addEventListener('click', (e) => {
-      e.stopPropagation();
-      showTimeBlockPopup('edit', block, key, svg, cx, cy, R);
-    });
-    g.addEventListener('mouseenter', () => { hoveredClockBlock = { block, key }; });
-    g.addEventListener('mouseleave', () => { hoveredClockBlock = null; });
+    // AM overlays are read-only; am-overlay-arc sets pointer-events:none,
+    // but skip attaching handlers entirely to keep things clean
+    if (!block._amOverlay) {
+      g.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showTimeBlockPopup('edit', block, key, svg, cx, cy, R);
+      });
+      g.addEventListener('mouseenter', () => { hoveredClockBlock = { block, key }; });
+      g.addEventListener('mouseleave', () => { hoveredClockBlock = null; });
+    }
 
     const path = svgEl('path', {
       class: 'clock-block-arc' + (block._recurring ? ' recurring-arc' : ''),
@@ -1206,19 +1223,20 @@ function closeTimeBlockPopup() {
 }
 
 // ── Time block data operations ──────────────────────────
-function saveTimeBlock(key, { startMin, endMin, label }, recurrence = 'none') {
+async function saveTimeBlock(key, { startMin, endMin, label }, recurrence = 'none') {
   pushCalendarSnapshot();
+  const ampm = inferBlockAmPm(startMin);
   if (recurrence === 'none') {
     const day   = getOrInitDayData(key);
     const color = BLOCK_COLORS[day.timeBlocks.length % BLOCK_COLORS.length];
-    day.timeBlocks.push({ id: generateCalendarEntryId(), startMin, endMin, label, color, ampm: clockAmPm, completed: false });
+    day.timeBlocks.push({ id: generateCalendarEntryId(), startMin, endMin, label, color, ampm, completed: false });
   } else {
     if (!calData._recurring) calData._recurring = [];
     const color = BLOCK_COLORS[calData._recurring.length % BLOCK_COLORS.length];
     const [y, m, d] = key.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     calData._recurring.push({
-      id: generateCalendarEntryId(), startMin, endMin, label, color, ampm: clockAmPm,
+      id: generateCalendarEntryId(), startMin, endMin, label, color, ampm,
       recurrence,
       dayOfWeek:  date.getDay(),
       dayOfMonth: d,
@@ -1226,11 +1244,17 @@ function saveTimeBlock(key, { startMin, endMin, label }, recurrence = 'none') {
       excludedDates:  [],
     });
   }
-  saveCalendarData();
+  await saveCalendarData();
+  // If the inferred period differs from the current clock view, switch to show the new block
+  if (ampm !== clockAmPm) {
+    clockAmPm = ampm;
+    document.querySelectorAll('.ampm-btn')
+      .forEach(b => b.classList.toggle('active', b.dataset.ampm === clockAmPm));
+  }
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
-function updateTimeBlock(key, blockId, label, recurrence, scope) {
+async function updateTimeBlock(key, blockId, label, recurrence, scope) {
   pushCalendarSnapshot();
   const recurring    = calData._recurring || [];
   const rIdx         = recurring.findIndex(b => b.id === blockId);
@@ -1289,11 +1313,11 @@ function updateTimeBlock(key, blockId, label, recurrence, scope) {
       });
     }
   }
-  saveCalendarData();
+  await saveCalendarData();
   if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
 }
 
-function deleteTimeBlock(key, blockId, scope) {
+async function deleteTimeBlock(key, blockId, scope) {
   pushCalendarSnapshot();
   const recurring = calData._recurring || [];
   const rIdx      = recurring.findIndex(b => b.id === blockId);
@@ -1307,14 +1331,14 @@ function deleteTimeBlock(key, blockId, scope) {
     } else {
       recurring.splice(rIdx, 1);
     }
-    saveCalendarData();
+    await saveCalendarData();
     if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
     return;
   }
   const day = calData[key];
   if (!day?.timeBlocks) return;
   day.timeBlocks = day.timeBlocks.filter(b => b.id !== blockId);
-  saveCalendarData();
+  await saveCalendarData();
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
@@ -1457,14 +1481,32 @@ function renderTaskList(key, allBlocks, svg) {
 }
 
 // ── Block state helpers ─────────────────────────────────
+// Infer whether a block drawn at `startMin` belongs to AM or PM.
+// Compares both 12-hr interpretations against the current wall-clock time:
+//   - one past, one future → pick the future one
+//   - both past or both future → fall back to the current clock mode
+function inferBlockAmPm(startMin) {
+  const now    = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const amStart = startMin;
+  const pmStart = startMin + 720;
+  if (amStart < nowMin && pmStart >= nowMin) return 'PM';
+  if (pmStart < nowMin && amStart >= nowMin) return 'AM';
+  return clockAmPm;
+}
+
 function isPastBlock(block) {
   const now    = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  const endMin = block.ampm === 'PM' ? block.endMin + 720 : block.endMin;
+  let endMin = block.ampm === 'PM' ? block.endMin + 720 : block.endMin;
+  // AM block crossing noon (e.g. 10 AM→12 PM): endMin wraps to a value < startMin on the 12-hr face
+  if (block.ampm === 'AM' && block.endMin < block.startMin) {
+    endMin = block.endMin + 720;
+  }
   return nowMin >= endMin;
 }
 
-function toggleBlockCompleted(key, blockId) {
+async function toggleBlockCompleted(key, blockId) {
   pushCalendarSnapshot();
   const rBlock = (calData._recurring || []).find(b => b.id === blockId);
   if (rBlock) {
@@ -1472,14 +1514,14 @@ function toggleBlockCompleted(key, blockId) {
     const idx = rBlock.completedDates.indexOf(key);
     if (idx === -1) rBlock.completedDates.push(key);
     else            rBlock.completedDates.splice(idx, 1);
-    saveCalendarData();
+    await saveCalendarData();
     if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
     return;
   }
   const block = calData[key]?.timeBlocks?.find(b => b.id === blockId);
   if (!block) return;
   block.completed = !block.completed;
-  saveCalendarData();
+  await saveCalendarData();
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
@@ -1506,7 +1548,7 @@ function updateRescheduleBanner() {
   }
 }
 
-function confirmReschedule() {
+async function confirmReschedule() {
   if (!rescheduleBlock) return;
   pushCalendarSnapshot();
   const input   = document.getElementById('reschedule-date-input');
@@ -1527,7 +1569,7 @@ function confirmReschedule() {
   newDay.timeBlocks.push({ id, startMin, endMin, label, color, ampm, completed: completed || false });
 
   rescheduleBlock = null;
-  saveCalendarData();
+  await saveCalendarData();
   renderScheduleView(scheduleDate); // stay on current day view; new day visible when navigated
 }
 

@@ -1371,3 +1371,103 @@ body.dark .skin-preview-default {
   background: rgba(255,255,255,0.12);
   border-radius: inherit;
 }
+
+/* ════════════════════════════════════════════════════════
+   GLASS SKIN — FIXES
+   ════════════════════════════════════════════════════════ */
+
+/* ── Fix 1: Modal overlay — reduce opacity so shader shows
+          through to the modal's own backdrop-filter ──── */
+body.skin-glass #modal-overlay {
+  background: rgba(0, 0, 0, 0.18);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Event card sub-elements need explicit glass treatment
+   because they have hardcoded backgrounds in the base CSS */
+body.skin-glass .card-image-area {
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom-color: var(--border);
+}
+body.skin-glass .card-time,
+body.skin-glass .card-notes {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border);
+  color: var(--text);
+}
+body.skin-glass .card-time:focus,
+body.skin-glass .card-notes:focus { border-color: var(--accent); }
+
+body.skin-glass .modal-add-zone {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+/* ── Fix 2: Nav arrows, month tabs, view tabs, ampm buttons ── */
+body.skin-glass .nav-arrow {
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-color: var(--border);
+  color: var(--text);
+}
+body.skin-glass .nav-arrow:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.50);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+body.skin-glass .month-tab {
+  color: var(--text-muted);
+}
+body.skin-glass .month-tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  border-color: var(--border);
+}
+body.skin-glass .month-tab.active {
+  background: rgba(160, 184, 255, 0.22);
+  color: var(--text);
+  border-color: rgba(160, 184, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(160,184,255,0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+body.skin-glass .view-tab {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+body.skin-glass .view-tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+body.skin-glass .view-tab.active {
+  background: rgba(160, 184, 255, 0.22);
+  color: var(--text);
+  border-color: rgba(160, 184, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 10px rgba(160,184,255,0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+body.skin-glass .ampm-btn {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+body.skin-glass .ampm-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+body.skin-glass .ampm-btn.active {
+  background: rgba(160, 184, 255, 0.22);
+  color: var(--text);
+  border-color: rgba(160, 184, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}

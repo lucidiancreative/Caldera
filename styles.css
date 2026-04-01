@@ -19,13 +19,23 @@
 
 html, body {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
   user-select: none;
   transition: background 0.2s, color 0.2s;
 }
+
+/* ── Shader canvas ────────────────────────────────────── */
+#shader-bg {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+  display: none;
+}
+body.skin-glass #shader-bg { display: block; }
 
 /* ── Title bar ────────────────────────────────────────── */
 #titlebar {
@@ -1067,4 +1077,297 @@ body.dark #block-label-popup { box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
   font-size: 10px;
   opacity: 0.65;
   margin-left: 4px;
+}
+
+/* ════════════════════════════════════════════════════════
+   GLASS SKIN
+   ════════════════════════════════════════════════════════ */
+
+/* ── Variables: light variant ─────────────────────────── */
+body.skin-glass {
+  --bg:          transparent;
+  --surface:     rgba(255, 255, 255, 0.18);
+  --border:      rgba(255, 255, 255, 0.30);
+  --text:        #ffffff;
+  --text-muted:  rgba(255, 255, 255, 0.60);
+  --accent:      #a0b8ff;
+  --accent-soft: rgba(160, 184, 255, 0.18);
+  --today-ring:  #ff6b6b;
+  --star:        #ffd166;
+}
+
+/* ── Variables: dark variant ──────────────────────────── */
+body.skin-glass.dark {
+  --surface:    rgba(10, 10, 20, 0.42);
+  --border:     rgba(255, 255, 255, 0.14);
+  --text-muted: rgba(255, 255, 255, 0.45);
+}
+
+/* ── Glass panels ─────────────────────────────────────── */
+body.skin-glass #titlebar {
+  background: var(--surface);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 12px rgba(0,0,0,0.18);
+}
+
+body.skin-glass #month-strip {
+  background: var(--surface);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 12px rgba(0,0,0,0.15);
+}
+
+body.skin-glass .day-cell {
+  background: var(--surface);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 2px 6px rgba(0,0,0,0.14);
+  transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s ease, background 0.18s;
+}
+
+body.skin-glass .day-cell:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,0.55);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.40), 0 8px 24px rgba(0,0,0,0.22);
+}
+
+body.skin-glass .day-cell.today {
+  border-color: var(--today-ring);
+  background: rgba(255, 107, 107, 0.10);
+  box-shadow: inset 0 1px 0 rgba(255,107,107,0.20), 0 0 18px rgba(255,107,107,0.12);
+}
+
+body.skin-glass .day-cell.empty {
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  transform: none;
+}
+
+body.skin-glass #modal {
+  background: var(--surface);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 32px 80px rgba(0,0,0,0.35);
+}
+
+body.skin-glass .event-card {
+  background: rgba(255,255,255,0.10);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+}
+
+body.skin-glass .card-toolbar {
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+body.skin-glass #block-label-popup {
+  background: var(--surface);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), 0 8px 32px rgba(0,0,0,0.28);
+}
+
+body.skin-glass .task-item {
+  background: var(--surface);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.20);
+}
+
+/* Dark-mode glass: harden specific elements that have hardcoded colors */
+body.skin-glass.dark #modal-close     { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.70); }
+body.skin-glass.dark #modal-close:hover { background: rgba(255,255,255,0.18); color: #fff; }
+body.skin-glass.dark .event-card      { background: rgba(10,10,20,0.30); }
+body.skin-glass.dark .card-toolbar    { background: rgba(10,10,20,0.28); }
+
+/* ── Entrance animations ──────────────────────────────── */
+@keyframes glass-cell-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Cell delay is set inline from JS: cell.style.animationDelay */
+body.skin-glass .day-cell {
+  animation: glass-cell-enter 0.35s ease both;
+}
+
+body.skin-glass #modal {
+  animation: glass-cell-enter 0.22s ease both;
+}
+
+/* ── Button light-follow effect ───────────────────────── */
+body.skin-glass #win-controls button,
+body.skin-glass .nav-arrow,
+body.skin-glass .month-tab,
+body.skin-glass .view-tab,
+body.skin-glass .ampm-btn,
+body.skin-glass #btn-add-event,
+body.skin-glass #btn-schedule-day {
+  position: relative;
+  overflow: hidden;
+}
+
+body.skin-glass #win-controls button::before,
+body.skin-glass .nav-arrow::before,
+body.skin-glass .month-tab::before,
+body.skin-glass .view-tab::before,
+body.skin-glass .ampm-btn::before,
+body.skin-glass #btn-add-event::before,
+body.skin-glass #btn-schedule-day::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle 40px at var(--mx, 50%) var(--my, 50%),
+    rgba(255,255,255,0.22) 0%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 0.20s;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+body.skin-glass #win-controls button:hover::before,
+body.skin-glass .nav-arrow:hover::before,
+body.skin-glass .month-tab:hover::before,
+body.skin-glass .view-tab:hover::before,
+body.skin-glass .ampm-btn:hover::before,
+body.skin-glass #btn-add-event:hover::before,
+body.skin-glass #btn-schedule-day:hover::before {
+  opacity: 1;
+}
+
+/* ════════════════════════════════════════════════════════
+   SKIN PICKER MODAL
+   ════════════════════════════════════════════════════════ */
+#skin-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+}
+#skin-overlay.hidden { display: none; }
+
+#skin-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  width: 360px;
+  max-width: 92vw;
+  position: relative;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.28);
+}
+
+body.skin-glass #skin-modal {
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), 0 32px 80px rgba(0,0,0,0.38);
+}
+
+#skin-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  padding-right: 36px;
+  color: var(--text);
+}
+
+#skin-modal-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 50%;
+  width: 30px; height: 30px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  transition: background 0.12s;
+}
+#skin-modal-close:hover               { background: #e0e0e0; color: var(--text); }
+body.dark #skin-modal-close           { background: #2c2c2e; }
+body.dark #skin-modal-close:hover     { background: #3a3a3c; color: var(--text); }
+body.skin-glass #skin-modal-close     { background: rgba(255,255,255,0.14); color: var(--text); }
+body.skin-glass #skin-modal-close:hover { background: rgba(255,255,255,0.26); }
+
+#skin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.skin-card {
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: pointer;
+  padding: 12px 10px 10px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+}
+.skin-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.skin-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+  background: var(--accent-soft);
+}
+
+.skin-preview {
+  width: 100%;
+  height: 52px;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.skin-preview-default {
+  background: linear-gradient(135deg, #f0f0f0 0%, #e8ecff 100%);
+}
+body.dark .skin-preview-default {
+  background: linear-gradient(135deg, #111113 0%, #1a234a 100%);
+}
+
+.skin-preview-glass {
+  background: linear-gradient(135deg, #0d0d1f 0%, #1a2a40 40%, #2a1a3a 70%, #0a1a2a 100%);
+}
+.skin-preview-glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.12);
+  border-radius: inherit;
 }

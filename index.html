@@ -4,9 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Caldera</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+  <!-- Shader background canvas — stays behind all UI via z-index -->
+  <canvas id="shader-bg"></canvas>
 
   <!-- Custom title bar -->
   <div id="titlebar">
@@ -14,6 +20,7 @@
     <span id="app-name">Caldera</span>
     <div id="win-controls">
       <button id="btn-theme" title="Toggle dark mode">&#9790;</button>
+      <button id="btn-skin"  title="Change skin">&#10024;</button>
       <button id="btn-min" title="Minimize">&#8211;</button>
       <button id="btn-max" title="Maximize">&#9633;</button>
       <button id="btn-close" title="Close">&#10005;</button>
@@ -122,6 +129,15 @@
   <div id="lightbox-overlay" class="hidden">
     <button id="lightbox-close">&#10005;</button>
     <img id="lightbox-img" alt="" />
+  </div>
+
+  <!-- Skin picker modal -->
+  <div id="skin-overlay" class="hidden">
+    <div id="skin-modal">
+      <button id="skin-modal-close">&#10005;</button>
+      <h2 id="skin-modal-title">Appearance</h2>
+      <div id="skin-grid"></div>
+    </div>
   </div>
 
   <script src="renderer.js"></script>

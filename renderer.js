@@ -27,9 +27,152 @@ const redoStack     = [];
 const MAX_HISTORY   = 50;
 const BLOCK_COLORS = ['#4f6ef7', '#e03030', '#2eb67d', '#f0a500', '#a259ff', '#ff6b35'];
 
+// ── Skin registry ───────────────────────────────────────
+const SKINS = {
+  default: { id: 'default', label: 'Default', init: () => {}, destroy: () => {} },
+  glass:   { id: 'glass',   label: 'Glass',   init: initShaderBackground, destroy: destroyShaderBackground },
+};
+
+function getCurrentSkin() {
+  return localStorage.getItem('skin') || 'default';
+}
+
+function activateSkin(id) {
+  const prev = getCurrentSkin();
+  if (SKINS[prev]) SKINS[prev].destroy();
+  document.body.classList.forEach(cls => {
+    if (cls.startsWith('skin-')) document.body.classList.remove(cls);
+  });
+  document.body.classList.add(`skin-${id}`);
+  localStorage.setItem('skin', id);
+  if (SKINS[id]) SKINS[id].init();
+}
+
+// ── WebGL shader background (glass skin) ───────────────
+let _shaderRAF  = null;
+let _shaderGL   = null;
+let _shaderProg = null;
+let _shaderTime = 0;
+let _shaderLast = null;
+
+function initShaderBackground() {
+  const canvas = document.getElementById('shader-bg');
+  const gl = canvas.getContext('webgl');
+  if (!gl) { console.warn('Caldera: WebGL unavailable — glass skin will use CSS only.'); return; }
+  _shaderGL = gl;
+
+  function compileShader(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error('Shader compile error:', gl.getShaderInfoLog(s));
+      return null;
+    }
+    return s;
+  }
+
+  const vs = compileShader(gl.VERTEX_SHADER, `
+    attribute vec2 a_position;
+    void main() { gl_Position = vec4(a_position, 0.0, 1.0); }
+  `);
+  const fs = compileShader(gl.FRAGMENT_SHADER, `
+    precision mediump float;
+    uniform vec2  u_resolution;
+    uniform float u_time;
+
+    vec3 palette(float t) {
+      vec3 a = vec3(0.05, 0.05, 0.12);
+      vec3 b = vec3(0.15, 0.25, 0.20);
+      vec3 c = vec3(0.70, 0.60, 0.80);
+      vec3 d = vec3(0.20, 0.40, 0.65);
+      return a + b * cos(6.28318 * (c * t + d));
+    }
+
+    void main() {
+      vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+      uv.x *= u_resolution.x / u_resolution.y;
+      float t = u_time * 0.15;
+      float d = 0.0;
+      vec2  p = uv * 2.5;
+      for (int i = 0; i < 4; i++) {
+        p = vec2(
+          sin(p.y * 1.8 + t + float(i) * 0.7) + cos(p.x * 1.3 - t * 0.6),
+          cos(p.x * 1.6 - t * 0.8 + float(i) * 0.5) + sin(p.y * 1.4 + t * 0.4)
+        );
+        d += length(p) * 0.25;
+      }
+      vec3 col = palette(d * 0.5 + t * 0.1);
+      col = pow(col, vec3(0.9));
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `);
+  if (!vs || !fs) return;
+
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs);
+  gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.error('Shader link error:', gl.getProgramInfoLog(prog));
+    return;
+  }
+  _shaderProg = prog;
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    -1,-1, 1,-1, -1, 1,
+    -1, 1, 1,-1,  1, 1,
+  ]), gl.STATIC_DRAW);
+  const posLoc = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+  const uRes  = gl.getUniformLocation(prog, 'u_resolution');
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+
+  function resizeCanvas() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  canvas._shaderResizeHandler = resizeCanvas;
+
+  _shaderTime = 0;
+  _shaderLast = null;
+
+  function frame(ts) {
+    if (_shaderLast !== null) _shaderTime += (ts - _shaderLast) * 0.001;
+    _shaderLast = ts;
+    gl.useProgram(_shaderProg);
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.uniform1f(uTime, _shaderTime);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    _shaderRAF = requestAnimationFrame(frame);
+  }
+  _shaderRAF = requestAnimationFrame(frame);
+}
+
+function destroyShaderBackground() {
+  if (_shaderRAF !== null) { cancelAnimationFrame(_shaderRAF); _shaderRAF = null; }
+  const canvas = document.getElementById('shader-bg');
+  if (canvas._shaderResizeHandler) {
+    window.removeEventListener('resize', canvas._shaderResizeHandler);
+    canvas._shaderResizeHandler = null;
+  }
+  if (_shaderGL && _shaderProg) _shaderGL.deleteProgram(_shaderProg);
+  _shaderGL = null;
+  _shaderProg = null;
+  _shaderLast = null;
+}
+
 // ── Boot ───────────────────────────────────────────────
 async function initCalendarApp() {
   applyCalendarTheme(localStorage.getItem('theme') === 'dark');
+  activateSkin(getCurrentSkin());
   const raw = await calBridge.loadData();
   calData = migrateCalendarDataFormat(raw);
   renderMonthStrip();
@@ -265,6 +408,10 @@ async function renderCalendarGrid() {
       pasteCellDate = null;
       teardownHoverScrollStrip(cell);
     });
+
+    if (document.body.classList.contains('skin-glass')) {
+      cell.style.animationDelay = ((firstDay + d - 1) * 18) + 'ms';
+    }
 
     grid.appendChild(cell);
   }
@@ -561,6 +708,12 @@ function openDayDetailModal(key) {
   document.getElementById('modal-date').textContent = formatDisplayDate(key);
   renderEventCards(key);
   document.getElementById('modal-overlay').classList.remove('hidden');
+  if (document.body.classList.contains('skin-glass')) {
+    const modal = document.getElementById('modal');
+    modal.style.animation = 'none';
+    void modal.offsetWidth;
+    modal.style.animation = '';
+  }
 }
 
 function closeDayDetailModal() {
@@ -739,6 +892,13 @@ function bindCalendarUIEvents() {
     document.getElementById('btn-theme').textContent = isDark ? '\u2600' : '\u263E';
   });
 
+  document.getElementById('btn-skin').addEventListener('click', openSkinPicker);
+
+  document.getElementById('skin-modal-close').addEventListener('click', closeSkinPicker);
+  document.getElementById('skin-overlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('skin-overlay')) closeSkinPicker();
+  });
+
   document.getElementById('prev-month').addEventListener('click', () => changeMonth(-1));
   document.getElementById('next-month').addEventListener('click', () => changeMonth(1));
   document.getElementById('prev-year').addEventListener('click',  () => changeYear(-1));
@@ -789,6 +949,7 @@ function bindCalendarUIEvents() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (!document.getElementById('skin-overlay').classList.contains('hidden')) { closeSkinPicker(); return; }
       if (!document.getElementById('lightbox-overlay').classList.contains('hidden')) closeLightbox();
       else if (modalDate) closeDayDetailModal();
       else if (rescheduleBlock) cancelReschedule();
@@ -837,6 +998,67 @@ function bindCalendarUIEvents() {
     scheduleDate = targetDate;
     clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
     switchCalendarView('schedule');
+  });
+
+  bindGlassButtonLightFollow();
+}
+
+// ── Skin picker ─────────────────────────────────────────
+function openSkinPicker() {
+  renderSkinGrid();
+  document.getElementById('skin-overlay').classList.remove('hidden');
+}
+
+function closeSkinPicker() {
+  document.getElementById('skin-overlay').classList.add('hidden');
+}
+
+function renderSkinGrid() {
+  const grid    = document.getElementById('skin-grid');
+  grid.innerHTML = '';
+  const current = getCurrentSkin();
+
+  Object.values(SKINS).forEach(skin => {
+    const card = document.createElement('button');
+    card.className   = 'skin-card' + (skin.id === current ? ' active' : '');
+    card.dataset.skinId = skin.id;
+
+    const preview = document.createElement('div');
+    preview.className = `skin-preview skin-preview-${skin.id}`;
+
+    const label = document.createElement('span');
+    label.textContent = skin.label;
+
+    card.append(preview, label);
+    card.addEventListener('click', () => {
+      activateSkin(skin.id);
+      renderSkinGrid();
+      // Re-render grid so cell animation delays apply/remove correctly
+      renderCalendarGrid();
+    });
+    grid.appendChild(card);
+  });
+}
+
+// ── Glass: button light-follow effect ──────────────────
+function bindGlassButtonLightFollow() {
+  const selector = [
+    '#win-controls button',
+    '.nav-arrow',
+    '.month-tab',
+    '.view-tab',
+    '.ampm-btn',
+    '#btn-add-event',
+    '#btn-schedule-day',
+  ].join(', ');
+
+  document.addEventListener('mousemove', (e) => {
+    if (!document.body.classList.contains('skin-glass')) return;
+    const btn = e.target.closest(selector);
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    btn.style.setProperty('--mx', ((e.clientX - rect.left) / rect.width  * 100) + '%');
+    btn.style.setProperty('--my', ((e.clientY - rect.top)  / rect.height * 100) + '%');
   });
 }
 

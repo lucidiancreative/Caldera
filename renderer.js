@@ -82,8 +82,8 @@ function initShaderBackground() {
     uniform float u_time;
 
     vec3 palette(float t) {
-      vec3 a = vec3(0.05, 0.05, 0.12);
-      vec3 b = vec3(0.15, 0.25, 0.20);
+      vec3 a = vec3(0.04, 0.04, 0.10);
+      vec3 b = vec3(0.07, 0.11, 0.09);
       vec3 c = vec3(0.70, 0.60, 0.80);
       vec3 d = vec3(0.20, 0.40, 0.65);
       return a + b * cos(6.28318 * (c * t + d));
@@ -103,7 +103,7 @@ function initShaderBackground() {
         d += length(p) * 0.25;
       }
       vec3 col = palette(d * 0.5 + t * 0.1);
-      col = pow(col, vec3(0.9));
+      col = pow(col, vec3(1.15));
       gl_FragColor = vec4(col, 1.0);
     }
   `);

@@ -114,7 +114,11 @@ async function buildPageDumps(sites: string[]): Promise<string[]> {
   for (const url of sites) {
     try {
       const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Caldera/1.0)' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+        },
         signal: AbortSignal.timeout(15_000),
       });
       const html = await res.text();
@@ -125,8 +129,17 @@ async function buildPageDumps(sites: string[]): Promise<string[]> {
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 50_000);
-      dumps.push(`--- SOURCE: ${url} ---\n${text}`);
+
+      const charCount = text.length;
+      console.log(`[ai-import] fetched ${url} — ${charCount} chars after strip`);
+      if (charCount < 200) {
+        console.warn(`[ai-import] WARNING: ${url} returned very little text — likely JS-rendered`);
+        dumps.push(`--- SOURCE: ${url} --- [PAGE APPEARS EMPTY — may require JavaScript rendering; only ${charCount} chars found]`);
+      } else {
+        dumps.push(`--- SOURCE: ${url} ---\n${text}`);
+      }
     } catch (e) {
+      console.error(`[ai-import] fetch failed for ${url}:`, (e as Error).message);
       dumps.push(`--- SOURCE: ${url} --- [FETCH FAILED: ${(e as Error).message}]`);
     }
   }
@@ -135,12 +148,14 @@ async function buildPageDumps(sites: string[]): Promise<string[]> {
 
 function buildFetchPrompt(today: string, interests: string, pageDumps: string[]): string {
   return (
-    `Today is ${today}.\n` +
-    `The user's interests: ${interests || '(none specified)'}\n\n` +
-    `Below is the scraped text from the user's event sites. Extract upcoming calendar events.\n` +
-    `Return ONLY valid JSON — an array of objects with these keys:\n` +
-    `  title (string), date (YYYY-MM-DD), time (HH:MM or null), notes (string), sourceUrl (string)\n` +
-    `If no events are found, return []. Do not include any prose outside the JSON array.\n\n` +
+    `Today is ${today}. Extract upcoming calendar events from the page text below.\n` +
+    (interests ? `Focus on events related to: ${interests}\n` : '') +
+    `\nRules:\n` +
+    `- Return ONLY a raw JSON array, no markdown, no prose, no code fences\n` +
+    `- Each item must have: title (string), date (YYYY-MM-DD), time ("HH:MM" 24h or null), notes (string), sourceUrl (string)\n` +
+    `- Convert all dates to YYYY-MM-DD format. Only include events on or after ${today}.\n` +
+    `- If a page says it is empty or JS-rendered, skip it\n` +
+    `- If no events are found at all, return []\n\n` +
     pageDumps.join('\n\n')
   );
 }
@@ -152,10 +167,9 @@ async function runFetchImport(aiConfig: AiConfig): Promise<AiImportResult> {
   const pageDumps = await buildPageDumps(aiConfig.sites ?? []);
   const prompt    = buildFetchPrompt(today, aiConfig.interests, pageDumps);
   const response  = await callClaude(aiConfig.apiKey, [{ role: 'user', content: prompt }]);
-  return parseEventText(
-    response.content.filter(b => b.type === 'text').map(b => b.text ?? '').join(''),
-    'Claude',
-  );
+  const rawText   = response.content.filter(b => b.type === 'text').map(b => b.text ?? '').join('');
+  console.log('[ai-import] Claude raw response:', rawText.slice(0, 500));
+  return parseEventText(rawText, 'Claude');
 }
 
 // ── Claude: Web Search mode ───────────────────────────────────────────────────
@@ -233,6 +247,7 @@ async function runOllamaFetchImport(aiConfig: AiConfig): Promise<AiImportResult>
   const pageDumps = await buildPageDumps(aiConfig.sites ?? []);
   const prompt    = buildFetchPrompt(today, aiConfig.interests, pageDumps);
   const text      = await callOllama(aiConfig.ollamaUrl, aiConfig.ollamaModel, prompt);
+  console.log('[ai-import] Ollama raw response:', text.slice(0, 500));
   return parseEventText(text, 'Ollama');
 }
 
@@ -262,8 +277,13 @@ async function callOllama(baseUrl: string, model: string, prompt: string): Promi
 // ── Shared response parser ────────────────────────────────────────────────────
 
 function parseEventText(text: string, source: string): AiImportResult {
-  const match = text.match(/\[[\s\S]*\]/);
-  if (!match) return { events: [] };
+  // Strip markdown code fences if the model wrapped its output
+  const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '');
+  const match = stripped.match(/\[[\s\S]*\]/);
+  if (!match) {
+    console.warn(`[ai-import] ${source}: no JSON array found in response`);
+    return { events: [] };
+  }
 
   try {
     const raw = JSON.parse(match[0]) as unknown[];
@@ -281,8 +301,10 @@ function parseEventText(text: string, source: string): AiImportResult {
         notes:     typeof e.notes === 'string' ? e.notes.trim() : '',
         sourceUrl: typeof e.sourceUrl === 'string' ? e.sourceUrl.trim() : '',
       }));
+    console.log(`[ai-import] ${source}: parsed ${events.length} valid events (${raw.length} raw)`);
     return { events };
-  } catch {
+  } catch (err) {
+    console.error(`[ai-import] ${source}: JSON parse error:`, err);
     return { error: `${source} returned malformed JSON.` };
   }
 }

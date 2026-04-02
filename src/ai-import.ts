@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -109,42 +109,81 @@ ipcMain.handle('ai-run-import', async (): Promise<AiImportResult> => {
 
 // ── Shared: fetch and strip page HTML ─────────────────────────────────────────
 
-async function buildPageDumps(sites: string[]): Promise<string[]> {
-  const dumps: string[] = [];
-  for (const rawUrl of sites) {
-    const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-        },
-        signal: AbortSignal.timeout(15_000),
-      });
-      const html = await res.text();
-      const text = html
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 50_000);
+// ── Headless page renderer ────────────────────────────────────────────────────
+// Uses a hidden BrowserWindow (real Chromium) so JS-rendered SPAs are fully
+// populated before we extract text. Each window uses an isolated partition so
+// the main app's CSP injection doesn't block external scripts on the target site.
 
-      const charCount = text.length;
-      console.log(`[ai-import] fetched ${url} — ${charCount} chars after strip`);
-      if (charCount < 200) {
-        console.warn(`[ai-import] WARNING: ${url} returned very little text — likely JS-rendered`);
-        dumps.push(`--- SOURCE: ${url} --- [PAGE APPEARS EMPTY — may require JavaScript rendering; only ${charCount} chars found]`);
-      } else {
-        dumps.push(`--- SOURCE: ${url} ---\n${text}`);
+async function renderPage(rawUrl: string): Promise<string> {
+  const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      show: false,
+      width: 1280,
+      height: 900,
+      webPreferences: {
+        partition: 'ai-scrape',   // isolated session — no main-app CSP applied
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+      },
+    });
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+    let done = false;
+    const finish = async (reason: string) => {
+      if (done) return;
+      done = true;
+      try {
+        const text: string = await win.webContents.executeJavaScript(
+          `document.body ? document.body.innerText : ''`,
+        );
+        const trimmed = text.replace(/\s+/g, ' ').trim().slice(0, 50_000);
+        console.log(`[ai-import] rendered ${url} (${reason}) — ${trimmed.length} chars`);
+        resolve(trimmed);
+      } catch {
+        resolve('');
+      } finally {
+        if (!win.isDestroyed()) win.destroy();
       }
-    } catch (e) {
-      console.error(`[ai-import] fetch failed for ${url}:`, (e as Error).message);
-      dumps.push(`--- SOURCE: ${url} --- [FETCH FAILED: ${(e as Error).message}]`);
-    }
-  }
-  return dumps;
+    };
+
+    // Hard cap: extract whatever rendered within 20s
+    const hardTimer = setTimeout(() => finish('timeout'), 20_000);
+
+    win.webContents.on('did-finish-load', () => {
+      clearTimeout(hardTimer);
+      // Give JS frameworks 2.5s to populate the DOM after initial load
+      setTimeout(() => finish('did-finish-load'), 2_500);
+    });
+
+    win.webContents.on('did-fail-load', (_e, code) => {
+      if (code === -3) return; // ERR_ABORTED = redirect in progress, ignore
+      clearTimeout(hardTimer);
+      console.error(`[ai-import] load failed for ${url} (code ${code})`);
+      resolve('');
+      if (!win.isDestroyed()) win.destroy();
+    });
+
+    win.loadURL(url).catch(() => {
+      clearTimeout(hardTimer);
+      resolve('');
+      if (!win.isDestroyed()) win.destroy();
+    });
+  });
+}
+
+async function buildPageDumps(sites: string[]): Promise<string[]> {
+  // Render all pages in parallel — each takes ~3–5s so parallel is much faster
+  const results = await Promise.all(
+    sites.map(async (rawUrl) => {
+      const url  = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+      const text = await renderPage(rawUrl);
+      if (!text) return `--- SOURCE: ${url} --- [FAILED TO LOAD]`;
+      return `--- SOURCE: ${url} ---\n${text}`;
+    }),
+  );
+  return results;
 }
 
 function buildFetchPrompt(today: string, interests: string, pageDumps: string[]): string {

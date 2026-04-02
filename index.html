@@ -148,12 +148,41 @@
       <h2 id="ai-modal-title">AI Event Import</h2>
 
       <div class="ai-field-group">
-        <label class="ai-label" for="ai-apikey-input">Anthropic API Key</label>
-        <input id="ai-apikey-input" type="password" class="ai-input"
-               placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false" />
+        <label class="ai-label">Provider</label>
+        <div class="ai-radio-row">
+          <label class="ai-radio-label">
+            <input type="radio" name="ai-provider" value="claude" id="ai-provider-claude" />
+            <span>Claude (Haiku)</span>
+          </label>
+          <label class="ai-radio-label">
+            <input type="radio" name="ai-provider" value="ollama" id="ai-provider-ollama" />
+            <span>Ollama (local)</span>
+          </label>
+        </div>
       </div>
 
-      <div class="ai-field-group">
+      <div id="ai-claude-panel" class="ai-panel">
+        <div class="ai-field-group">
+          <label class="ai-label" for="ai-apikey-input">Anthropic API Key</label>
+          <input id="ai-apikey-input" type="password" class="ai-input"
+                 placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false" />
+        </div>
+      </div>
+
+      <div id="ai-ollama-panel" class="ai-panel hidden">
+        <div class="ai-field-group">
+          <label class="ai-label" for="ai-ollama-url">Ollama Endpoint</label>
+          <input id="ai-ollama-url" type="url" class="ai-input"
+                 placeholder="http://localhost:11434" autocomplete="off" />
+        </div>
+        <div class="ai-field-group">
+          <label class="ai-label" for="ai-ollama-model">Model</label>
+          <input id="ai-ollama-model" type="text" class="ai-input"
+                 placeholder="llama3.2" autocomplete="off" spellcheck="false" />
+        </div>
+      </div>
+
+      <div id="ai-mode-group" class="ai-field-group">
         <label class="ai-label">Import Mode</label>
         <div class="ai-radio-row">
           <label class="ai-radio-label">

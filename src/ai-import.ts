@@ -5,15 +5,21 @@ import * as path from 'path';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AiConfig {
+  provider: 'claude' | 'ollama';
+  // Claude
   apiKey: string;
   mode: 'fetch' | 'websearch';
+  // Ollama
+  ollamaUrl: string;
+  ollamaModel: string;
+  // Shared
   interests: string;
   sites: string[];
 }
 
 interface AiEvent {
   title: string;
-  date: string;       // YYYY-MM-DD
+  date: string;        // YYYY-MM-DD
   time: string | null; // HH:MM or null
   notes: string;
   sourceUrl: string;
@@ -35,6 +41,11 @@ interface ClaudeContentBlock {
 interface ClaudeResponse {
   stop_reason: 'end_turn' | 'tool_use' | string;
   content: ClaudeContentBlock[];
+}
+
+interface OllamaResponse {
+  message: { role: string; content: string };
+  done: boolean;
 }
 
 type ClaudeMessage = { role: string; content: unknown };
@@ -78,24 +89,29 @@ ipcMain.handle('ai-run-import', async (): Promise<AiImportResult> => {
   } catch {
     return { error: 'Could not read config.' };
   }
-  if (!aiConfig?.apiKey) return { error: 'No API key configured.' };
+  if (!aiConfig) return { error: 'No AI config found. Save settings first.' };
+
+  if (aiConfig.provider === 'ollama') {
+    if (!aiConfig.ollamaUrl) return { error: 'No Ollama endpoint configured.' };
+  } else {
+    if (!aiConfig.apiKey) return { error: 'No API key configured.' };
+  }
+
   try {
-    return aiConfig.mode === 'websearch'
-      ? await runWebSearchImport(aiConfig)
-      : await runFetchImport(aiConfig);
+    if (aiConfig.provider === 'ollama') return await runOllamaFetchImport(aiConfig);
+    if (aiConfig.mode === 'websearch')   return await runWebSearchImport(aiConfig);
+    return await runFetchImport(aiConfig);
   } catch (err) {
     console.error('[ai-run-import]', err);
     return { error: err instanceof Error ? err.message : 'Unknown error' };
   }
 });
 
-// ── Fetch mode ────────────────────────────────────────────────────────────────
+// ── Shared: fetch and strip page HTML ─────────────────────────────────────────
 
-async function runFetchImport(aiConfig: AiConfig): Promise<AiImportResult> {
-  const today = new Date().toISOString().split('T')[0];
-  const pageDumps: string[] = [];
-
-  for (const url of aiConfig.sites ?? []) {
+async function buildPageDumps(sites: string[]): Promise<string[]> {
+  const dumps: string[] = [];
+  for (const url of sites) {
     try {
       const res = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Caldera/1.0)' },
@@ -109,32 +125,44 @@ async function runFetchImport(aiConfig: AiConfig): Promise<AiImportResult> {
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 50_000);
-      pageDumps.push(`--- SOURCE: ${url} ---\n${text}`);
+      dumps.push(`--- SOURCE: ${url} ---\n${text}`);
     } catch (e) {
-      pageDumps.push(`--- SOURCE: ${url} --- [FETCH FAILED: ${(e as Error).message}]`);
+      dumps.push(`--- SOURCE: ${url} --- [FETCH FAILED: ${(e as Error).message}]`);
     }
   }
+  return dumps;
+}
 
-  const userContent =
+function buildFetchPrompt(today: string, interests: string, pageDumps: string[]): string {
+  return (
     `Today is ${today}.\n` +
-    `The user's interests: ${aiConfig.interests || '(none specified)'}\n\n` +
+    `The user's interests: ${interests || '(none specified)'}\n\n` +
     `Below is the scraped text from the user's event sites. Extract upcoming calendar events.\n` +
     `Return ONLY valid JSON — an array of objects with these keys:\n` +
     `  title (string), date (YYYY-MM-DD), time (HH:MM or null), notes (string), sourceUrl (string)\n` +
     `If no events are found, return []. Do not include any prose outside the JSON array.\n\n` +
-    pageDumps.join('\n\n');
-
-  const response = await callClaude(aiConfig.apiKey, [{ role: 'user', content: userContent }]);
-  return parseClaudeEvents(response);
+    pageDumps.join('\n\n')
+  );
 }
 
-// ── Web Search mode ───────────────────────────────────────────────────────────
+// ── Claude: Fetch mode ────────────────────────────────────────────────────────
+
+async function runFetchImport(aiConfig: AiConfig): Promise<AiImportResult> {
+  const today     = new Date().toISOString().split('T')[0];
+  const pageDumps = await buildPageDumps(aiConfig.sites ?? []);
+  const prompt    = buildFetchPrompt(today, aiConfig.interests, pageDumps);
+  const response  = await callClaude(aiConfig.apiKey, [{ role: 'user', content: prompt }]);
+  return parseEventText(
+    response.content.filter(b => b.type === 'text').map(b => b.text ?? '').join(''),
+    'Claude',
+  );
+}
+
+// ── Claude: Web Search mode ───────────────────────────────────────────────────
 
 async function runWebSearchImport(aiConfig: AiConfig): Promise<AiImportResult> {
-  const today = new Date().toISOString().split('T')[0];
-
-  const tools = [{ type: 'web_search_20250305', name: 'web_search' }];
-
+  const today   = new Date().toISOString().split('T')[0];
+  const tools   = [{ type: 'web_search_20250305', name: 'web_search' }];
   const messages: ClaudeMessage[] = [{
     role: 'user',
     content:
@@ -148,15 +176,10 @@ async function runWebSearchImport(aiConfig: AiConfig): Promise<AiImportResult> {
   let finalText = '';
   for (let i = 0; i < 5; i++) {
     const response = await callClaude(aiConfig.apiKey, messages, tools);
-
     if (response.stop_reason === 'end_turn') {
-      finalText = response.content
-        .filter(b => b.type === 'text')
-        .map(b => b.text ?? '')
-        .join('');
+      finalText = response.content.filter(b => b.type === 'text').map(b => b.text ?? '').join('');
       break;
     }
-
     if (response.stop_reason === 'tool_use') {
       messages.push({ role: 'assistant', content: response.content });
       const toolResults = response.content
@@ -167,14 +190,10 @@ async function runWebSearchImport(aiConfig: AiConfig): Promise<AiImportResult> {
       break;
     }
   }
-
-  return parseClaudeEvents({
-    stop_reason: 'end_turn',
-    content: [{ type: 'text', text: finalText }],
-  });
+  return parseEventText(finalText, 'Claude');
 }
 
-// ── Claude API ────────────────────────────────────────────────────────────────
+// ── Claude API call ───────────────────────────────────────────────────────────
 
 async function callClaude(
   apiKey: string,
@@ -182,7 +201,7 @@ async function callClaude(
   tools?: unknown[],
 ): Promise<ClaudeResponse> {
   const body: Record<string, unknown> = {
-    model: 'claude-sonnet-4-6',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 4096,
     messages,
   };
@@ -207,14 +226,42 @@ async function callClaude(
   return res.json() as Promise<ClaudeResponse>;
 }
 
-// ── Response parser ───────────────────────────────────────────────────────────
+// ── Ollama: Fetch mode ────────────────────────────────────────────────────────
 
-function parseClaudeEvents(response: ClaudeResponse): AiImportResult {
-  const text = response.content
-    .filter(b => b.type === 'text')
-    .map(b => b.text ?? '')
-    .join('');
+async function runOllamaFetchImport(aiConfig: AiConfig): Promise<AiImportResult> {
+  const today     = new Date().toISOString().split('T')[0];
+  const pageDumps = await buildPageDumps(aiConfig.sites ?? []);
+  const prompt    = buildFetchPrompt(today, aiConfig.interests, pageDumps);
+  const text      = await callOllama(aiConfig.ollamaUrl, aiConfig.ollamaModel, prompt);
+  return parseEventText(text, 'Ollama');
+}
 
+// ── Ollama API call ───────────────────────────────────────────────────────────
+
+async function callOllama(baseUrl: string, model: string, prompt: string): Promise<string> {
+  const url = baseUrl.replace(/\/$/, '') + '/api/chat';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Ollama ${res.status}: ${text}`);
+  }
+  const data = await res.json() as OllamaResponse;
+  return data.message?.content ?? '';
+}
+
+// ── Shared response parser ────────────────────────────────────────────────────
+
+function parseEventText(text: string, source: string): AiImportResult {
   const match = text.match(/\[[\s\S]*\]/);
   if (!match) return { events: [] };
 
@@ -236,6 +283,6 @@ function parseClaudeEvents(response: ClaudeResponse): AiImportResult {
       }));
     return { events };
   } catch {
-    return { error: 'Claude returned malformed JSON.' };
+    return { error: `${source} returned malformed JSON.` };
   }
 }

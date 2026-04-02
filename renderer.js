@@ -904,6 +904,8 @@ function bindCalendarUIEvents() {
   document.getElementById('ai-overlay').addEventListener('click', (e) => {
     if (e.target === document.getElementById('ai-overlay')) closeAiSettingsModal();
   });
+  document.getElementById('ai-provider-claude').addEventListener('change', () => syncAiProviderPanel('claude'));
+  document.getElementById('ai-provider-ollama').addEventListener('change', () => syncAiProviderPanel('ollama'));
   document.getElementById('ai-mode-fetch').addEventListener('change', () => syncAiModePanel('fetch'));
   document.getElementById('ai-mode-websearch').addEventListener('change', () => syncAiModePanel('websearch'));
   document.getElementById('ai-url-add-btn').addEventListener('click', () => {
@@ -1064,13 +1066,21 @@ function closeSkinPicker() {
 async function openAiSettingsModal() {
   const cfg = await calBridge.aiLoadConfig();
   if (cfg) {
-    document.getElementById('ai-apikey-input').value    = cfg.apiKey    || '';
-    document.getElementById('ai-interests-input').value = cfg.interests || '';
+    document.getElementById('ai-apikey-input').value    = cfg.apiKey      || '';
+    document.getElementById('ai-interests-input').value = cfg.interests   || '';
+    document.getElementById('ai-ollama-url').value      = cfg.ollamaUrl   || 'http://localhost:11434';
+    document.getElementById('ai-ollama-model').value    = cfg.ollamaModel || 'llama3.2';
     renderAiUrlList(cfg.sites || []);
+    const providerRadio = document.querySelector(`input[name="ai-provider"][value="${cfg.provider || 'claude'}"]`);
+    if (providerRadio) { providerRadio.checked = true; syncAiProviderPanel(cfg.provider || 'claude'); }
     const modeRadio = document.querySelector(`input[name="ai-mode"][value="${cfg.mode || 'fetch'}"]`);
     if (modeRadio) { modeRadio.checked = true; syncAiModePanel(cfg.mode || 'fetch'); }
   } else {
-    document.getElementById('ai-mode-fetch').checked = true;
+    document.getElementById('ai-provider-claude').checked = true;
+    document.getElementById('ai-mode-fetch').checked      = true;
+    document.getElementById('ai-ollama-url').value        = 'http://localhost:11434';
+    document.getElementById('ai-ollama-model').value      = 'llama3.2';
+    syncAiProviderPanel('claude');
     syncAiModePanel('fetch');
     renderAiUrlList([]);
   }
@@ -1080,6 +1090,18 @@ async function openAiSettingsModal() {
 
 function closeAiSettingsModal() {
   document.getElementById('ai-overlay').classList.add('hidden');
+}
+
+function syncAiProviderPanel(provider) {
+  const isOllama = provider === 'ollama';
+  document.getElementById('ai-claude-panel').classList.toggle('hidden', isOllama);
+  document.getElementById('ai-ollama-panel').classList.toggle('hidden', !isOllama);
+  // Ollama only supports fetch mode — hide the mode selector and force fetch
+  document.getElementById('ai-mode-group').classList.toggle('hidden', isOllama);
+  if (isOllama) {
+    document.getElementById('ai-mode-fetch').checked = true;
+    syncAiModePanel('fetch');
+  }
 }
 
 function syncAiModePanel(mode) {
@@ -1114,11 +1136,14 @@ function getAiSitesFromList() {
 }
 
 function getAiConfig() {
-  const apiKey    = document.getElementById('ai-apikey-input').value.trim();
-  const mode      = document.querySelector('input[name="ai-mode"]:checked')?.value || 'fetch';
-  const interests = document.getElementById('ai-interests-input').value.trim();
-  const sites     = getAiSitesFromList();
-  return { apiKey, mode, interests, sites };
+  const provider    = document.querySelector('input[name="ai-provider"]:checked')?.value || 'claude';
+  const apiKey      = document.getElementById('ai-apikey-input').value.trim();
+  const ollamaUrl   = document.getElementById('ai-ollama-url').value.trim();
+  const ollamaModel = document.getElementById('ai-ollama-model').value.trim();
+  const mode        = document.querySelector('input[name="ai-mode"]:checked')?.value || 'fetch';
+  const interests   = document.getElementById('ai-interests-input').value.trim();
+  const sites       = getAiSitesFromList();
+  return { provider, apiKey, ollamaUrl, ollamaModel, mode, interests, sites };
 }
 
 function setAiStatus(msg, type) {
@@ -1129,14 +1154,24 @@ function setAiStatus(msg, type) {
 
 async function saveAiSettings() {
   const cfg = getAiConfig();
-  if (!cfg.apiKey) { setAiStatus('Please enter your Anthropic API key.', 'error'); return; }
+  if (cfg.provider === 'claude' && !cfg.apiKey) {
+    setAiStatus('Please enter your Anthropic API key.', 'error'); return;
+  }
+  if (cfg.provider === 'ollama' && !cfg.ollamaUrl) {
+    setAiStatus('Please enter the Ollama endpoint URL.', 'error'); return;
+  }
   await calBridge.aiSaveConfig(cfg);
   setAiStatus('Settings saved.', '');
 }
 
 async function runAiImport() {
   const cfg = getAiConfig();
-  if (!cfg.apiKey) { setAiStatus('Please enter and save your API key first.', 'error'); return; }
+  if (cfg.provider === 'claude' && !cfg.apiKey) {
+    setAiStatus('Please enter and save your API key first.', 'error'); return;
+  }
+  if (cfg.provider === 'ollama' && !cfg.ollamaUrl) {
+    setAiStatus('Please enter the Ollama endpoint URL.', 'error'); return;
+  }
   await calBridge.aiSaveConfig(cfg);
   setAiStatus('Running import\u2026 this may take up to 30 seconds.', 'loading');
   document.getElementById('ai-run-btn').disabled = true;

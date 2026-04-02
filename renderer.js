@@ -1426,7 +1426,7 @@ function buildClockSVG(key, blocks) {
     return e;
   }
 
-  // Defs (for arc label text paths + per-block glass shimmer gradients)
+  // Defs (for arc label text paths)
   const defs = svgEl('defs', {});
   svg.appendChild(defs);
 
@@ -1481,47 +1481,13 @@ function buildClockSVG(key, blocks) {
 
     const path = svgEl('path', {
       class: 'clock-block-arc' + (block._recurring ? ' recurring-arc' : ''),
-      d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin),
+      d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin, document.body.classList.contains('skin-glass') ? 6 : 0),
       fill: block.color,
     });
     g.appendChild(path);
 
-    // Glass shimmer — radial gradient overlay + outer-edge highlight stroke.
-    // Gradient uses userSpaceOnUse with SVG coords so it works reliably on arc paths.
-    // Light source fixed at top-centre (cx=200, cy=0) so all blocks share one direction.
-    // Only visible via CSS when body.skin-glass is active.
-    const gid = `glass-shimmer-${block.id}`;
-
-    const radial = svgEl('radialGradient', {
-      id: gid,
-      cx: String(cx), cy: '0',
-      r:  String(VB * 0.75),
-      fx: String(cx), fy: '0',
-      gradientUnits: 'userSpaceOnUse',
-    });
-    const stop0 = svgEl('stop', { offset: '0%',   'stop-color': 'rgba(255,255,255,0.22)' });
-    const stop1 = svgEl('stop', { offset: '100%', 'stop-color': 'rgba(255,255,255,0)' });
-    radial.append(stop0, stop1);
-    defs.appendChild(radial);
-
-    // White overlay on the block shape — fills with the radial gradient
-    const overlay = svgEl('path', {
-      class: 'clock-block-glass-overlay',
-      d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin),
-      fill: `url(#${gid})`,
-    });
-    g.appendChild(overlay);
-
-    // Thin highlight stroke on the outer arc edge only (not the full perimeter)
-    const spanMin = (block.endMin - block.startMin + 720) % 720;
-    const midMin  = block.startMin + spanMin / 2;
-    const capMin  = Math.min(spanMin * 0.35, 45);
-    const hlD     = arcEdgePath(cx, cy, r2, midMin - capMin, midMin + capMin);
-    if (hlD) {
-      g.appendChild(svgEl('path', { class: 'clock-block-glass-edge', d: hlD }));
-    }
-
     // Label follows the arc's curve so text reads naturally inside the block's shape
+    const spanMin = (block.endMin - block.startMin + 720) % 720;
     if (spanMin >= 30 && block.label) {
       const rMid    = (r1 + r2) / 2;
       const arcLen  = (spanMin / 720) * 2 * Math.PI * rMid;
@@ -1565,7 +1531,7 @@ function buildClockSVG(key, blocks) {
 }
 
 // ── Clock arc geometry ──────────────────────────────────
-function arcPath(cx, cy, r1, r2, startMin, endMin) {
+function arcPath(cx, cy, r1, r2, startMin, endMin, rnd = 0) {
   const spanMin  = (endMin - startMin + 720) % 720;
   if (spanMin === 0) return '';
   const startAng = (startMin / 720) * 2 * Math.PI - Math.PI / 2;
@@ -1579,20 +1545,47 @@ function arcPath(cx, cy, r1, r2, startMin, endMin) {
   const ix1 = cx + r1 * c2, iy1 = cy + r1 * s2;
   const ix2 = cx + r1 * c1, iy2 = cy + r1 * s1;
 
-  return `M ${ox1} ${oy1} A ${r2} ${r2} 0 ${large} 1 ${ox2} ${oy2} ` +
-         `L ${ix1} ${iy1} A ${r1} ${r1} 0 ${large} 0 ${ix2} ${iy2} Z`;
-}
+  if (rnd <= 0) {
+    return `M ${ox1} ${oy1} A ${r2} ${r2} 0 ${large} 1 ${ox2} ${oy2} ` +
+           `L ${ix1} ${iy1} A ${r1} ${r1} 0 ${large} 0 ${ix2} ${iy2} Z`;
+  }
 
-// Single arc stroke path — outer edge only, used for the glass highlight
-function arcEdgePath(cx, cy, r, startMin, endMin) {
-  const spanMin  = (endMin - startMin + 720) % 720;
-  if (spanMin === 0) return '';
-  const startAng = (startMin / 720) * 2 * Math.PI - Math.PI / 2;
-  const endAng   = startAng + (spanMin / 720) * 2 * Math.PI;
-  const large    = spanMin > 360 ? 1 : 0;
-  const x1 = cx + r * Math.cos(startAng), y1 = cy + r * Math.sin(startAng);
-  const x2 = cx + r * Math.cos(endAng),   y2 = cy + r * Math.sin(endAng);
-  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+  // Rounded corners: replace each sharp corner with a quadratic bezier.
+  // At each corner the approach/depart points are r units back along the
+  // incoming and outgoing directions; the sharp corner is the control point.
+  //
+  // CW tangent at angle θ (SVG Y-down): (-sin θ, cos θ)
+  // Radial outward at θ:                 (cos θ,  sin θ)
+  const r = Math.min(rnd, (r2 - r1) * 0.45);
+  const p = (x, y) => `${x.toFixed(2)} ${y.toFixed(2)}`;
+
+  // Corner A (ox1,oy1): arrives radially outward (c1,s1), departs CW tangent (-s1,c1)
+  const Aa = [ox1 - r * c1,  oy1 - r * s1];
+  const Ad = [ox1 - r * s1,  oy1 + r * c1];
+
+  // Corner B (ox2,oy2): arrives CW tangent (-s2,c2), departs radially inward (-c2,-s2)
+  const Ba = [ox2 + r * s2,  oy2 - r * c2];
+  const Bd = [ox2 - r * c2,  oy2 - r * s2];
+
+  // Corner C (ix1,iy1): arrives radially inward (-c2,-s2), departs CCW tangent (s2,-c2)
+  const Ca = [ix1 + r * c2,  iy1 + r * s2];
+  const Cd = [ix1 + r * s2,  iy1 - r * c2];
+
+  // Corner D (ix2,iy2): arrives CCW tangent (s1,-c1), departs radially outward (c1,s1)
+  const Da = [ix2 - r * s1,  iy2 + r * c1];
+  const Dd = [ix2 + r * c1,  iy2 + r * s1];
+
+  return (
+    `M ${p(...Ad)} ` +
+    `A ${r2} ${r2} 0 ${large} 1 ${p(...Ba)} ` +
+    `Q ${p(ox2, oy2)} ${p(...Bd)} ` +
+    `L ${p(...Ca)} ` +
+    `Q ${p(ix1, iy1)} ${p(...Cd)} ` +
+    `A ${r1} ${r1} 0 ${large} 0 ${p(...Da)} ` +
+    `Q ${p(ix2, iy2)} ${p(...Dd)} ` +
+    `L ${p(...Aa)} ` +
+    `Q ${p(ox1, oy1)} ${p(...Ad)} Z`
+  );
 }
 
 // Convert screen mouse event to SVG viewBox coordinates

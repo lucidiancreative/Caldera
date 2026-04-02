@@ -1845,10 +1845,9 @@ body.skin-glass #ai-review-modal { animation: glass-cell-enter 0.22s ease both; 
 
 /* ── Glass skin: clock time blocks ───────────────────── */
 body.skin-glass .clock-block-arc {
-  fill-opacity: 0.52;
+  opacity: 0.35;
   stroke: rgba(255, 255, 255, 0.55);
   stroke-width: 2;
-  stroke-linecap: round;
 }
 /* Keep recurring dashes but blend with the glass stroke colour */
 body.skin-glass .clock-block-arc.recurring-arc {
@@ -1859,7 +1858,7 @@ body.skin-glass .clock-block-arc.recurring-arc {
 
 /* ── Glass skin: block legend chips ─────────────────── */
 body.skin-glass .block-chip {
-  opacity: 0.80;
+  opacity: 0.35;
   border: 1px solid rgba(255, 255, 255, 0.40);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }

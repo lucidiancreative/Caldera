@@ -256,7 +256,7 @@ async function callClaude(
 ): Promise<ClaudeResponse> {
   const body: Record<string, unknown> = {
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 4096,
+    max_tokens: 8192,
     messages,
   };
   if (tools) body.tools = tools;
@@ -316,17 +316,37 @@ async function callOllama(baseUrl: string, model: string, prompt: string): Promi
 
 // ── Shared response parser ────────────────────────────────────────────────────
 
+function tryParseJsonArray(candidate: string): unknown[] | null {
+  // First try as-is
+  try { return JSON.parse(candidate) as unknown[]; } catch {}
+  // Response may be truncated mid-object — try closing it a few ways
+  for (const suffix of ['"}]', '}]', ']']) {
+    try { return JSON.parse(candidate + suffix) as unknown[]; } catch {}
+  }
+  return null;
+}
+
 function parseEventText(text: string, source: string): AiImportResult {
   // Strip markdown code fences if the model wrapped its output
   const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '');
-  const match = stripped.match(/\[[\s\S]*\]/);
-  if (!match) {
+
+  // Match a complete array first, fall back to a partial one for truncated responses
+  const completeMatch = stripped.match(/\[[\s\S]*\]/);
+  const partialMatch  = stripped.match(/\[[\s\S]*/);
+  const candidate     = completeMatch?.[0] ?? partialMatch?.[0];
+
+  if (!candidate) {
     console.warn(`[ai-import] ${source}: no JSON array found in response`);
     return { events: [] };
   }
 
+  const raw = tryParseJsonArray(candidate);
+  if (!raw) {
+    console.error(`[ai-import] ${source}: JSON parse failed even after repair attempts`);
+    return { error: `${source} returned malformed JSON.` };
+  }
+
   try {
-    const raw = JSON.parse(match[0]) as unknown[];
     const events: AiEvent[] = raw
       .filter((e): e is Record<string, unknown> =>
         e !== null &&
@@ -344,7 +364,7 @@ function parseEventText(text: string, source: string): AiImportResult {
     console.log(`[ai-import] ${source}: parsed ${events.length} valid events (${raw.length} raw)`);
     return { events };
   } catch (err) {
-    console.error(`[ai-import] ${source}: JSON parse error:`, err);
+    console.error(`[ai-import] ${source}: event mapping error:`, err);
     return { error: `${source} returned malformed JSON.` };
   }
 }

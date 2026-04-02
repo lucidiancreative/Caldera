@@ -83,10 +83,10 @@ function initShaderBackground() {
     uniform float u_time;
 
     vec3 palette(float t) {
-      vec3 a = vec3(0.04, 0.04, 0.10);
-      vec3 b = vec3(0.07, 0.11, 0.09);
-      vec3 c = vec3(0.70, 0.60, 0.80);
-      vec3 d = vec3(0.20, 0.40, 0.65);
+      vec3 a = vec3(0.04, 0.03, 0.10);
+      vec3 b = vec3(0.07, 0.04, 0.12);
+      vec3 c = vec3(0.80, 0.00, 0.90);
+      vec3 d = vec3(0.20, 0.50, 0.65);
       return a + b * cos(6.28318 * (c * t + d));
     }
 

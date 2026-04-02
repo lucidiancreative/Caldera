@@ -1487,24 +1487,20 @@ function buildClockSVG(key, blocks) {
     g.appendChild(path);
 
     // Glass shimmer — radial gradient overlay + outer-edge highlight stroke.
-    // The gradient is anchored at the top-centre of the SVG (light source from above),
-    // so every block catches light from the same direction regardless of its position.
+    // Gradient uses userSpaceOnUse with SVG coords so it works reliably on arc paths.
+    // Light source fixed at top-centre (cx=200, cy=0) so all blocks share one direction.
     // Only visible via CSS when body.skin-glass is active.
     const gid = `glass-shimmer-${block.id}`;
 
     const radial = svgEl('radialGradient', {
       id: gid,
-      cx: '50%', cy: '0%',   // light source: top-centre of the SVG
-      r:  '75%',
-      fx: '50%', fy: '0%',
-      gradientUnits: 'objectBoundingBox',
+      cx: String(cx), cy: '0',
+      r:  String(VB * 0.75),
+      fx: String(cx), fy: '0',
+      gradientUnits: 'userSpaceOnUse',
     });
-    const stop0 = svgEl('stop', { offset: '0%' });
-    stop0.style.stopColor   = 'rgba(255,255,255,0.22)';
-    stop0.style.stopOpacity = '1';
-    const stop1 = svgEl('stop', { offset: '100%' });
-    stop1.style.stopColor   = 'rgba(255,255,255,0)';
-    stop1.style.stopOpacity = '0';
+    const stop0 = svgEl('stop', { offset: '0%',   'stop-color': 'rgba(255,255,255,0.22)' });
+    const stop1 = svgEl('stop', { offset: '100%', 'stop-color': 'rgba(255,255,255,0)' });
     radial.append(stop0, stop1);
     defs.appendChild(radial);
 
@@ -1519,20 +1515,13 @@ function buildClockSVG(key, blocks) {
     // Thin highlight stroke on the outer arc edge only (not the full perimeter)
     const spanMin = (block.endMin - block.startMin + 720) % 720;
     const midMin  = block.startMin + spanMin / 2;
-    const capMin  = Math.min(spanMin * 0.35, 45); // highlight covers central ~35% of arc, max 45 min
-    const hlStart = midMin - capMin;
-    const hlEnd   = midMin + capMin;
-    const hlD     = arcEdgePath(cx, cy, r2, hlStart, hlEnd);
+    const capMin  = Math.min(spanMin * 0.35, 45);
+    const hlD     = arcEdgePath(cx, cy, r2, midMin - capMin, midMin + capMin);
     if (hlD) {
-      const edge = svgEl('path', {
-        class: 'clock-block-glass-edge',
-        d: hlD,
-      });
-      g.appendChild(edge);
+      g.appendChild(svgEl('path', { class: 'clock-block-glass-edge', d: hlD }));
     }
 
     // Label follows the arc's curve so text reads naturally inside the block's shape
-    const spanMin = (block.endMin - block.startMin + 720) % 720;
     if (spanMin >= 30 && block.label) {
       const rMid    = (r1 + r2) / 2;
       const arcLen  = (spanMin / 720) * 2 * Math.PI * rMid;

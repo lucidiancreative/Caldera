@@ -111,7 +111,8 @@ ipcMain.handle('ai-run-import', async (): Promise<AiImportResult> => {
 
 async function buildPageDumps(sites: string[]): Promise<string[]> {
   const dumps: string[] = [];
-  for (const url of sites) {
+  for (const rawUrl of sites) {
+    const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
     try {
       const res = await fetch(url, {
         headers: {

@@ -1426,14 +1426,8 @@ function buildClockSVG(key, blocks) {
     return e;
   }
 
-  // Defs (for arc label text paths + glass skin blur filter)
+  // Defs (for arc label text paths + per-block glass shimmer gradients)
   const defs = svgEl('defs', {});
-  if (getCurrentSkin() === 'glass') {
-    const filter = svgEl('filter', { id: 'glass-block-blur', x: '-20%', y: '-20%', width: '140%', height: '140%' });
-    const blur   = svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: '2.5' });
-    filter.appendChild(blur);
-    defs.appendChild(filter);
-  }
   svg.appendChild(defs);
 
   // Background circle that defines the clock's visual boundary
@@ -1491,13 +1485,50 @@ function buildClockSVG(key, blocks) {
       fill: block.color,
     });
     g.appendChild(path);
-    if (getCurrentSkin() === 'glass') {
-      // Inner highlight arc — sits just inside the outer edge to simulate a glass sheen
-      const shimmer = svgEl('path', {
-        class: 'clock-block-shimmer',
-        d: arcPath(cx, cy, r2 - 3, r2 - 1, block.startMin, block.endMin),
+
+    // Glass shimmer — radial gradient overlay + outer-edge highlight stroke.
+    // The gradient is anchored at the top-centre of the SVG (light source from above),
+    // so every block catches light from the same direction regardless of its position.
+    // Only visible via CSS when body.skin-glass is active.
+    const gid = `glass-shimmer-${block.id}`;
+
+    const radial = svgEl('radialGradient', {
+      id: gid,
+      cx: '50%', cy: '0%',   // light source: top-centre of the SVG
+      r:  '75%',
+      fx: '50%', fy: '0%',
+      gradientUnits: 'objectBoundingBox',
+    });
+    const stop0 = svgEl('stop', { offset: '0%' });
+    stop0.style.stopColor   = 'rgba(255,255,255,0.22)';
+    stop0.style.stopOpacity = '1';
+    const stop1 = svgEl('stop', { offset: '100%' });
+    stop1.style.stopColor   = 'rgba(255,255,255,0)';
+    stop1.style.stopOpacity = '0';
+    radial.append(stop0, stop1);
+    defs.appendChild(radial);
+
+    // White overlay on the block shape — fills with the radial gradient
+    const overlay = svgEl('path', {
+      class: 'clock-block-glass-overlay',
+      d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin),
+      fill: `url(#${gid})`,
+    });
+    g.appendChild(overlay);
+
+    // Thin highlight stroke on the outer arc edge only (not the full perimeter)
+    const spanMin = (block.endMin - block.startMin + 720) % 720;
+    const midMin  = block.startMin + spanMin / 2;
+    const capMin  = Math.min(spanMin * 0.35, 45); // highlight covers central ~35% of arc, max 45 min
+    const hlStart = midMin - capMin;
+    const hlEnd   = midMin + capMin;
+    const hlD     = arcEdgePath(cx, cy, r2, hlStart, hlEnd);
+    if (hlD) {
+      const edge = svgEl('path', {
+        class: 'clock-block-glass-edge',
+        d: hlD,
       });
-      g.appendChild(shimmer);
+      g.appendChild(edge);
     }
 
     // Label follows the arc's curve so text reads naturally inside the block's shape
@@ -1561,6 +1592,18 @@ function arcPath(cx, cy, r1, r2, startMin, endMin) {
 
   return `M ${ox1} ${oy1} A ${r2} ${r2} 0 ${large} 1 ${ox2} ${oy2} ` +
          `L ${ix1} ${iy1} A ${r1} ${r1} 0 ${large} 0 ${ix2} ${iy2} Z`;
+}
+
+// Single arc stroke path — outer edge only, used for the glass highlight
+function arcEdgePath(cx, cy, r, startMin, endMin) {
+  const spanMin  = (endMin - startMin + 720) % 720;
+  if (spanMin === 0) return '';
+  const startAng = (startMin / 720) * 2 * Math.PI - Math.PI / 2;
+  const endAng   = startAng + (spanMin / 720) * 2 * Math.PI;
+  const large    = spanMin > 360 ? 1 : 0;
+  const x1 = cx + r * Math.cos(startAng), y1 = cy + r * Math.sin(startAng);
+  const x2 = cx + r * Math.cos(endAng),   y2 = cy + r * Math.sin(endAng);
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
 }
 
 // Convert screen mouse event to SVG viewBox coordinates

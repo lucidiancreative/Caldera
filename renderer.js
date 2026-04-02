@@ -1426,8 +1426,14 @@ function buildClockSVG(key, blocks) {
     return e;
   }
 
-  // Defs (for arc label text paths)
+  // Defs (for arc label text paths + glass skin blur filter)
   const defs = svgEl('defs', {});
+  if (getCurrentSkin() === 'glass') {
+    const filter = svgEl('filter', { id: 'glass-block-blur', x: '-20%', y: '-20%', width: '140%', height: '140%' });
+    const blur   = svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: '2.5' });
+    filter.appendChild(blur);
+    defs.appendChild(filter);
+  }
   svg.appendChild(defs);
 
   // Background circle that defines the clock's visual boundary
@@ -1485,6 +1491,14 @@ function buildClockSVG(key, blocks) {
       fill: block.color,
     });
     g.appendChild(path);
+    if (getCurrentSkin() === 'glass') {
+      // Inner highlight arc — sits just inside the outer edge to simulate a glass sheen
+      const shimmer = svgEl('path', {
+        class: 'clock-block-shimmer',
+        d: arcPath(cx, cy, r2 - 3, r2 - 1, block.startMin, block.endMin),
+      });
+      g.appendChild(shimmer);
+    }
 
     // Label follows the arc's curve so text reads naturally inside the block's shape
     const spanMin = (block.endMin - block.startMin + 720) % 720;

@@ -1252,6 +1252,22 @@ body.skin-glass #btn-schedule-day:hover::before {
   opacity: 1;
 }
 
+/* ── Glass skin: clock time blocks ───────────────────── */
+body.skin-glass .clock-block-arc {
+  opacity: 0.42;
+  filter: url(#glass-block-blur);
+}
+body.skin-glass .clock-block-arc:hover {
+  opacity: 0.68;
+}
+/* Shimmer highlight ring drawn over each block via a shared SVG overlay path */
+body.skin-glass .clock-block-shimmer {
+  fill: none;
+  stroke: rgba(255,255,255,0.28);
+  stroke-width: 1.2;
+  pointer-events: none;
+}
+
 /* ════════════════════════════════════════════════════════
    SKIN PICKER MODAL
    ════════════════════════════════════════════════════════ */

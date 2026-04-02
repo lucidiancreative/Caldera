@@ -1778,6 +1778,15 @@ body.dark #ai-event-list::-webkit-scrollbar-thumb:hover { background: #636366; }
   text-overflow: ellipsis;
 }
 
+.ai-event-link {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.12s;
+}
+.ai-event-link:hover { text-decoration-color: var(--accent); }
+
 .ai-event-notes {
   font-size: 11px;
   color: var(--text-muted);

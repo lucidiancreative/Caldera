@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, shell } = require('electron');
 
 contextBridge.exposeInMainWorld('calAPI', {
   loadData:        ()                      => ipcRenderer.invoke('load-data'),
@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld('calAPI', {
   aiSaveConfig:    (config)               => ipcRenderer.invoke('ai-save-config', config),
   aiLoadConfig:    ()                     => ipcRenderer.invoke('ai-load-config'),
   aiRunImport:     ()                     => ipcRenderer.invoke('ai-run-import'),
+  openExternal:    (url)                  => shell.openExternal(url),
 });

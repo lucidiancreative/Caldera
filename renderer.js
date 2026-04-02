@@ -1233,10 +1233,21 @@ function renderAiEventList(events) {
     meta.className = 'ai-event-meta';
     let metaText = formatDisplayDate(ev.date);
     if (ev.time) metaText += ' \u00b7 ' + formatTime12h(ev.time);
-    try {
-      if (ev.sourceUrl) metaText += ' \u00b7 ' + new URL(ev.sourceUrl).hostname;
-    } catch {}
     meta.textContent = metaText;
+    if (ev.sourceUrl) {
+      let hostname = ev.sourceUrl;
+      try { hostname = new URL(ev.sourceUrl).hostname; } catch {}
+      const sep  = document.createTextNode(' \u00b7 ');
+      const link = document.createElement('span');
+      link.className   = 'ai-event-link';
+      link.textContent = hostname;
+      link.title       = ev.sourceUrl;
+      link.addEventListener('click', (e) => {
+        e.stopPropagation(); // don't toggle the checkbox
+        calBridge.openExternal(ev.sourceUrl);
+      });
+      meta.append(sep, link);
+    }
 
     const notes = document.createElement('div');
     notes.className   = 'ai-event-notes';

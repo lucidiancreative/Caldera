@@ -21,6 +21,7 @@
     <div id="win-controls">
       <button id="btn-theme" title="Toggle dark mode">&#9790;</button>
       <button id="btn-skin"  title="Change skin">&#9671;</button>
+      <button id="btn-ai"   title="AI Event Import">&#10024;</button>
       <button id="btn-min" title="Minimize">&#8211;</button>
       <button id="btn-max" title="Maximize">&#9633;</button>
       <button id="btn-close" title="Close">&#10005;</button>
@@ -137,6 +138,78 @@
       <button id="skin-modal-close">&#10005;</button>
       <h2 id="skin-modal-title">Appearance</h2>
       <div id="skin-grid"></div>
+    </div>
+  </div>
+
+  <!-- AI Settings Modal -->
+  <div id="ai-overlay" class="hidden">
+    <div id="ai-modal">
+      <button id="ai-modal-close">&#10005;</button>
+      <h2 id="ai-modal-title">AI Event Import</h2>
+
+      <div class="ai-field-group">
+        <label class="ai-label" for="ai-apikey-input">Anthropic API Key</label>
+        <input id="ai-apikey-input" type="password" class="ai-input"
+               placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false" />
+      </div>
+
+      <div class="ai-field-group">
+        <label class="ai-label">Import Mode</label>
+        <div class="ai-radio-row">
+          <label class="ai-radio-label">
+            <input type="radio" name="ai-mode" value="fetch" id="ai-mode-fetch" />
+            <span>Fetch my sites</span>
+          </label>
+          <label class="ai-radio-label">
+            <input type="radio" name="ai-mode" value="websearch" id="ai-mode-websearch" />
+            <span>Web Search</span>
+          </label>
+        </div>
+      </div>
+
+      <div id="ai-fetch-panel" class="ai-panel">
+        <div class="ai-field-group">
+          <label class="ai-label">Event Site URLs</label>
+          <div id="ai-url-list"></div>
+          <div class="ai-url-add-row">
+            <input id="ai-url-input" type="url" class="ai-input"
+                   placeholder="https://venue.com/events" autocomplete="off" />
+            <button id="ai-url-add-btn" class="ai-btn-secondary">Add</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="ai-websearch-panel" class="ai-panel hidden">
+        <div class="ai-field-group">
+          <label class="ai-label" for="ai-interests-input">Describe your interests</label>
+          <textarea id="ai-interests-input" class="ai-textarea"
+                    placeholder="jazz concerts, FC Barcelona matches, local tech meetups…"
+                    rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="ai-modal-actions">
+        <button id="ai-save-btn" class="ai-btn-primary">Save Settings</button>
+        <button id="ai-run-btn"  class="ai-btn-accent">&#9889; Run Import</button>
+      </div>
+
+      <div id="ai-status" class="ai-status hidden"></div>
+    </div>
+  </div>
+
+  <!-- AI Event Review Modal -->
+  <div id="ai-review-overlay" class="hidden">
+    <div id="ai-review-modal">
+      <button id="ai-review-close">&#10005;</button>
+      <h2 id="ai-review-title">Found Events</h2>
+      <p id="ai-review-subtitle" class="ai-review-subtitle"></p>
+      <div id="ai-event-list"></div>
+      <div class="ai-review-actions">
+        <button id="ai-select-all-btn"   class="ai-btn-secondary">Select All</button>
+        <button id="ai-deselect-all-btn" class="ai-btn-secondary">Deselect All</button>
+        <span class="ai-review-spacer"></span>
+        <button id="ai-add-selected-btn" class="ai-btn-accent">Add to Calendar</button>
+      </div>
     </div>
   </div>
 

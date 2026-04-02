@@ -18,6 +18,7 @@ let hoveredGridCell = null;
 let activeView      = 'calendar';
 let scheduleDate    = null;
 let clockDragState       = null;
+let aiPendingEvents      = [];
 let timeBlockPopupState      = null;
 let clockAmPm       = new Date().getHours() >= 12 ? 'PM' : 'AM';
 let rescheduleBlock = null;
@@ -260,6 +261,10 @@ function migrateCalendarDataFormat(raw) {
   for (const [key, val] of Object.entries(raw)) {
     if (key === '_recurring') {
       out._recurring = Array.isArray(val) ? val : [];
+      continue;
+    }
+    if (key === '_aiConfig') {
+      out._aiConfig = val;
       continue;
     }
     if (val.events) {
@@ -894,6 +899,45 @@ function bindCalendarUIEvents() {
 
   document.getElementById('btn-skin').addEventListener('click', openSkinPicker);
 
+  document.getElementById('btn-ai').addEventListener('click', openAiSettingsModal);
+  document.getElementById('ai-modal-close').addEventListener('click', closeAiSettingsModal);
+  document.getElementById('ai-overlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('ai-overlay')) closeAiSettingsModal();
+  });
+  document.getElementById('ai-mode-fetch').addEventListener('change', () => syncAiModePanel('fetch'));
+  document.getElementById('ai-mode-websearch').addEventListener('change', () => syncAiModePanel('websearch'));
+  document.getElementById('ai-url-add-btn').addEventListener('click', () => {
+    const input = document.getElementById('ai-url-input');
+    const url   = input.value.trim();
+    if (!url) return;
+    const current = getAiSitesFromList();
+    if (!current.includes(url)) renderAiUrlList([...current, url]);
+    input.value = '';
+  });
+  document.getElementById('ai-url-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('ai-url-add-btn').click();
+  });
+  document.getElementById('ai-save-btn').addEventListener('click', saveAiSettings);
+  document.getElementById('ai-run-btn').addEventListener('click', runAiImport);
+
+  document.getElementById('ai-review-close').addEventListener('click', closeAiReviewModal);
+  document.getElementById('ai-review-overlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('ai-review-overlay')) closeAiReviewModal();
+  });
+  document.getElementById('ai-select-all-btn').addEventListener('click', () => {
+    document.querySelectorAll('#ai-event-list .ai-event-row').forEach(row => {
+      row.classList.add('checked');
+      row.querySelector('input[type="checkbox"]').checked = true;
+    });
+  });
+  document.getElementById('ai-deselect-all-btn').addEventListener('click', () => {
+    document.querySelectorAll('#ai-event-list .ai-event-row').forEach(row => {
+      row.classList.remove('checked');
+      row.querySelector('input[type="checkbox"]').checked = false;
+    });
+  });
+  document.getElementById('ai-add-selected-btn').addEventListener('click', addSelectedAiEvents);
+
   document.getElementById('skin-modal-close').addEventListener('click', closeSkinPicker);
   document.getElementById('skin-overlay').addEventListener('click', (e) => {
     if (e.target === document.getElementById('skin-overlay')) closeSkinPicker();
@@ -949,6 +993,8 @@ function bindCalendarUIEvents() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (!document.getElementById('ai-review-overlay').classList.contains('hidden')) { closeAiReviewModal(); return; }
+      if (!document.getElementById('ai-overlay').classList.contains('hidden'))        { closeAiSettingsModal(); return; }
       if (!document.getElementById('skin-overlay').classList.contains('hidden')) { closeSkinPicker(); return; }
       if (!document.getElementById('lightbox-overlay').classList.contains('hidden')) closeLightbox();
       else if (modalDate) closeDayDetailModal();
@@ -1011,6 +1057,180 @@ function openSkinPicker() {
 
 function closeSkinPicker() {
   document.getElementById('skin-overlay').classList.add('hidden');
+}
+
+// ── AI Import: Settings Modal ─────────────────────────
+
+async function openAiSettingsModal() {
+  const cfg = await calBridge.aiLoadConfig();
+  if (cfg) {
+    document.getElementById('ai-apikey-input').value    = cfg.apiKey    || '';
+    document.getElementById('ai-interests-input').value = cfg.interests || '';
+    renderAiUrlList(cfg.sites || []);
+    const modeRadio = document.querySelector(`input[name="ai-mode"][value="${cfg.mode || 'fetch'}"]`);
+    if (modeRadio) { modeRadio.checked = true; syncAiModePanel(cfg.mode || 'fetch'); }
+  } else {
+    document.getElementById('ai-mode-fetch').checked = true;
+    syncAiModePanel('fetch');
+    renderAiUrlList([]);
+  }
+  setAiStatus('', '');
+  document.getElementById('ai-overlay').classList.remove('hidden');
+}
+
+function closeAiSettingsModal() {
+  document.getElementById('ai-overlay').classList.add('hidden');
+}
+
+function syncAiModePanel(mode) {
+  document.getElementById('ai-fetch-panel').classList.toggle('hidden', mode !== 'fetch');
+  document.getElementById('ai-websearch-panel').classList.toggle('hidden', mode !== 'websearch');
+}
+
+function renderAiUrlList(sites) {
+  const list = document.getElementById('ai-url-list');
+  list.innerHTML = '';
+  sites.forEach((url, i) => {
+    const row  = document.createElement('div');
+    row.className = 'ai-url-row';
+    const span = document.createElement('span');
+    span.textContent = url;
+    const btn  = document.createElement('button');
+    btn.className   = 'ai-url-remove';
+    btn.textContent = '\u2715';
+    btn.title       = 'Remove';
+    btn.addEventListener('click', () => {
+      const current = getAiSitesFromList();
+      current.splice(i, 1);
+      renderAiUrlList(current);
+    });
+    row.append(span, btn);
+    list.appendChild(row);
+  });
+}
+
+function getAiSitesFromList() {
+  return Array.from(document.querySelectorAll('.ai-url-row span')).map(s => s.textContent);
+}
+
+function getAiConfig() {
+  const apiKey    = document.getElementById('ai-apikey-input').value.trim();
+  const mode      = document.querySelector('input[name="ai-mode"]:checked')?.value || 'fetch';
+  const interests = document.getElementById('ai-interests-input').value.trim();
+  const sites     = getAiSitesFromList();
+  return { apiKey, mode, interests, sites };
+}
+
+function setAiStatus(msg, type) {
+  const el = document.getElementById('ai-status');
+  el.textContent = msg;
+  el.className   = 'ai-status' + (type ? ` ${type}` : '') + (msg ? '' : ' hidden');
+}
+
+async function saveAiSettings() {
+  const cfg = getAiConfig();
+  if (!cfg.apiKey) { setAiStatus('Please enter your Anthropic API key.', 'error'); return; }
+  await calBridge.aiSaveConfig(cfg);
+  setAiStatus('Settings saved.', '');
+}
+
+async function runAiImport() {
+  const cfg = getAiConfig();
+  if (!cfg.apiKey) { setAiStatus('Please enter and save your API key first.', 'error'); return; }
+  await calBridge.aiSaveConfig(cfg);
+  setAiStatus('Running import\u2026 this may take up to 30 seconds.', 'loading');
+  document.getElementById('ai-run-btn').disabled = true;
+  try {
+    const result = await calBridge.aiRunImport();
+    if (result.error) { setAiStatus(`Error: ${result.error}`, 'error'); return; }
+    if (!result.events?.length) { setAiStatus('No events found. Try adjusting your interests or URLs.', ''); return; }
+    aiPendingEvents = result.events;
+    closeAiSettingsModal();
+    openAiReviewModal(result.events);
+  } finally {
+    document.getElementById('ai-run-btn').disabled = false;
+  }
+}
+
+// ── AI Import: Review Modal ───────────────────────────
+
+function openAiReviewModal(events) {
+  const count = events.length;
+  document.getElementById('ai-review-title').textContent =
+    `Found ${count} Event${count === 1 ? '' : 's'}`;
+  document.getElementById('ai-review-subtitle').textContent =
+    'Select the events you want to add to your calendar.';
+  renderAiEventList(events);
+  document.getElementById('ai-review-overlay').classList.remove('hidden');
+}
+
+function closeAiReviewModal() {
+  document.getElementById('ai-review-overlay').classList.add('hidden');
+  aiPendingEvents = [];
+}
+
+function renderAiEventList(events) {
+  const list = document.getElementById('ai-event-list');
+  list.innerHTML = '';
+  events.forEach((ev, i) => {
+    const row = document.createElement('div');
+    row.className  = 'ai-event-row checked';
+    row.dataset.idx = i;
+
+    const cb    = document.createElement('input');
+    cb.type     = 'checkbox';
+    cb.checked  = true;
+    cb.addEventListener('change', () => row.classList.toggle('checked', cb.checked));
+    row.addEventListener('click', (e) => {
+      if (e.target === cb) return;
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change'));
+    });
+
+    const info  = document.createElement('div');
+    info.className = 'ai-event-info';
+
+    const title = document.createElement('div');
+    title.className   = 'ai-event-title';
+    title.textContent = ev.title;
+
+    const meta  = document.createElement('div');
+    meta.className = 'ai-event-meta';
+    let metaText = formatDisplayDate(ev.date);
+    if (ev.time) metaText += ' \u00b7 ' + formatTime12h(ev.time);
+    try {
+      if (ev.sourceUrl) metaText += ' \u00b7 ' + new URL(ev.sourceUrl).hostname;
+    } catch {}
+    meta.textContent = metaText;
+
+    const notes = document.createElement('div');
+    notes.className   = 'ai-event-notes';
+    notes.textContent = ev.notes;
+    if (!ev.notes) notes.style.display = 'none';
+
+    info.append(title, meta, notes);
+    row.append(cb, info);
+    list.appendChild(row);
+  });
+}
+
+async function addSelectedAiEvents() {
+  const rows = Array.from(document.querySelectorAll('#ai-event-list .ai-event-row.checked'));
+  if (!rows.length) { closeAiReviewModal(); return; }
+  pushCalendarSnapshot();
+  for (const row of rows) {
+    const ev  = aiPendingEvents[parseInt(row.dataset.idx)];
+    if (!ev) continue;
+    const day = getOrInitDayData(ev.date);
+    const id  = generateCalendarEntryId();
+    const noteParts = [ev.title, ev.notes, ev.sourceUrl].filter(Boolean);
+    day.events.push({ id, image: null, notes: noteParts.join('\n'), time: ev.time || '' });
+    if (!day.featuredId) day.featuredId = id;
+  }
+  await saveCalendarData();
+  renderCalendarGrid();
+  renderMonthStrip();
+  closeAiReviewModal();
 }
 
 function renderSkinGrid() {

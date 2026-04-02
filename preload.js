@@ -12,4 +12,7 @@ contextBridge.exposeInMainWorld('calAPI', {
   winMinimize:     ()                      => ipcRenderer.send('win-minimize'),
   winMaximize:     ()                      => ipcRenderer.send('win-maximize'),
   winClose:        ()                      => ipcRenderer.send('win-close'),
+  aiSaveConfig:    (config)               => ipcRenderer.invoke('ai-save-config', config),
+  aiLoadConfig:    ()                     => ipcRenderer.invoke('ai-load-config'),
+  aiRunImport:     ()                     => ipcRenderer.invoke('ai-run-import'),
 });

@@ -142,6 +142,9 @@ ipcMain.handle('open-file-dialog', async () => {
   return fileDialogResult.filePaths[0];
 });
 
+// ---- AI import (compiled from src/ai-import.ts) ----
+require('./dist/ai-import');
+
 // ---- IPC: window controls ----
 
 ipcMain.on('win-minimize', () => calderaWindow.minimize());

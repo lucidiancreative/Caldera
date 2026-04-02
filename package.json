@@ -1,12 +1,13 @@
 {
   "name": "caldera",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A simple visual event calendar with drag and drop support",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder",
-    "dist:win": "electron-builder --win"
+    "build": "tsc",
+    "dist": "tsc && electron-builder",
+    "dist:win": "tsc && electron-builder --win"
   },
   "keywords": [],
   "author": "Lucidian Creative",
@@ -20,7 +21,8 @@
       "renderer.js",
       "index.html",
       "styles.css",
-      "build/icon.png"
+      "build/icon.png",
+      "dist/ai-import.js"
     ],
     "win": {
       "target": ["nsis", "dir"],
@@ -34,6 +36,8 @@
   "devDependencies": {
     "electron": "^40.6.1",
     "electron-builder": "^25.1.8",
-    "png-to-ico": "^3.0.1"
+    "png-to-ico": "^3.0.1",
+    "typescript": "^5.0.0",
+    "@types/node": "^22.0.0"
   }
 }

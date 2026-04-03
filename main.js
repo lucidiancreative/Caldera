@@ -33,13 +33,19 @@ function createCalderaWindow() {
         'Content-Security-Policy': [
           "default-src 'self'; img-src 'self' file: data:; connect-src 'none';",
         ],
+        'X-Content-Type-Options': ['nosniff'],
+        'Referrer-Policy': ['no-referrer'],
       },
     });
   });
 
-  // Block navigation away from the local app file
+  // Block all navigation except back to the app's own index.html.
+  // Checking only 'file://' would still allow navigation to arbitrary local files
+  // (e.g. ../../etc/passwd via a crafted link or XSS), so we compare against the
+  // exact URL that loadFile() generates.
+  const appIndexFileUrl = 'file:///' + path.resolve(__dirname, 'index.html').replace(/\\/g, '/');
   calderaWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('file://')) event.preventDefault();
+    if (url !== appIndexFileUrl) event.preventDefault();
   });
 
   // Block any attempt to open new windows
@@ -73,17 +79,25 @@ const calendarImagesDir = () => {
 
 const ALLOWED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
 
-/** relPath arrives via IPC from the renderer — validate it stays inside userData so a crafted path like ../../sensitive can't escape the sandbox. */
+/** relPath arrives via IPC from the renderer — validate it stays inside userData so a crafted path like ../../sensitive can't escape the sandbox.
+ *  realpathSync resolves symlinks so a symlink inside userData pointing outside cannot bypass the boundary check. */
 function resolveCalendarStoragePath(relPath) {
-  const userDataBasePath = path.resolve(app.getPath('userData'));
+  const userDataBasePath = fs.realpathSync(path.resolve(app.getPath('userData')));
   const resolvedFullPath = path.resolve(userDataBasePath, relPath);
   if (!resolvedFullPath.startsWith(userDataBasePath + path.sep)) throw new Error('Invalid path');
-  return resolvedFullPath;
+  try {
+    const realPath = fs.realpathSync(resolvedFullPath);
+    if (!realPath.startsWith(userDataBasePath + path.sep)) throw new Error('Symlink escapes sandbox');
+    return realPath;
+  } catch (e) {
+    if (e.code === 'ENOENT') return resolvedFullPath; // file not yet written, lexical check above is sufficient
+    throw e;
+  }
 }
 
 /** Returns a relative path (not absolute) so stored image references in calendar-data.json remain valid if userData moves between machines or installs. */
 function saveImageToCalendarStore(destName, writeFn) {
-  const imagesDirPath = calendarImagesDir();
+  const imagesDirPath = fs.realpathSync(calendarImagesDir()); // resolve symlinks on the images dir itself
   const destAbsPath   = path.resolve(imagesDirPath, destName);
   if (!destAbsPath.startsWith(imagesDirPath + path.sep)) throw new Error('Invalid image path');
   writeFn(destAbsPath);

@@ -15,5 +15,10 @@ contextBridge.exposeInMainWorld('calAPI', {
   aiSaveConfig:    (config)               => ipcRenderer.invoke('ai-save-config', config),
   aiLoadConfig:    ()                     => ipcRenderer.invoke('ai-load-config'),
   aiRunImport:     ()                     => ipcRenderer.invoke('ai-run-import'),
-  openExternal:    (url)                  => shell.openExternal(url),
+  openExternal: (url) => {
+    let parsed;
+    try { parsed = new URL(url); } catch { return; }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    shell.openExternal(url);
+  },
 });

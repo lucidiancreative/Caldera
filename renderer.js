@@ -206,6 +206,14 @@ function toElectronFileUrl(absPath) {
   return 'file:///' + absPath.replace(/\\/g, '/');
 }
 
+// Resolves a stored relative image path (e.g. "images/2025-01-01-abc.png") to a
+// safe file:// URL via the main process. Centralises the resolveImage + toElectronFileUrl
+// two-step that was previously duplicated at every call site.
+async function resolveCalendarImageUrl(relPath) {
+  const fullPath = await calBridge.resolveImage(relPath);
+  return toElectronFileUrl(fullPath);
+}
+
 function formatTime12h(t) {
   if (!t) return '';
   const [h, m] = t.split(':').map(Number);
@@ -339,6 +347,17 @@ async function renderCalendarGrid() {
   const grid = document.getElementById('calendar-grid');
   grid.innerHTML = '';
 
+  // Restart the glass-skin entrance animation on every grid render (month navigation, today
+  // re-render, etc.).  The class is removed by a persistent animationend listener set up in
+  // bindCalendarUIEvents so the opacity/transform fill-mode never lingers on the compositor —
+  // a persisted animation state can be reset by Chromium when backdrop-filter overlays are
+  // shown or hidden, leaving the grid invisible after the overlay closes.
+  if (document.body.classList.contains('skin-glass')) {
+    grid.classList.remove('is-entering');
+    void grid.offsetHeight; // force reflow so re-adding the class triggers a fresh animation
+    grid.classList.add('is-entering');
+  }
+
   const todayKey    = getTodayKey();
   renderedTodayKey  = todayKey;
   const firstDay    = new Date(viewYear, viewMonth, 1).getDay();
@@ -373,8 +392,8 @@ async function renderCalendarGrid() {
       cell.insertBefore(bg, dayNum);
       // Collect resolve promise — all will run concurrently below
       imageResolves.push(
-        calBridge.resolveImage(featured.image).then(fullPath => {
-          bg.style.backgroundImage = `url("${toElectronFileUrl(fullPath)}")`;
+        resolveCalendarImageUrl(featured.image).then(url => {
+          bg.style.backgroundImage = `url("${url}")`;
         }).catch(err => console.error(`Failed to resolve featured image for ${key}:`, err))
       );
     }
@@ -414,10 +433,6 @@ async function renderCalendarGrid() {
       teardownHoverScrollStrip(cell);
     });
 
-    if (document.body.classList.contains('skin-glass')) {
-      cell.style.animationDelay = ((firstDay + d - 1) * 18) + 'ms';
-    }
-
     grid.appendChild(cell);
   }
 
@@ -440,10 +455,9 @@ async function refreshCalendarCell(key) {
   const featured = getFeaturedEvent(key);
   if (featured?.image) {
     cell.classList.add('has-image');
-    const fullPath = await calBridge.resolveImage(featured.image);
     const bg = document.createElement('div');
     bg.className = 'cell-bg';
-    bg.style.backgroundImage = `url("${toElectronFileUrl(fullPath)}")`;
+    bg.style.backgroundImage = `url("${await resolveCalendarImageUrl(featured.image)}")`;
     cell.insertBefore(bg, cell.querySelector('.day-num'));
   } else {
     cell.classList.remove('has-image');
@@ -491,9 +505,8 @@ async function setupHoverScrollStrip(cell, key) {
   // Resolve all image paths and measure natural dimensions concurrently
   const imageInfo = await Promise.all(
     withImages.map(async ev => {
-      const fullPath = await calBridge.resolveImage(ev.image);
-      const url      = toElectronFileUrl(fullPath);
-      const size     = await measureImageNaturalDimensions(url);
+      const url  = await resolveCalendarImageUrl(ev.image);
+      const size = await measureImageNaturalDimensions(url);
       return { url, size };
     })
   );
@@ -579,7 +592,9 @@ document.addEventListener('paste', async (e) => {
   if (!targetKey) return;
 
   for (const item of (e.clipboardData?.items || [])) {
-    if (!item.type.startsWith('image/')) continue;
+    // Explicit allowlist — image/gif, image/svg+xml etc. are excluded because
+    // ALLOWED_IMAGE_EXTS in main.js only accepts png/jpg/jpeg/webp.
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(item.type)) continue;
     const blob = item.getAsFile();
     if (!blob) continue;
 
@@ -832,8 +847,8 @@ function buildEventCard(key, ev, isFeatured) {
 
   if (ev.image) {
     imgArea.classList.add('has-image');
-    calBridge.resolveImage(ev.image)
-      .then(p => { img.src = toElectronFileUrl(p); })
+    resolveCalendarImageUrl(ev.image)
+      .then(url => { img.src = url; })
       .catch(err => console.error(`Failed to resolve event image for event ${ev.id}:`, err));
     imgArea.addEventListener('click', () => { if (img.src) openLightbox(img.src); });
   }
@@ -887,6 +902,13 @@ function buildEventCard(key, ev, isFeatured) {
 
 // ── UI bindings ────────────────────────────────────────
 function bindCalendarUIEvents() {
+  // Remove the glass-skin .is-entering class once the entrance animation completes so the
+  // animated opacity/transform don't persist on the compositor — see renderCalendarGrid
+  // for a full explanation of why this matters.
+  document.getElementById('calendar-grid').addEventListener('animationend', (e) => {
+    if (e.animationName === 'glass-cell-enter') e.currentTarget.classList.remove('is-entering');
+  });
+
   document.getElementById('btn-min').addEventListener('click', () => calBridge.winMinimize());
   document.getElementById('btn-max').addEventListener('click', () => calBridge.winMaximize());
   document.getElementById('btn-close').addEventListener('click', () => calBridge.winClose());
@@ -961,6 +983,10 @@ function bindCalendarUIEvents() {
 
   document.querySelectorAll('.view-tab').forEach(btn => {
     btn.addEventListener('click', () => {
+      // #btn-ai shares the .view-tab class for styling but has no data-view —
+      // skip it here so clicking AI doesn't call switchCalendarView(undefined),
+      // which would hide #calendar-wrapper via its view !== 'calendar' toggle.
+      if (!btn.dataset.view) return;
       if (btn.dataset.view === 'schedule') {
         scheduleDate = getTodayKey();
         clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
@@ -1318,13 +1344,26 @@ function bindGlassButtonLightFollow() {
     '#btn-schedule-day',
   ].join(', ');
 
+  // Throttle to one update per animation frame — getBoundingClientRect + setProperty
+  // on every raw mousemove (60+ Hz) causes measurable layout thrashing on glass skin.
+  let glassLightRafPending = false;
+  let glassLightLastEvent  = null;
+
   document.addEventListener('mousemove', (e) => {
     if (!document.body.classList.contains('skin-glass')) return;
-    const btn = e.target.closest(selector);
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    btn.style.setProperty('--mx', ((e.clientX - rect.left) / rect.width  * 100) + '%');
-    btn.style.setProperty('--my', ((e.clientY - rect.top)  / rect.height * 100) + '%');
+    glassLightLastEvent = e;
+    if (glassLightRafPending) return;
+    glassLightRafPending = true;
+    requestAnimationFrame(() => {
+      glassLightRafPending = false;
+      const ev  = glassLightLastEvent;
+      if (!ev) return;
+      const btn = ev.target.closest(selector);
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      btn.style.setProperty('--mx', ((ev.clientX - rect.left) / rect.width  * 100) + '%');
+      btn.style.setProperty('--my', ((ev.clientY - rect.top)  / rect.height * 100) + '%');
+    });
   });
 }
 
@@ -1345,9 +1384,16 @@ function changeYear(delta) {
 }
 
 // ── Day-change watcher ─────────────────────────────────
-// Polls every 60 s so the today-highlight updates correctly after
-// midnight or when the system wakes from sleep.
+// Keeps the today-highlight accurate after midnight or a system sleep/wake cycle.
+// visibilitychange fires immediately when the window regains focus (e.g. wake from sleep),
+// which is faster and more reliable than waiting for the next 60-second poll tick.
 function startDayChangeWatcher() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && getTodayKey() !== renderedTodayKey) {
+      renderCalendarGrid();
+    }
+  });
+  // Fallback: poll every 60 s to catch midnight rollover while the app stays visible
   setInterval(() => {
     if (getTodayKey() !== renderedTodayKey) renderCalendarGrid();
   }, 60_000);

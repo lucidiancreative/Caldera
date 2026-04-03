@@ -14,7 +14,7 @@
   --titlebar-h:  36px;
   --strip-h:     56px;
   --header-h:    36px;
-  --radius:      8px;
+  --radius:      12px;
 }
 
 html, body {
@@ -211,7 +211,8 @@ body.skin-glass #shader-bg { display: block; }
 
 .day-cell:hover {
   border-color: var(--accent);
-  box-shadow: 0 2px 8px rgba(79, 110, 247, 0.15);
+  box-shadow: 0 6px 18px rgba(79, 110, 247, 0.18);
+  transform: translateY(-5px);
 }
 
 .day-cell.today {
@@ -678,7 +679,7 @@ body.dark {
 .nav-arrow, .month-tab, #modal-close {
   transition:
     background 0.2s, border-color 0.2s,
-    color 0.2s, box-shadow 0.2s;
+    color 0.2s, box-shadow 0.2s, transform 0.18s ease;
 }
 
 /* Dark overrides for hardcoded colors */
@@ -1130,7 +1131,7 @@ body.skin-glass .day-cell {
 }
 
 body.skin-glass .day-cell:hover {
-  transform: translateY(-2px);
+  transform: translateY(-5px);
   border-color: rgba(255,255,255,0.55);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.40), 0 8px 24px rgba(0,0,0,0.22);
 }
@@ -1200,9 +1201,13 @@ body.skin-glass.dark .card-toolbar    { background: rgba(10,10,20,0.28); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Cell delay is set inline from JS: cell.style.animationDelay */
-body.skin-glass .day-cell {
-  animation: glass-cell-enter 0.35s ease both;
+/* Entrance animation is JS-driven: renderCalendarGrid adds .is-entering, animationend removes it.
+   Class-based (not persistent) so no fill-mode lingers on the compositor after the animation
+   completes — a persistent opacity/transform animation pinned via fill-mode:both can be reset
+   by Chromium when backdrop-filter overlays (AI modal, skin picker) are shown or hidden,
+   leaving the grid invisible after the overlay closes. */
+body.skin-glass #calendar-grid.is-entering {
+  animation: glass-cell-enter 0.28s ease forwards;
 }
 
 body.skin-glass #modal {

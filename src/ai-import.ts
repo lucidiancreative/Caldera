@@ -1,4 +1,4 @@
-import { app, ipcMain, BrowserWindow } from 'electron';
+import { app, ipcMain, BrowserWindow, safeStorage } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -48,12 +48,54 @@ interface OllamaResponse {
   done: boolean;
 }
 
-type ClaudeMessage = { role: string; content: unknown };
+// content can be a plain text string (user prompts) or a structured block array
+// (assistant turns with tool_use results). Using unknown here would lose type narrowing
+// at every call site, so we keep it broad but explicit.
+type ClaudeMessage = { role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> };
+
+// StoredAiConfig is the on-disk shape — apiKey may be encrypted (base64) when _apiKeyEncrypted is true
+interface StoredAiConfig extends AiConfig {
+  _apiKeyEncrypted?: boolean;
+}
+
+// ── Config validation ─────────────────────────────────────────────────────────
+
+// Guards against corrupted or partially-written on-disk configs that would pass
+// the StoredAiConfig type assertion but blow up later when fields are accessed.
+function isValidStoredAiConfig(stored: unknown): stored is StoredAiConfig {
+  if (!stored || typeof stored !== 'object') return false;
+  const s = stored as Record<string, unknown>;
+  return (
+    (s.provider === 'claude' || s.provider === 'ollama') &&
+    typeof s.interests === 'string' &&
+    Array.isArray(s.sites)
+  );
+}
 
 // ── Path helper ───────────────────────────────────────────────────────────────
 
 const calendarDataFilePath = (): string =>
   path.join(app.getPath('userData'), 'calendar-data.json');
+
+// ── API key encryption helpers ────────────────────────────────────────────────
+
+function encryptApiKey(plaintext: string): { value: string; encrypted: boolean } {
+  if (plaintext && safeStorage.isEncryptionAvailable()) {
+    return { value: safeStorage.encryptString(plaintext).toString('base64'), encrypted: true };
+  }
+  return { value: plaintext, encrypted: false };
+}
+
+function decryptApiKey(stored: StoredAiConfig): string {
+  if (stored._apiKeyEncrypted && stored.apiKey && safeStorage.isEncryptionAvailable()) {
+    try {
+      return safeStorage.decryptString(Buffer.from(stored.apiKey, 'base64'));
+    } catch {
+      return ''; // corrupted or key from different OS user — treat as missing
+    }
+  }
+  return stored.apiKey ?? '';
+}
 
 // ── IPC: save config ──────────────────────────────────────────────────────────
 
@@ -63,7 +105,9 @@ ipcMain.handle('ai-save-config', async (_event, config: AiConfig) => {
   if (fs.existsSync(filePath)) {
     try { data = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch {}
   }
-  data._aiConfig = config;
+  const { value, encrypted } = encryptApiKey(config.apiKey);
+  const stored: StoredAiConfig = { ...config, apiKey: value, _apiKeyEncrypted: encrypted };
+  data._aiConfig = stored;
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 });
 
@@ -74,7 +118,9 @@ ipcMain.handle('ai-load-config', async (): Promise<AiConfig | null> => {
   if (!fs.existsSync(filePath)) return null;
   try {
     const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return (data._aiConfig as AiConfig) ?? null;
+    const stored = data._aiConfig;
+    if (!isValidStoredAiConfig(stored)) return null;
+    return { ...stored, apiKey: decryptApiKey(stored), _apiKeyEncrypted: undefined } as AiConfig;
   } catch { return null; }
 });
 
@@ -85,7 +131,8 @@ ipcMain.handle('ai-run-import', async (): Promise<AiImportResult> => {
   let aiConfig: AiConfig | undefined;
   try {
     const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    aiConfig = data._aiConfig as AiConfig;
+    const stored = data._aiConfig;
+    if (isValidStoredAiConfig(stored)) aiConfig = { ...stored, apiKey: decryptApiKey(stored) } as AiConfig;
   } catch {
     return { error: 'Could not read config.' };
   }
@@ -116,6 +163,11 @@ ipcMain.handle('ai-run-import', async (): Promise<AiImportResult> => {
 
 async function renderPage(rawUrl: string): Promise<string> {
   const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+  // Reject anything that isn't http or https after normalisation (e.g. file://, ftp://)
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+  } catch { return ''; }
   return new Promise((resolve) => {
     const win = new BrowserWindow({
       show: false,
@@ -174,14 +226,25 @@ async function renderPage(rawUrl: string): Promise<string> {
 }
 
 async function buildPageDumps(sites: string[]): Promise<string[]> {
-  // Render all pages in parallel — each takes ~3–5s so parallel is much faster
-  const results = await Promise.all(
-    sites.map(async (rawUrl) => {
-      const url  = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-      const text = await renderPage(rawUrl);
-      if (!text) return `--- SOURCE: ${url} --- [FAILED TO LOAD]`;
-      return `--- SOURCE: ${url} ---\n${text}`;
-    }),
+  // Cap at 3 concurrent hidden BrowserWindows — each uses ~1.6 MB of Chromium memory,
+  // so unbounded Promise.all would spike RAM significantly for large site lists.
+  // Worker-pool pattern: each worker pulls the next index until the queue is empty.
+  const MAX_CONCURRENT_SCRAPERS = 3;
+  const results: string[] = new Array(sites.length);
+  let nextIndex = 0;
+
+  async function scraperWorker() {
+    while (nextIndex < sites.length) {
+      const i      = nextIndex++;
+      const rawUrl = sites[i];
+      const url    = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+      const text   = await renderPage(rawUrl);
+      results[i]   = text ? `--- SOURCE: ${url} ---\n${text}` : `--- SOURCE: ${url} --- [FAILED TO LOAD]`;
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(MAX_CONCURRENT_SCRAPERS, sites.length) }, scraperWorker),
   );
   return results;
 }
@@ -236,8 +299,10 @@ async function runWebSearchImport(aiConfig: AiConfig): Promise<AiImportResult> {
     }
     if (response.stop_reason === 'tool_use') {
       messages.push({ role: 'assistant', content: response.content });
+      // Filter out any tool_use blocks that are missing an id — passing undefined
+      // as tool_use_id would cause the Claude API to reject the message.
       const toolResults = response.content
-        .filter(b => b.type === 'tool_use')
+        .filter((b): b is ClaudeContentBlock & { id: string } => b.type === 'tool_use' && b.id !== undefined)
         .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: '' }));
       messages.push({ role: 'user', content: toolResults });
     } else {
@@ -294,6 +359,15 @@ async function runOllamaFetchImport(aiConfig: AiConfig): Promise<AiImportResult>
 // ── Ollama API call ───────────────────────────────────────────────────────────
 
 async function callOllama(baseUrl: string, model: string, prompt: string): Promise<string> {
+  // Validate the base URL is http or https — blocks file://, custom protocols, etc.
+  try {
+    const parsed = new URL(baseUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Ollama URL must use http or https');
+    }
+  } catch (e) {
+    throw new Error(`Invalid Ollama URL: ${e instanceof Error ? e.message : e}`);
+  }
   const url = baseUrl.replace(/\/$/, '') + '/api/chat';
   const res = await fetch(url, {
     method: 'POST',
@@ -312,6 +386,29 @@ async function callOllama(baseUrl: string, model: string, prompt: string): Promi
   }
   const data = await res.json() as OllamaResponse;
   return data.message?.content ?? '';
+}
+
+// ── Event field validation helpers ───────────────────────────────────────────
+
+const MAX_TITLE_LEN  = 200;
+const MAX_NOTES_LEN  = 10_000;
+const MAX_URL_LEN    = 2_000;
+
+/** Checks that the date string is both well-formed AND represents a real calendar date (e.g. rejects 2024-02-30). */
+function isValidCalendarDate(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const d = new Date(dateStr + 'T00:00:00');
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === dateStr;
+}
+
+/** Accepts only http/https URLs; returns '' for anything else (javascript:, file:, relative paths, etc.). */
+function sanitizeSourceUrl(raw: string): string {
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    return raw.slice(0, MAX_URL_LEN);
+  } catch { return ''; }
 }
 
 // ── Shared response parser ────────────────────────────────────────────────────
@@ -352,14 +449,14 @@ function parseEventText(text: string, source: string): AiImportResult {
         e !== null &&
         typeof e === 'object' &&
         typeof (e as Record<string, unknown>).title === 'string' &&
-        /^\d{4}-\d{2}-\d{2}$/.test(String((e as Record<string, unknown>).date)),
+        isValidCalendarDate(String((e as Record<string, unknown>).date)),
       )
       .map(e => ({
-        title:     String(e.title).trim(),
+        title:     String(e.title).trim().slice(0, MAX_TITLE_LEN),
         date:      String(e.date),
         time:      typeof e.time === 'string' && /^\d{2}:\d{2}$/.test(e.time) ? e.time : null,
-        notes:     typeof e.notes === 'string' ? e.notes.trim() : '',
-        sourceUrl: typeof e.sourceUrl === 'string' ? e.sourceUrl.trim() : '',
+        notes:     typeof e.notes === 'string' ? e.notes.trim().slice(0, MAX_NOTES_LEN) : '',
+        sourceUrl: typeof e.sourceUrl === 'string' ? sanitizeSourceUrl(e.sourceUrl.trim()) : '',
       }));
     console.log(`[ai-import] ${source}: parsed ${events.length} valid events (${raw.length} raw)`);
     return { events };

@@ -51,7 +51,7 @@ interface OllamaResponse {
 // content can be a plain text string (user prompts) or a structured block array
 // (assistant turns with tool_use results). Using unknown here would lose type narrowing
 // at every call site, so we keep it broad but explicit.
-type ClaudeMessage = { role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> };
+type ClaudeMessage = { role: 'user' | 'assistant'; content: string | ClaudeContentBlock[] };
 
 // StoredAiConfig is the on-disk shape — apiKey may be encrypted (base64) when _apiKeyEncrypted is true
 interface StoredAiConfig extends AiConfig {
@@ -303,7 +303,7 @@ async function runWebSearchImport(aiConfig: AiConfig): Promise<AiImportResult> {
       // as tool_use_id would cause the Claude API to reject the message.
       const toolResults = response.content
         .filter((b): b is ClaudeContentBlock & { id: string } => b.type === 'tool_use' && b.id !== undefined)
-        .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: '' }));
+        .map(b => ({ type: 'tool_result' as const, tool_use_id: b.id, content: '' }));
       messages.push({ role: 'user', content: toolResults });
     } else {
       break;

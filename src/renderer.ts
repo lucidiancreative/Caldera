@@ -1,44 +1,98 @@
 /* ────────────────────────────────────────────────────────
-   Caldera – renderer.js
+   Caldera – renderer.ts
    Multi-event calendar: each day holds an array of events.
    Data shape per day:
      { events: [{ id, image, time, notes }], featuredId }
 ──────────────────────────────────────────────────────── */
 
+// Types are provided globally by src/renderer-globals.d.ts — no import needed.
+// Keeping this file import-free prevents TypeScript from emitting a CommonJS
+// module wrapper (`Object.defineProperty(exports, ...)`) which would crash in
+// a plain <script> tag context where `exports` is not defined.
+
+// ── Local interfaces ────────────────────────────────────
+
+interface Skin {
+  id: SkinId;
+  label: string;
+  init: () => void;
+  destroy: () => void;
+}
+
+interface TimeBlockPopupState {
+  mode: 'new' | 'edit';
+  key: string;
+  startMin: number;
+  endMin: number;
+  id?: string;
+  _cleanup?: () => void;
+}
+
+type BlockOrPartial =
+  | (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean; recurrence?: string; dayOfWeek?: number; dayOfMonth?: number; completedDates?: string[]; excludedDates?: string[] })
+  | { startMin: number; endMin: number; id?: undefined; label?: undefined; color?: string; ampm?: AmPm };
+
+// ── DOM helpers ─────────────────────────────────────────
+
+function qId<T extends HTMLElement = HTMLElement>(id: string): T {
+  const el = document.getElementById(id) as T | null;
+  if (!el) throw new Error(`#${id} not found`);
+  return el;
+}
+
+// ── Typed SVG helper ─────────────────────────────────────
+
+function svgEl<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | number>
+): SVGElementTagNameMap[K] {
+  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+  return e;
+}
+
+// ── CalData accessor helper ──────────────────────────────
+
+function getDayData(key: string): DayData | undefined {
+  const v = calData[key];
+  if (v && typeof v === 'object' && 'events' in v) return v as DayData;
+  return undefined;
+}
+
 const calBridge = window.calAPI;
 
 // ── State ──────────────────────────────────────────────
-let calData         = {};
-let viewYear        = new Date().getFullYear();
-let viewMonth       = new Date().getMonth();
-let modalDate       = null;
-let pasteCellDate   = null;
-let renderedTodayKey = null;
-let hoveredGridCell = null;
-let activeView      = 'calendar';
-let scheduleDate    = null;
-let clockDragState       = null;
-let aiPendingEvents      = [];
-let timeBlockPopupState      = null;
-let clockAmPm       = new Date().getHours() >= 12 ? 'PM' : 'AM';
-let rescheduleBlock = null;
-let hoveredClockBlock    = null; // { block, key } – block the cursor is over on the clock face
-const undoStack     = [];
-const redoStack     = [];
-const MAX_HISTORY   = 50;
-const BLOCK_COLORS = ['#4f6ef7', '#e03030', '#2eb67d', '#f0a500', '#a259ff', '#ff6b35'];
+let calData: CalData                                                    = { _recurring: [] };
+let viewYear:          number                                           = new Date().getFullYear();
+let viewMonth:         number                                           = new Date().getMonth();
+let modalDate:         string | null                                    = null;
+let pasteCellDate:     string | null                                    = null;
+let renderedTodayKey:  string | null                                    = null;
+let hoveredGridCell:   Element | null                                   = null;
+let activeView:        ViewType                                         = 'calendar';
+let scheduleDate:      string | null                                    = null;
+let clockDragState:    { startMin: number; svg: SVGSVGElement } | null = null;
+let aiPendingEvents:   AiEvent[]                                        = [];
+let timeBlockPopupState: TimeBlockPopupState | null                     = null;
+let clockAmPm:         AmPm                                             = new Date().getHours() >= 12 ? 'PM' : 'AM';
+let rescheduleBlock:   (TimeBlock & { _key: string }) | null           = null;
+let hoveredClockBlock: { block: TimeBlock | RecurringBlock; key: string } | null = null; // { block, key } – block the cursor is over on the clock face
+const undoStack:       string[]                                         = [];
+const redoStack:       string[]                                         = [];
+const MAX_HISTORY      = 50;
+const BLOCK_COLORS:    string[]                                         = ['#4f6ef7', '#e03030', '#2eb67d', '#f0a500', '#a259ff', '#ff6b35'];
 
 // ── Skin registry ───────────────────────────────────────
-const SKINS = {
+const SKINS: Record<SkinId, Skin> = {
   default: { id: 'default', label: 'Default', init: () => {}, destroy: () => {} },
   glass:   { id: 'glass',   label: 'Glass',   init: initShaderBackground, destroy: destroyShaderBackground },
 };
 
-function getCurrentSkin() {
-  return localStorage.getItem('skin') || 'default';
+function getCurrentSkin(): SkinId {
+  return (localStorage.getItem('skin') || 'default') as SkinId;
 }
 
-function activateSkin(id) {
+function activateSkin(id: SkinId): void {
   const prev = getCurrentSkin();
   if (SKINS[prev]) SKINS[prev].destroy();
   document.body.classList.forEach(cls => {
@@ -50,34 +104,39 @@ function activateSkin(id) {
 }
 
 // ── WebGL shader background (glass skin) ───────────────
-let _shaderRAF  = null;
-let _shaderGL   = null;
-let _shaderProg = null;
-let _shaderTime = 0;
-let _shaderLast = null;
+let _shaderRAF:           number | null                = null;
+let _shaderGL:            WebGLRenderingContext | null = null;
+let _shaderProg:          WebGLProgram | null          = null;
+let _shaderTime:          number                       = 0;
+let _shaderLast:          number | null                = null;
+// Module-level variable replacing canvas._shaderResizeHandler (which is not valid on HTMLElement)
+let _shaderResizeHandler: (() => void) | null          = null;
 
-function initShaderBackground() {
-  const canvas = document.getElementById('shader-bg');
+function initShaderBackground(): void {
+  const canvas = qId('shader-bg') as HTMLCanvasElement;
   const gl = canvas.getContext('webgl');
   if (!gl) { console.warn('Caldera: WebGL unavailable — glass skin will use CSS only.'); return; }
   _shaderGL = gl;
+  // Narrow gl to non-null for all nested functions — the early-return above guarantees it.
+  const glNN = gl;
 
-  function compileShader(type, src) {
-    const s = gl.createShader(type);
-    gl.shaderSource(s, src);
-    gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-      console.error('Shader compile error:', gl.getShaderInfoLog(s));
+  function compileShader(type: number, src: string): WebGLShader | null {
+    const s = glNN.createShader(type);
+    if (!s) return null;
+    glNN.shaderSource(s, src);
+    glNN.compileShader(s);
+    if (!glNN.getShaderParameter(s, glNN.COMPILE_STATUS)) {
+      console.error('Shader compile error:', glNN.getShaderInfoLog(s));
       return null;
     }
     return s;
   }
 
-  const vs = compileShader(gl.VERTEX_SHADER, `
+  const vs = compileShader(glNN.VERTEX_SHADER, `
     attribute vec2 a_position;
     void main() { gl_Position = vec4(a_position, 0.0, 1.0); }
   `);
-  const fs = compileShader(gl.FRAGMENT_SHADER, `
+  const fs = compileShader(glNN.FRAGMENT_SHADER, `
     precision mediump float;
     uniform vec2  u_resolution;
     uniform float u_time;
@@ -110,59 +169,59 @@ function initShaderBackground() {
   `);
   if (!vs || !fs) return;
 
-  const prog = gl.createProgram();
-  gl.attachShader(prog, vs);
-  gl.attachShader(prog, fs);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    console.error('Shader link error:', gl.getProgramInfoLog(prog));
+  const prog = glNN.createProgram();
+  if (!prog) return;
+  glNN.attachShader(prog, vs);
+  glNN.attachShader(prog, fs);
+  glNN.linkProgram(prog);
+  if (!glNN.getProgramParameter(prog, glNN.LINK_STATUS)) {
+    console.error('Shader link error:', glNN.getProgramInfoLog(prog));
     return;
   }
   _shaderProg = prog;
 
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  const buf = glNN.createBuffer();
+  glNN.bindBuffer(glNN.ARRAY_BUFFER, buf);
+  glNN.bufferData(glNN.ARRAY_BUFFER, new Float32Array([
     -1,-1, 1,-1, -1, 1,
     -1, 1, 1,-1,  1, 1,
-  ]), gl.STATIC_DRAW);
-  const posLoc = gl.getAttribLocation(prog, 'a_position');
-  gl.enableVertexAttribArray(posLoc);
-  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+  ]), glNN.STATIC_DRAW);
+  const posLoc = glNN.getAttribLocation(prog, 'a_position');
+  glNN.enableVertexAttribArray(posLoc);
+  glNN.vertexAttribPointer(posLoc, 2, glNN.FLOAT, false, 0, 0);
 
-  const uRes  = gl.getUniformLocation(prog, 'u_resolution');
-  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes  = glNN.getUniformLocation(prog, 'u_resolution');
+  const uTime = glNN.getUniformLocation(prog, 'u_time');
 
-  function resizeCanvas() {
+  function resizeCanvas(): void {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
-    gl.viewport(0, 0, canvas.width, canvas.height);
+    glNN.viewport(0, 0, canvas.width, canvas.height);
   }
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
-  canvas._shaderResizeHandler = resizeCanvas;
+  _shaderResizeHandler = resizeCanvas;
 
   _shaderTime = 0;
   _shaderLast = null;
 
-  function frame(ts) {
+  function frame(ts: number): void {
     if (_shaderLast !== null) _shaderTime += (ts - _shaderLast) * 0.001;
     _shaderLast = ts;
-    gl.useProgram(_shaderProg);
-    gl.uniform2f(uRes, canvas.width, canvas.height);
-    gl.uniform1f(uTime, _shaderTime);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    glNN.useProgram(_shaderProg);
+    glNN.uniform2f(uRes, canvas.width, canvas.height);
+    glNN.uniform1f(uTime, _shaderTime);
+    glNN.drawArrays(glNN.TRIANGLES, 0, 6);
     _shaderRAF = requestAnimationFrame(frame);
   }
   _shaderRAF = requestAnimationFrame(frame);
 }
 
-function destroyShaderBackground() {
+function destroyShaderBackground(): void {
   if (_shaderRAF !== null) { cancelAnimationFrame(_shaderRAF); _shaderRAF = null; }
-  const canvas = document.getElementById('shader-bg');
-  if (canvas._shaderResizeHandler) {
-    window.removeEventListener('resize', canvas._shaderResizeHandler);
-    canvas._shaderResizeHandler = null;
+  if (_shaderResizeHandler) {
+    window.removeEventListener('resize', _shaderResizeHandler);
+    _shaderResizeHandler = null;
   }
   if (_shaderGL && _shaderProg) _shaderGL.deleteProgram(_shaderProg);
   _shaderGL = null;
@@ -171,7 +230,7 @@ function destroyShaderBackground() {
 }
 
 // ── Boot ───────────────────────────────────────────────
-async function initCalendarApp() {
+async function initCalendarApp(): Promise<void> {
   applyCalendarTheme(localStorage.getItem('theme') === 'dark');
   activateSkin(getCurrentSkin());
   const raw = await calBridge.loadData();
@@ -181,40 +240,40 @@ async function initCalendarApp() {
   bindCalendarUIEvents();
 }
 
-function applyCalendarTheme(isDarkMode) {
+function applyCalendarTheme(isDarkMode: boolean): void {
   document.body.classList.toggle('dark', isDarkMode);
-  document.getElementById('btn-theme').textContent = isDarkMode ? '\u2600' : '\u263E';
+  qId('btn-theme').textContent = isDarkMode ? '\u2600' : '\u263E';
 }
 
 // ── Helpers ────────────────────────────────────────────
-function generateCalendarEntryId() {
+function generateCalendarEntryId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-function dateKey(y, m, d) {
+function dateKey(y: number, m: number, d: number): string {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
-function formatDisplayDate(key) {
+function formatDisplayDate(key: string): string {
   const [y, m, d] = key.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 }
 
-function toElectronFileUrl(absPath) {
+function toElectronFileUrl(absPath: string): string {
   return 'file:///' + absPath.replace(/\\/g, '/');
 }
 
 // Resolves a stored relative image path (e.g. "images/2025-01-01-abc.png") to a
 // safe file:// URL via the main process. Centralises the resolveImage + toElectronFileUrl
 // two-step that was previously duplicated at every call site.
-async function resolveCalendarImageUrl(relPath) {
+async function resolveCalendarImageUrl(relPath: string): Promise<string> {
   const fullPath = await calBridge.resolveImage(relPath);
   return toElectronFileUrl(fullPath);
 }
 
-function formatTime12h(t) {
+function formatTime12h(t: string): string {
   if (!t) return '';
   const [h, m] = t.split(':').map(Number);
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
@@ -222,39 +281,39 @@ function formatTime12h(t) {
 
 // Returns today's date key — computed fresh each call so the app
 // stays correct if left open past midnight.
-function getTodayKey() {
+function getTodayKey(): string {
   const t = new Date();
   return dateKey(t.getFullYear(), t.getMonth(), t.getDate());
 }
 
-async function saveCalendarData() {
+async function saveCalendarData(): Promise<void> {
   await calBridge.saveData(calData);
 }
 
-function pushCalendarSnapshot() {
+function pushCalendarSnapshot(): void {
   undoStack.push(JSON.stringify(calData));
   if (undoStack.length > MAX_HISTORY) undoStack.shift();
   redoStack.length = 0; // any new user action invalidates the redo chain
 }
 
-async function applyCalendarSnapshot(snapshot) {
+async function applyCalendarSnapshot(snapshot: string): Promise<void> {
   calData = JSON.parse(snapshot);
   await saveCalendarData();
   renderCalendarGrid();
   renderMonthStrip();
   if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
-  if (modalDate && !document.getElementById('modal-overlay').classList.contains('hidden'))
+  if (modalDate && !qId('modal-overlay').classList.contains('hidden'))
     renderEventCards(modalDate);
 }
 
-function debounce(fn, ms) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): (...args: Parameters<T>) => void {
+  let t: ReturnType<typeof setTimeout>;
+  return (...args: Parameters<T>) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
 const CELL_HOVER_SCROLL_PX_PER_SEC = 20;
 
-function measureImageNaturalDimensions(url) {
+function measureImageNaturalDimensions(url: string): Promise<{ w: number; h: number }> {
   return new Promise(resolve => {
     const img = new Image();
     img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
@@ -264,8 +323,8 @@ function measureImageNaturalDimensions(url) {
 }
 
 // ── Migration: old single-event format → new multi-event ──
-function migrateCalendarDataFormat(raw) {
-  const out = {};
+function migrateCalendarDataFormat(raw: Record<string, unknown>): CalData {
+  const out: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(raw)) {
     if (key === '_recurring') {
       out._recurring = Array.isArray(val) ? val : [];
@@ -275,33 +334,39 @@ function migrateCalendarDataFormat(raw) {
       out._aiConfig = val;
       continue;
     }
-    if (val.events) {
+    const valObj = val as Record<string, unknown>;
+    if (valObj && typeof valObj === 'object' && valObj.events) {
       out[key] = val;
-      if (!out[key].timeBlocks) out[key].timeBlocks = [];
-      out[key].timeBlocks.forEach(b => {
+      const day = out[key] as DayData;
+      if (!day.timeBlocks) day.timeBlocks = [];
+      day.timeBlocks.forEach(b => {
         if (!b.ampm)             b.ampm      = 'AM';
         if (b.completed == null) b.completed = false;
       });
     } else {
       const id = generateCalendarEntryId();
+      const legacy = valObj || {};
       out[key] = {
-        events:     [{ id, image: val.image || null, notes: val.notes || '', time: val.time || '' }],
-        featuredId: val.image ? id : null,
+        events:     [{ id, image: (legacy.image as string | null) || null, notes: (legacy.notes as string) || '', time: (legacy.time as string) || '' }],
+        featuredId: legacy.image ? id : null,
       };
     }
   }
   if (!out._recurring) out._recurring = [];
-  return out;
+  return out as CalData;
 }
 
 // ── Day data helpers ────────────────────────────────────
-function getOrInitDayData(key) {
-  if (!calData[key]) calData[key] = { events: [], featuredId: null, timeBlocks: [] };
-  if (!calData[key].timeBlocks) calData[key].timeBlocks = [];
-  return calData[key];
+function getOrInitDayData(key: string): DayData {
+  if (!calData[key] || typeof calData[key] !== 'object' || !('events' in (calData[key] as object))) {
+    calData[key] = { events: [], featuredId: null, timeBlocks: [] };
+  }
+  const day = calData[key] as DayData;
+  if (!day.timeBlocks) day.timeBlocks = [];
+  return day;
 }
 
-function getRecurringBlocksForDate(key) {
+function getRecurringBlocksForDate(key: string): RecurringBlock[] {
   const [y, m, d] = key.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   return (calData._recurring || []).filter(b => {
@@ -313,14 +378,14 @@ function getRecurringBlocksForDate(key) {
   });
 }
 
-function getFeaturedEvent(key) {
-  const day = calData[key];
+function getFeaturedEvent(key: string): CalendarEvent | null {
+  const day = getDayData(key);
   if (!day?.events?.length) return null;
   return day.events.find(e => e.id === day.featuredId) || day.events[0];
 }
 
-function pruneEmptyDayEntry(key) {
-  const day = calData[key];
+function pruneEmptyDayEntry(key: string): void {
+  const day = getDayData(key);
   if (!day) return;
   if (!day.events.length) { delete calData[key]; return; }
   if (!day.events.find(e => e.id === day.featuredId)) {
@@ -329,22 +394,22 @@ function pruneEmptyDayEntry(key) {
 }
 
 // ── Strip ──────────────────────────────────────────────
-function renderMonthStrip() {
+function renderMonthStrip(): void {
   const months = ['January','February','March','April','May','June',
                   'July','August','September','October','November','December'];
-  document.getElementById('current-label').textContent = `${months[viewMonth]} ${viewYear}`;
-  document.querySelectorAll('.month-tab').forEach(btn =>
-    btn.classList.toggle('active', parseInt(btn.dataset.month) === viewMonth)
+  qId('current-label').textContent = `${months[viewMonth]} ${viewYear}`;
+  (document.querySelectorAll('.month-tab') as NodeListOf<HTMLElement>).forEach(btn =>
+    btn.classList.toggle('active', parseInt(btn.dataset.month!) === viewMonth)
   );
 }
 
 // ── Grid ───────────────────────────────────────────────
 // Cells are built synchronously first, then all resolveImage calls
 // fire in parallel via Promise.all so the grid never waits 31× in series.
-async function renderCalendarGrid() {
+async function renderCalendarGrid(): Promise<void> {
   hoveredGridCell = null;
 
-  const grid = document.getElementById('calendar-grid');
+  const grid = qId('calendar-grid');
   grid.innerHTML = '';
 
   // Restart the glass-skin entrance animation on every grid render (month navigation, today
@@ -369,7 +434,7 @@ async function renderCalendarGrid() {
     grid.appendChild(blank);
   }
 
-  const imageResolves = [];
+  const imageResolves: Promise<void>[] = [];
 
   for (let d = 1; d <= daysInMonth; d++) {
     const key  = dateKey(viewYear, viewMonth, d);
@@ -381,7 +446,7 @@ async function renderCalendarGrid() {
 
     const dayNum = document.createElement('span');
     dayNum.className = 'day-num';
-    dayNum.textContent = d;
+    dayNum.textContent = String(d);
     cell.appendChild(dayNum);
 
     const featured = getFeaturedEvent(key);
@@ -398,11 +463,11 @@ async function renderCalendarGrid() {
       );
     }
 
-    const count = calData[key]?.events?.length || 0;
+    const count = getDayData(key)?.events?.length || 0;
     if (count > 1) {
       const badge = document.createElement('span');
       badge.className   = 'cell-count';
-      badge.textContent = count;
+      badge.textContent = String(count);
       cell.appendChild(badge);
     }
 
@@ -424,7 +489,7 @@ async function renderCalendarGrid() {
     });
     cell.addEventListener('mouseenter', () => {
       pasteCellDate = key;
-      if (calData[key]?.events?.some(e => e.image)) {
+      if (getDayData(key)?.events?.some(e => e.image)) {
         setupHoverScrollStrip(cell, key).catch(console.error);
       }
     });
@@ -440,8 +505,8 @@ async function renderCalendarGrid() {
   await Promise.all(imageResolves);
 }
 
-async function refreshCalendarCell(key) {
-  const cell = document.querySelector(`.day-cell[data-date="${key}"]`);
+async function refreshCalendarCell(key: string): Promise<void> {
+  const cell = document.querySelector(`.day-cell[data-date="${key}"]`) as HTMLElement | null;
   if (!cell) return;
 
   // If this cell has an active hover strip, cancel it
@@ -463,11 +528,11 @@ async function refreshCalendarCell(key) {
     cell.classList.remove('has-image');
   }
 
-  const count = calData[key]?.events?.length || 0;
+  const count = getDayData(key)?.events?.length || 0;
   if (count > 1) {
     const badge = document.createElement('span');
     badge.className   = 'cell-count';
-    badge.textContent = count;
+    badge.textContent = String(count);
     cell.appendChild(badge);
   }
 
@@ -484,10 +549,10 @@ async function refreshCalendarCell(key) {
 // Each segment height = max(cellHeight, cellWidth × imgH/imgW) so portrait
 // images scroll through more content at the same px/s rate.
 // Cell size is stable during hover, so we measure once — no ResizeObserver needed.
-async function setupHoverScrollStrip(cell, key) {
+async function setupHoverScrollStrip(cell: HTMLElement, key: string): Promise<void> {
   hoveredGridCell = cell;
 
-  const day = calData[key];
+  const day = getDayData(key);
   if (!day?.events?.length) return;
 
   // All events with images, featured image first
@@ -505,7 +570,7 @@ async function setupHoverScrollStrip(cell, key) {
   // Resolve all image paths and measure natural dimensions concurrently
   const imageInfo = await Promise.all(
     withImages.map(async ev => {
-      const url  = await resolveCalendarImageUrl(ev.image);
+      const url  = await resolveCalendarImageUrl(ev.image!);
       const size = await measureImageNaturalDimensions(url);
       return { url, size };
     })
@@ -552,46 +617,46 @@ async function setupHoverScrollStrip(cell, key) {
   strip.style.animation = `cell-strip-scroll ${duration}s linear infinite`;
 }
 
-function teardownHoverScrollStrip(cell) {
+function teardownHoverScrollStrip(cell: HTMLElement): void {
   hoveredGridCell = null;
   cell.querySelector('.cell-scroll-strip')?.remove();
 }
 
 // ── Drag & Drop (cells) ────────────────────────────────
-const dragCounters = new WeakMap();
+const dragCounters = new WeakMap<Element, number>();
 
-function onCellDragEnter(e) {
+function onCellDragEnter(e: DragEvent): void {
   e.preventDefault();
-  const cell = e.currentTarget;
+  const cell = e.currentTarget as HTMLElement;
   dragCounters.set(cell, (dragCounters.get(cell) || 0) + 1);
   cell.classList.add('drag-over');
 }
-function onCellDragOver(e) { e.preventDefault(); }
-function onCellDragLeave(e) {
-  const cell  = e.currentTarget;
+function onCellDragOver(e: DragEvent): void { e.preventDefault(); }
+function onCellDragLeave(e: DragEvent): void {
+  const cell  = e.currentTarget as HTMLElement;
   const count = (dragCounters.get(cell) || 1) - 1;
   dragCounters.set(cell, count);
   if (count <= 0) { dragCounters.set(cell, 0); cell.classList.remove('drag-over'); }
 }
-async function onCalendarCellDrop(e) {
+async function onCalendarCellDrop(e: DragEvent): Promise<void> {
   e.preventDefault();
-  const cell = e.currentTarget;
+  const cell = e.currentTarget as HTMLElement;
   dragCounters.set(cell, 0);
   cell.classList.remove('drag-over');
 
-  const file = e.dataTransfer.files[0];
+  const file = e.dataTransfer!.files[0];
   if (!file) return;
   if (!['image/png','image/jpeg','image/webp'].includes(file.type)) return;
 
-  await addEventFromPath(cell.dataset.date, calBridge.getPathForFile(file));
+  await addEventFromPath(cell.dataset.date!, calBridge.getPathForFile(file));
 }
 
 // ── Paste ──────────────────────────────────────────────
-document.addEventListener('paste', async (e) => {
+document.addEventListener('paste', async (e: ClipboardEvent): Promise<void> => {
   const targetKey = modalDate || pasteCellDate;
   if (!targetKey) return;
 
-  for (const item of (e.clipboardData?.items || [])) {
+  for (const item of Array.from(e.clipboardData?.items ?? [])) {
     // Explicit allowlist — image/gif, image/svg+xml etc. are excluded because
     // ALLOWED_IMAGE_EXTS in main.js only accepts png/jpg/jpeg/webp.
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(item.type)) continue;
@@ -609,14 +674,14 @@ document.addEventListener('paste', async (e) => {
 });
 
 // ── Event management ───────────────────────────────────
-async function addEventFromPath(key, srcPath) {
+async function addEventFromPath(key: string, srcPath: string): Promise<void> {
   const id       = generateCalendarEntryId();
   const fileName = `${key}-${id}`;
   const relPath  = await calBridge.copyImage(srcPath, fileName);
   await addEventWithImage(key, id, relPath);
 }
 
-async function addEventWithImage(key, id, relPath) {
+async function addEventWithImage(key: string, id: string, relPath: string): Promise<void> {
   const day = getOrInitDayData(key);
   day.events.push({ id, image: relPath, notes: '', time: '' });
   // Auto-feature the very first event on a day
@@ -626,7 +691,7 @@ async function addEventWithImage(key, id, relPath) {
   if (modalDate === key) renderEventCards(key);
 }
 
-async function addEmptyEvent(key) {
+async function addEmptyEvent(key: string): Promise<void> {
   pushCalendarSnapshot();
   const day = getOrInitDayData(key);
   const id  = generateCalendarEntryId();
@@ -636,9 +701,9 @@ async function addEmptyEvent(key) {
   if (modalDate === key) renderEventCards(key);
 }
 
-async function removeEvent(key, eventId) {
+async function removeEvent(key: string, eventId: string): Promise<void> {
   pushCalendarSnapshot();
-  const day = calData[key];
+  const day = getDayData(key);
   if (!day) return;
 
   const ev = day.events.find(e => e.id === eventId);
@@ -653,9 +718,9 @@ async function removeEvent(key, eventId) {
   if (modalDate === key) renderEventCards(key);
 }
 
-async function setFeaturedCalendarEvent(key, eventId) {
+async function setFeaturedCalendarEvent(key: string, eventId: string): Promise<void> {
   pushCalendarSnapshot();
-  const day = calData[key];
+  const day = getDayData(key);
   if (!day) return;
   day.featuredId = eventId;
   await saveCalendarData();
@@ -663,19 +728,20 @@ async function setFeaturedCalendarEvent(key, eventId) {
   if (modalDate === key) renderEventCards(key);
 }
 
-async function saveEventField(key, eventId, field, value) {
+async function saveEventField(key: string, eventId: string, field: keyof CalendarEvent, value: string): Promise<void> {
   pushCalendarSnapshot();
-  const day = calData[key];
+  const day = getDayData(key);
   if (!day) return;
   const ev = day.events.find(e => e.id === eventId);
   if (!ev) return;
-  if (value) ev[field] = value; else delete ev[field];
+  if (value) (ev as unknown as Record<string, unknown>)[field] = value;
+  else delete (ev as unknown as Record<string, unknown>)[field];
   if (field === 'time' && day.featuredId === eventId) await refreshCalendarCell(key);
   await saveCalendarData();
 }
 
-async function assignEventImage(key, eventId, srcPath) {
-  const day = calData[key];
+async function assignEventImage(key: string, eventId: string, srcPath: string): Promise<void> {
+  const day = getDayData(key);
   const ev  = day?.events.find(e => e.id === eventId);
   if (!ev) return;
 
@@ -684,16 +750,16 @@ async function assignEventImage(key, eventId, srcPath) {
   ev.image = await calBridge.copyImage(srcPath, fileName);
 
   // If the day has no featured image yet, promote this event
-  const hasFeaturedImg = day.events.find(e => e.id === day.featuredId)?.image;
-  if (!hasFeaturedImg) day.featuredId = eventId;
+  const hasFeaturedImg = day!.events.find(e => e.id === day!.featuredId)?.image;
+  if (!hasFeaturedImg) day!.featuredId = eventId;
 
   await saveCalendarData();
   await refreshCalendarCell(key);
   if (modalDate === key) renderEventCards(key);
 }
 
-async function removeEventImage(key, eventId) {
-  const day = calData[key];
+async function removeEventImage(key: string, eventId: string): Promise<void> {
+  const day = getDayData(key);
   const ev  = day?.events.find(e => e.id === eventId);
   if (!ev?.image) return;
 
@@ -701,9 +767,9 @@ async function removeEventImage(key, eventId) {
   ev.image = null;
 
   // If this was the featured event, find another with an image
-  if (day.featuredId === eventId) {
-    const other = day.events.find(e => e.id !== eventId && e.image);
-    day.featuredId = other?.id || day.events.find(e => e.id !== eventId)?.id || null;
+  if (day!.featuredId === eventId) {
+    const other = day!.events.find(e => e.id !== eventId && e.image);
+    day!.featuredId = other?.id || day!.events.find(e => e.id !== eventId)?.id || null;
   }
 
   await saveCalendarData();
@@ -712,40 +778,40 @@ async function removeEventImage(key, eventId) {
 }
 
 // ── Lightbox ───────────────────────────────────────────
-function openLightbox(url) {
-  document.getElementById('lightbox-img').src = url;
-  document.getElementById('lightbox-overlay').classList.remove('hidden');
+function openLightbox(url: string): void {
+  qId<HTMLImageElement>('lightbox-img').src = url;
+  qId('lightbox-overlay').classList.remove('hidden');
 }
 
-function closeLightbox() {
-  document.getElementById('lightbox-overlay').classList.add('hidden');
-  document.getElementById('lightbox-img').src = '';
+function closeLightbox(): void {
+  qId('lightbox-overlay').classList.add('hidden');
+  qId<HTMLImageElement>('lightbox-img').src = '';
 }
 
 // ── Modal ──────────────────────────────────────────────
-function openDayDetailModal(key) {
+function openDayDetailModal(key: string): void {
   modalDate = key;
-  document.getElementById('modal-date').textContent = formatDisplayDate(key);
+  qId('modal-date').textContent = formatDisplayDate(key);
   renderEventCards(key);
-  document.getElementById('modal-overlay').classList.remove('hidden');
+  qId('modal-overlay').classList.remove('hidden');
   if (document.body.classList.contains('skin-glass')) {
-    const modal = document.getElementById('modal');
+    const modal = qId('modal');
     modal.style.animation = 'none';
     void modal.offsetWidth;
     modal.style.animation = '';
   }
 }
 
-function closeDayDetailModal() {
+function closeDayDetailModal(): void {
   modalDate = null;
-  document.getElementById('modal-overlay').classList.add('hidden');
+  qId('modal-overlay').classList.add('hidden');
 }
 
-function renderEventCards(key) {
-  const container = document.getElementById('event-cards');
+function renderEventCards(key: string): void {
+  const container = qId('event-cards');
   container.innerHTML = '';
 
-  const day    = calData[key];
+  const day    = getDayData(key);
   const events = day?.events || [];
 
   events.forEach(ev => {
@@ -760,22 +826,22 @@ function renderEventCards(key) {
     : '+ Drop an image here to add another event';
 
   let zoneCounter = 0;
-  zone.addEventListener('dragenter', (e) => {
+  zone.addEventListener('dragenter', (e: DragEvent) => {
     e.preventDefault();
     zoneCounter++;
     zone.classList.add('drag-over');
   });
-  zone.addEventListener('dragover', (e) => e.preventDefault());
+  zone.addEventListener('dragover', (e: DragEvent) => e.preventDefault());
   zone.addEventListener('dragleave', () => {
     if (--zoneCounter <= 0) { zoneCounter = 0; zone.classList.remove('drag-over'); }
   });
-  zone.addEventListener('drop', async (e) => {
+  zone.addEventListener('drop', async (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     zoneCounter = 0;
     zone.classList.remove('drag-over');
     if (!modalDate) return;
-    const file = e.dataTransfer.files[0];
+    const file = e.dataTransfer!.files[0];
     if (!file || !['image/png','image/jpeg','image/webp'].includes(file.type)) return;
     await addEventFromPath(modalDate, calBridge.getPathForFile(file));
   });
@@ -783,7 +849,7 @@ function renderEventCards(key) {
   container.appendChild(zone);
 }
 
-function buildEventCard(key, ev, isFeatured) {
+function buildEventCard(key: string, ev: CalendarEvent, isFeatured: boolean): HTMLElement {
   const card = document.createElement('div');
   card.className   = 'event-card' + (isFeatured ? ' featured' : '');
   card.dataset.id  = ev.id;
@@ -855,20 +921,20 @@ function buildEventCard(key, ev, isFeatured) {
 
   // Drag-drop on card image area → replaces this event's image
   let imgCounter = 0;
-  imgArea.addEventListener('dragenter', (e) => {
+  imgArea.addEventListener('dragenter', (e: DragEvent) => {
     e.preventDefault(); e.stopPropagation();
     imgCounter++;
     imgArea.classList.add('drag-over');
   });
-  imgArea.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+  imgArea.addEventListener('dragover', (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); });
   imgArea.addEventListener('dragleave', () => {
     if (--imgCounter <= 0) { imgCounter = 0; imgArea.classList.remove('drag-over'); }
   });
-  imgArea.addEventListener('drop', async (e) => {
+  imgArea.addEventListener('drop', async (e: DragEvent) => {
     e.preventDefault(); e.stopPropagation();
     imgCounter = 0;
     imgArea.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
+    const file = e.dataTransfer!.files[0];
     if (!file || !['image/png','image/jpeg','image/webp'].includes(file.type)) return;
     await assignEventImage(key, ev.id, calBridge.getPathForFile(file));
   });
@@ -881,7 +947,7 @@ function buildEventCard(key, ev, isFeatured) {
   timeRow.className = 'card-time-row';
   const timeLabel = document.createElement('label');
   timeLabel.textContent = 'Time';
-  const timeInput = document.createElement('input');
+  const timeInput = document.createElement('input') as HTMLInputElement;
   timeInput.type      = 'time';
   timeInput.className = 'card-time';
   timeInput.value     = ev.time || '';
@@ -901,87 +967,87 @@ function buildEventCard(key, ev, isFeatured) {
 }
 
 // ── UI bindings ────────────────────────────────────────
-function bindCalendarUIEvents() {
+function bindCalendarUIEvents(): void {
   // Remove the glass-skin .is-entering class once the entrance animation completes so the
   // animated opacity/transform don't persist on the compositor — see renderCalendarGrid
   // for a full explanation of why this matters.
-  document.getElementById('calendar-grid').addEventListener('animationend', (e) => {
-    if (e.animationName === 'glass-cell-enter') e.currentTarget.classList.remove('is-entering');
+  qId('calendar-grid').addEventListener('animationend', (e: AnimationEvent) => {
+    if (e.animationName === 'glass-cell-enter') (e.currentTarget as HTMLElement).classList.remove('is-entering');
   });
 
-  document.getElementById('btn-min').addEventListener('click', () => calBridge.winMinimize());
-  document.getElementById('btn-max').addEventListener('click', () => calBridge.winMaximize());
-  document.getElementById('btn-close').addEventListener('click', () => calBridge.winClose());
+  qId('btn-min').addEventListener('click', () => calBridge.winMinimize());
+  qId('btn-max').addEventListener('click', () => calBridge.winMaximize());
+  qId('btn-close').addEventListener('click', () => calBridge.winClose());
 
-  document.getElementById('btn-theme').addEventListener('click', () => {
+  qId('btn-theme').addEventListener('click', () => {
     const isDark = document.body.classList.toggle('dark');
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    document.getElementById('btn-theme').textContent = isDark ? '\u2600' : '\u263E';
+    qId('btn-theme').textContent = isDark ? '\u2600' : '\u263E';
   });
 
-  document.getElementById('btn-skin').addEventListener('click', openSkinPicker);
+  qId('btn-skin').addEventListener('click', openSkinPicker);
 
-  document.getElementById('btn-ai').addEventListener('click', openAiSettingsModal);
-  document.getElementById('ai-modal-close').addEventListener('click', closeAiSettingsModal);
-  document.getElementById('ai-overlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('ai-overlay')) closeAiSettingsModal();
+  qId('btn-ai').addEventListener('click', openAiSettingsModal);
+  qId('ai-modal-close').addEventListener('click', closeAiSettingsModal);
+  qId('ai-overlay').addEventListener('click', (e: MouseEvent) => {
+    if (e.target === qId('ai-overlay')) closeAiSettingsModal();
   });
-  document.getElementById('ai-provider-claude').addEventListener('change', () => syncAiProviderPanel('claude'));
-  document.getElementById('ai-provider-ollama').addEventListener('change', () => syncAiProviderPanel('ollama'));
-  document.getElementById('ai-mode-fetch').addEventListener('change', () => syncAiModePanel('fetch'));
-  document.getElementById('ai-mode-websearch').addEventListener('change', () => syncAiModePanel('websearch'));
-  document.getElementById('ai-url-add-btn').addEventListener('click', () => {
-    const input = document.getElementById('ai-url-input');
+  qId<HTMLInputElement>('ai-provider-claude').addEventListener('change', () => syncAiProviderPanel('claude'));
+  qId<HTMLInputElement>('ai-provider-ollama').addEventListener('change', () => syncAiProviderPanel('ollama'));
+  qId<HTMLInputElement>('ai-mode-fetch').addEventListener('change', () => syncAiModePanel('fetch'));
+  qId<HTMLInputElement>('ai-mode-websearch').addEventListener('change', () => syncAiModePanel('websearch'));
+  qId('ai-url-add-btn').addEventListener('click', () => {
+    const input = qId<HTMLInputElement>('ai-url-input');
     const url   = input.value.trim();
     if (!url) return;
     const current = getAiSitesFromList();
     if (!current.includes(url)) renderAiUrlList([...current, url]);
     input.value = '';
   });
-  document.getElementById('ai-url-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') document.getElementById('ai-url-add-btn').click();
+  qId('ai-url-input').addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter') qId('ai-url-add-btn').click();
   });
-  document.getElementById('ai-save-btn').addEventListener('click', saveAiSettings);
-  document.getElementById('ai-run-btn').addEventListener('click', runAiImport);
+  qId('ai-save-btn').addEventListener('click', saveAiSettings);
+  qId('ai-run-btn').addEventListener('click', runAiImport);
 
-  document.getElementById('ai-review-close').addEventListener('click', closeAiReviewModal);
-  document.getElementById('ai-review-overlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('ai-review-overlay')) closeAiReviewModal();
+  qId('ai-review-close').addEventListener('click', closeAiReviewModal);
+  qId('ai-review-overlay').addEventListener('click', (e: MouseEvent) => {
+    if (e.target === qId('ai-review-overlay')) closeAiReviewModal();
   });
-  document.getElementById('ai-select-all-btn').addEventListener('click', () => {
-    document.querySelectorAll('#ai-event-list .ai-event-row').forEach(row => {
+  qId('ai-select-all-btn').addEventListener('click', () => {
+    (document.querySelectorAll('#ai-event-list .ai-event-row') as NodeListOf<HTMLElement>).forEach(row => {
       row.classList.add('checked');
-      row.querySelector('input[type="checkbox"]').checked = true;
+      (row.querySelector('input[type="checkbox"]') as HTMLInputElement).checked = true;
     });
   });
-  document.getElementById('ai-deselect-all-btn').addEventListener('click', () => {
-    document.querySelectorAll('#ai-event-list .ai-event-row').forEach(row => {
+  qId('ai-deselect-all-btn').addEventListener('click', () => {
+    (document.querySelectorAll('#ai-event-list .ai-event-row') as NodeListOf<HTMLElement>).forEach(row => {
       row.classList.remove('checked');
-      row.querySelector('input[type="checkbox"]').checked = false;
+      (row.querySelector('input[type="checkbox"]') as HTMLInputElement).checked = false;
     });
   });
-  document.getElementById('ai-add-selected-btn').addEventListener('click', addSelectedAiEvents);
+  qId('ai-add-selected-btn').addEventListener('click', addSelectedAiEvents);
 
-  document.getElementById('skin-modal-close').addEventListener('click', closeSkinPicker);
-  document.getElementById('skin-overlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('skin-overlay')) closeSkinPicker();
+  qId('skin-modal-close').addEventListener('click', closeSkinPicker);
+  qId('skin-overlay').addEventListener('click', (e: MouseEvent) => {
+    if (e.target === qId('skin-overlay')) closeSkinPicker();
   });
 
-  document.getElementById('prev-month').addEventListener('click', () => changeMonth(-1));
-  document.getElementById('next-month').addEventListener('click', () => changeMonth(1));
-  document.getElementById('prev-year').addEventListener('click',  () => changeYear(-1));
-  document.getElementById('next-year').addEventListener('click',  () => changeYear(1));
+  qId('prev-month').addEventListener('click', () => changeMonth(-1));
+  qId('next-month').addEventListener('click', () => changeMonth(1));
+  qId('prev-year').addEventListener('click',  () => changeYear(-1));
+  qId('next-year').addEventListener('click',  () => changeYear(1));
 
-  document.querySelectorAll('.month-tab').forEach(btn => {
+  (document.querySelectorAll('.month-tab') as NodeListOf<HTMLElement>).forEach(btn => {
     btn.addEventListener('click', () => {
-      viewMonth = parseInt(btn.dataset.month);
+      viewMonth = parseInt(btn.dataset.month!);
       renderMonthStrip();
       renderCalendarGrid();
       if (activeView !== 'calendar') switchCalendarView('calendar');
     });
   });
 
-  document.querySelectorAll('.view-tab').forEach(btn => {
+  (document.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).forEach(btn => {
     btn.addEventListener('click', () => {
       // #btn-ai shares the .view-tab class for styling but has no data-view —
       // skip it here so clicking AI doesn't call switchCalendarView(undefined),
@@ -991,53 +1057,53 @@ function bindCalendarUIEvents() {
         scheduleDate = getTodayKey();
         clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
       }
-      switchCalendarView(btn.dataset.view);
+      switchCalendarView(btn.dataset.view as ViewType);
     });
   });
-  document.getElementById('sched-prev-day').addEventListener('click', () => stepScheduleDay(-1));
-  document.getElementById('sched-next-day').addEventListener('click', () => stepScheduleDay(1));
+  qId('sched-prev-day').addEventListener('click', () => stepScheduleDay(-1));
+  qId('sched-next-day').addEventListener('click', () => stepScheduleDay(1));
 
-  document.querySelectorAll('.ampm-btn').forEach(btn => {
+  (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>).forEach(btn => {
     btn.addEventListener('click', () => {
-      clockAmPm = btn.dataset.ampm;
-      document.querySelectorAll('.ampm-btn').forEach(b =>
+      clockAmPm = btn.dataset.ampm as AmPm;
+      (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>).forEach(b =>
         b.classList.toggle('active', b.dataset.ampm === clockAmPm)
       );
       if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
     });
   });
-  document.getElementById('reschedule-confirm').addEventListener('click', confirmReschedule);
-  document.getElementById('reschedule-cancel').addEventListener('click', cancelReschedule);
+  qId('reschedule-confirm').addEventListener('click', confirmReschedule);
+  qId('reschedule-cancel').addEventListener('click', cancelReschedule);
 
-  document.getElementById('modal-close').addEventListener('click', closeDayDetailModal);
-  document.getElementById('modal-overlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('modal-overlay')) closeDayDetailModal();
+  qId('modal-close').addEventListener('click', closeDayDetailModal);
+  qId('modal-overlay').addEventListener('click', (e: MouseEvent) => {
+    if (e.target === qId('modal-overlay')) closeDayDetailModal();
   });
 
-  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
-  document.getElementById('lightbox-overlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('lightbox-overlay')) closeLightbox();
+  qId('lightbox-close').addEventListener('click', closeLightbox);
+  qId('lightbox-overlay').addEventListener('click', (e: MouseEvent) => {
+    if (e.target === qId('lightbox-overlay')) closeLightbox();
   });
 
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      if (!document.getElementById('ai-review-overlay').classList.contains('hidden')) { closeAiReviewModal(); return; }
-      if (!document.getElementById('ai-overlay').classList.contains('hidden'))        { closeAiSettingsModal(); return; }
-      if (!document.getElementById('skin-overlay').classList.contains('hidden')) { closeSkinPicker(); return; }
-      if (!document.getElementById('lightbox-overlay').classList.contains('hidden')) closeLightbox();
+      if (!qId('ai-review-overlay').classList.contains('hidden')) { closeAiReviewModal(); return; }
+      if (!qId('ai-overlay').classList.contains('hidden'))        { closeAiSettingsModal(); return; }
+      if (!qId('skin-overlay').classList.contains('hidden')) { closeSkinPicker(); return; }
+      if (!qId('lightbox-overlay').classList.contains('hidden')) closeLightbox();
       else if (modalDate) closeDayDetailModal();
       else if (rescheduleBlock) cancelReschedule();
       return;
     }
 
-    const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+    const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement as HTMLElement)?.tagName);
 
     // Backspace over a hovered clock block → delete it
     if (e.key === 'Backspace' && hoveredClockBlock && !inInput) {
       e.preventDefault();
       const { block, key } = hoveredClockBlock;
       hoveredClockBlock = null;
-      deleteTimeBlock(key, block.id, block._recurring ? 'all' : undefined);
+      deleteTimeBlock(key, block.id, (block as BlockOrPartial & { _recurring?: boolean })._recurring ? 'all' : undefined);
       return;
     }
 
@@ -1046,7 +1112,7 @@ function bindCalendarUIEvents() {
       e.preventDefault();
       if (undoStack.length) {
         redoStack.push(JSON.stringify(calData));
-        applyCalendarSnapshot(undoStack.pop());
+        applyCalendarSnapshot(undoStack.pop()!);
       }
       return;
     }
@@ -1056,17 +1122,17 @@ function bindCalendarUIEvents() {
       e.preventDefault();
       if (redoStack.length) {
         undoStack.push(JSON.stringify(calData));
-        applyCalendarSnapshot(redoStack.pop());
+        applyCalendarSnapshot(redoStack.pop()!);
       }
       return;
     }
   });
 
-  document.getElementById('btn-add-event').addEventListener('click', () => {
+  qId('btn-add-event').addEventListener('click', () => {
     if (modalDate) addEmptyEvent(modalDate);
   });
 
-  document.getElementById('btn-schedule-day').addEventListener('click', () => {
+  qId('btn-schedule-day').addEventListener('click', () => {
     const targetDate = modalDate;
     closeDayDetailModal();
     scheduleDate = targetDate;
@@ -1078,65 +1144,65 @@ function bindCalendarUIEvents() {
 }
 
 // ── Skin picker ─────────────────────────────────────────
-function openSkinPicker() {
+function openSkinPicker(): void {
   renderSkinGrid();
-  document.getElementById('skin-overlay').classList.remove('hidden');
+  qId('skin-overlay').classList.remove('hidden');
 }
 
-function closeSkinPicker() {
-  document.getElementById('skin-overlay').classList.add('hidden');
+function closeSkinPicker(): void {
+  qId('skin-overlay').classList.add('hidden');
 }
 
 // ── AI Import: Settings Modal ─────────────────────────
 
-async function openAiSettingsModal() {
+async function openAiSettingsModal(): Promise<void> {
   const cfg = await calBridge.aiLoadConfig();
   if (cfg) {
-    document.getElementById('ai-apikey-input').value    = cfg.apiKey      || '';
-    document.getElementById('ai-interests-input').value = cfg.interests   || '';
-    document.getElementById('ai-ollama-url').value      = cfg.ollamaUrl   || 'http://localhost:11434';
-    document.getElementById('ai-ollama-model').value    = cfg.ollamaModel || 'llama3.2';
+    qId<HTMLInputElement>('ai-apikey-input').value    = cfg.apiKey      || '';
+    qId<HTMLInputElement>('ai-interests-input').value = cfg.interests   || '';
+    qId<HTMLInputElement>('ai-ollama-url').value      = cfg.ollamaUrl   || 'http://localhost:11434';
+    qId<HTMLInputElement>('ai-ollama-model').value    = cfg.ollamaModel || 'llama3.2';
     renderAiUrlList(cfg.sites || []);
-    const providerRadio = document.querySelector(`input[name="ai-provider"][value="${cfg.provider || 'claude'}"]`);
+    const providerRadio = document.querySelector(`input[name="ai-provider"][value="${cfg.provider || 'claude'}"]`) as HTMLInputElement | null;
     if (providerRadio) { providerRadio.checked = true; syncAiProviderPanel(cfg.provider || 'claude'); }
-    const modeRadio = document.querySelector(`input[name="ai-mode"][value="${cfg.mode || 'fetch'}"]`);
+    const modeRadio = document.querySelector(`input[name="ai-mode"][value="${cfg.mode || 'fetch'}"]`) as HTMLInputElement | null;
     if (modeRadio) { modeRadio.checked = true; syncAiModePanel(cfg.mode || 'fetch'); }
   } else {
-    document.getElementById('ai-provider-claude').checked = true;
-    document.getElementById('ai-mode-fetch').checked      = true;
-    document.getElementById('ai-ollama-url').value        = 'http://localhost:11434';
-    document.getElementById('ai-ollama-model').value      = 'llama3.2';
+    qId<HTMLInputElement>('ai-provider-claude').checked = true;
+    qId<HTMLInputElement>('ai-mode-fetch').checked      = true;
+    qId<HTMLInputElement>('ai-ollama-url').value        = 'http://localhost:11434';
+    qId<HTMLInputElement>('ai-ollama-model').value      = 'llama3.2';
     syncAiProviderPanel('claude');
     syncAiModePanel('fetch');
     renderAiUrlList([]);
   }
   setAiStatus('', '');
-  document.getElementById('ai-overlay').classList.remove('hidden');
+  qId('ai-overlay').classList.remove('hidden');
 }
 
-function closeAiSettingsModal() {
-  document.getElementById('ai-overlay').classList.add('hidden');
+function closeAiSettingsModal(): void {
+  qId('ai-overlay').classList.add('hidden');
 }
 
-function syncAiProviderPanel(provider) {
+function syncAiProviderPanel(provider: string): void {
   const isOllama = provider === 'ollama';
-  document.getElementById('ai-claude-panel').classList.toggle('hidden', isOllama);
-  document.getElementById('ai-ollama-panel').classList.toggle('hidden', !isOllama);
+  qId('ai-claude-panel').classList.toggle('hidden', isOllama);
+  qId('ai-ollama-panel').classList.toggle('hidden', !isOllama);
   // Ollama only supports fetch mode — hide the mode selector and force fetch
-  document.getElementById('ai-mode-group').classList.toggle('hidden', isOllama);
+  qId('ai-mode-group').classList.toggle('hidden', isOllama);
   if (isOllama) {
-    document.getElementById('ai-mode-fetch').checked = true;
+    qId<HTMLInputElement>('ai-mode-fetch').checked = true;
     syncAiModePanel('fetch');
   }
 }
 
-function syncAiModePanel(mode) {
-  document.getElementById('ai-fetch-panel').classList.toggle('hidden', mode !== 'fetch');
-  document.getElementById('ai-websearch-panel').classList.toggle('hidden', mode !== 'websearch');
+function syncAiModePanel(mode: string): void {
+  qId('ai-fetch-panel').classList.toggle('hidden', mode !== 'fetch');
+  qId('ai-websearch-panel').classList.toggle('hidden', mode !== 'websearch');
 }
 
-function renderAiUrlList(sites) {
-  const list = document.getElementById('ai-url-list');
+function renderAiUrlList(sites: string[]): void {
+  const list = qId('ai-url-list');
   list.innerHTML = '';
   sites.forEach((url, i) => {
     const row  = document.createElement('div');
@@ -1157,28 +1223,28 @@ function renderAiUrlList(sites) {
   });
 }
 
-function getAiSitesFromList() {
-  return Array.from(document.querySelectorAll('.ai-url-row span')).map(s => s.textContent);
+function getAiSitesFromList(): string[] {
+  return Array.from(document.querySelectorAll('.ai-url-row span')).map(s => s.textContent || '');
 }
 
-function getAiConfig() {
-  const provider    = document.querySelector('input[name="ai-provider"]:checked')?.value || 'claude';
-  const apiKey      = document.getElementById('ai-apikey-input').value.trim();
-  const ollamaUrl   = document.getElementById('ai-ollama-url').value.trim();
-  const ollamaModel = document.getElementById('ai-ollama-model').value.trim();
-  const mode        = document.querySelector('input[name="ai-mode"]:checked')?.value || 'fetch';
-  const interests   = document.getElementById('ai-interests-input').value.trim();
+function getAiConfig(): AiConfig {
+  const provider    = (document.querySelector('input[name="ai-provider"]:checked') as HTMLInputElement | null)?.value || 'claude';
+  const apiKey      = qId<HTMLInputElement>('ai-apikey-input').value.trim();
+  const ollamaUrl   = qId<HTMLInputElement>('ai-ollama-url').value.trim();
+  const ollamaModel = qId<HTMLInputElement>('ai-ollama-model').value.trim();
+  const mode        = (document.querySelector('input[name="ai-mode"]:checked') as HTMLInputElement | null)?.value || 'fetch';
+  const interests   = qId<HTMLInputElement>('ai-interests-input').value.trim();
   const sites       = getAiSitesFromList();
-  return { provider, apiKey, ollamaUrl, ollamaModel, mode, interests, sites };
+  return { provider: provider as AiConfig['provider'], apiKey, ollamaUrl, ollamaModel, mode: mode as AiConfig['mode'], interests, sites };
 }
 
-function setAiStatus(msg, type) {
-  const el = document.getElementById('ai-status');
+function setAiStatus(msg: string, type: string): void {
+  const el = qId('ai-status');
   el.textContent = msg;
   el.className   = 'ai-status' + (type ? ` ${type}` : '') + (msg ? '' : ' hidden');
 }
 
-async function saveAiSettings() {
+async function saveAiSettings(): Promise<void> {
   const cfg = getAiConfig();
   if (cfg.provider === 'claude' && !cfg.apiKey) {
     setAiStatus('Please enter your Anthropic API key.', 'error'); return;
@@ -1190,7 +1256,7 @@ async function saveAiSettings() {
   setAiStatus('Settings saved.', '');
 }
 
-async function runAiImport() {
+async function runAiImport(): Promise<void> {
   const cfg = getAiConfig();
   if (cfg.provider === 'claude' && !cfg.apiKey) {
     setAiStatus('Please enter and save your API key first.', 'error'); return;
@@ -1200,7 +1266,7 @@ async function runAiImport() {
   }
   await calBridge.aiSaveConfig(cfg);
   setAiStatus('Running import\u2026 this may take up to 30 seconds.', 'loading');
-  document.getElementById('ai-run-btn').disabled = true;
+  qId<HTMLButtonElement>('ai-run-btn').disabled = true;
   try {
     const result = await calBridge.aiRunImport();
     if (result.error) { setAiStatus(`Error: ${result.error}`, 'error'); return; }
@@ -1209,40 +1275,40 @@ async function runAiImport() {
     closeAiSettingsModal();
     openAiReviewModal(result.events);
   } finally {
-    document.getElementById('ai-run-btn').disabled = false;
+    qId<HTMLButtonElement>('ai-run-btn').disabled = false;
   }
 }
 
 // ── AI Import: Review Modal ───────────────────────────
 
-function openAiReviewModal(events) {
+function openAiReviewModal(events: AiEvent[]): void {
   const count = events.length;
-  document.getElementById('ai-review-title').textContent =
+  qId('ai-review-title').textContent =
     `Found ${count} Event${count === 1 ? '' : 's'}`;
-  document.getElementById('ai-review-subtitle').textContent =
+  qId('ai-review-subtitle').textContent =
     'Select the events you want to add to your calendar.';
   renderAiEventList(events);
-  document.getElementById('ai-review-overlay').classList.remove('hidden');
+  qId('ai-review-overlay').classList.remove('hidden');
 }
 
-function closeAiReviewModal() {
-  document.getElementById('ai-review-overlay').classList.add('hidden');
+function closeAiReviewModal(): void {
+  qId('ai-review-overlay').classList.add('hidden');
   aiPendingEvents = [];
 }
 
-function renderAiEventList(events) {
-  const list = document.getElementById('ai-event-list');
+function renderAiEventList(events: AiEvent[]): void {
+  const list = qId('ai-event-list');
   list.innerHTML = '';
   events.forEach((ev, i) => {
     const row = document.createElement('div');
     row.className  = 'ai-event-row checked';
-    row.dataset.idx = i;
+    row.dataset.idx = String(i);
 
-    const cb    = document.createElement('input');
+    const cb    = document.createElement('input') as HTMLInputElement;
     cb.type     = 'checkbox';
     cb.checked  = true;
     cb.addEventListener('change', () => row.classList.toggle('checked', cb.checked));
-    row.addEventListener('click', (e) => {
+    row.addEventListener('click', (e: MouseEvent) => {
       if (e.target === cb) return;
       cb.checked = !cb.checked;
       cb.dispatchEvent(new Event('change'));
@@ -1268,7 +1334,7 @@ function renderAiEventList(events) {
       link.className   = 'ai-event-link';
       link.textContent = hostname;
       link.title       = ev.sourceUrl;
-      link.addEventListener('click', (e) => {
+      link.addEventListener('click', (e: MouseEvent) => {
         e.stopPropagation(); // don't toggle the checkbox
         calBridge.openExternal(ev.sourceUrl);
       });
@@ -1286,12 +1352,12 @@ function renderAiEventList(events) {
   });
 }
 
-async function addSelectedAiEvents() {
-  const rows = Array.from(document.querySelectorAll('#ai-event-list .ai-event-row.checked'));
+async function addSelectedAiEvents(): Promise<void> {
+  const rows = Array.from(document.querySelectorAll('#ai-event-list .ai-event-row.checked')) as HTMLElement[];
   if (!rows.length) { closeAiReviewModal(); return; }
   pushCalendarSnapshot();
   for (const row of rows) {
-    const ev  = aiPendingEvents[parseInt(row.dataset.idx)];
+    const ev  = aiPendingEvents[parseInt(row.dataset.idx!)];
     if (!ev) continue;
     const day = getOrInitDayData(ev.date);
     const id  = generateCalendarEntryId();
@@ -1305,8 +1371,8 @@ async function addSelectedAiEvents() {
   closeAiReviewModal();
 }
 
-function renderSkinGrid() {
-  const grid    = document.getElementById('skin-grid');
+function renderSkinGrid(): void {
+  const grid    = qId('skin-grid');
   grid.innerHTML = '';
   const current = getCurrentSkin();
 
@@ -1333,7 +1399,7 @@ function renderSkinGrid() {
 }
 
 // ── Glass: button light-follow effect ──────────────────
-function bindGlassButtonLightFollow() {
+function bindGlassButtonLightFollow(): void {
   const selector = [
     '#win-controls button',
     '.nav-arrow',
@@ -1347,9 +1413,9 @@ function bindGlassButtonLightFollow() {
   // Throttle to one update per animation frame — getBoundingClientRect + setProperty
   // on every raw mousemove (60+ Hz) causes measurable layout thrashing on glass skin.
   let glassLightRafPending = false;
-  let glassLightLastEvent  = null;
+  let glassLightLastEvent: MouseEvent | null  = null;
 
-  document.addEventListener('mousemove', (e) => {
+  document.addEventListener('mousemove', (e: MouseEvent) => {
     if (!document.body.classList.contains('skin-glass')) return;
     glassLightLastEvent = e;
     if (glassLightRafPending) return;
@@ -1358,7 +1424,7 @@ function bindGlassButtonLightFollow() {
       glassLightRafPending = false;
       const ev  = glassLightLastEvent;
       if (!ev) return;
-      const btn = ev.target.closest(selector);
+      const btn = (ev.target as Element).closest(selector) as HTMLElement | null;
       if (!btn) return;
       const rect = btn.getBoundingClientRect();
       btn.style.setProperty('--mx', ((ev.clientX - rect.left) / rect.width  * 100) + '%');
@@ -1367,7 +1433,7 @@ function bindGlassButtonLightFollow() {
   });
 }
 
-function changeMonth(delta) {
+function changeMonth(delta: number): void {
   viewMonth += delta;
   if (viewMonth < 0)  { viewMonth = 11; viewYear--; }
   if (viewMonth > 11) { viewMonth = 0;  viewYear++; }
@@ -1376,7 +1442,7 @@ function changeMonth(delta) {
   if (activeView !== 'calendar') switchCalendarView('calendar');
 }
 
-function changeYear(delta) {
+function changeYear(delta: number): void {
   viewYear += delta;
   renderMonthStrip();
   renderCalendarGrid();
@@ -1387,7 +1453,7 @@ function changeYear(delta) {
 // Keeps the today-highlight accurate after midnight or a system sleep/wake cycle.
 // visibilitychange fires immediately when the window regains focus (e.g. wake from sleep),
 // which is faster and more reliable than waiting for the next 60-second poll tick.
-function startDayChangeWatcher() {
+function startDayChangeWatcher(): void {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && getTodayKey() !== renderedTodayKey) {
       renderCalendarGrid();
@@ -1400,23 +1466,23 @@ function startDayChangeWatcher() {
 }
 
 // ── View switching ──────────────────────────────────────
-function switchCalendarView(view) {
+function switchCalendarView(view: ViewType): void {
   activeView = view;
-  document.getElementById('calendar-wrapper').classList.toggle('hidden', view !== 'calendar');
-  document.getElementById('schedule-view').classList.toggle('hidden', view !== 'schedule');
-  document.querySelectorAll('.view-tab').forEach(btn =>
+  qId('calendar-wrapper').classList.toggle('hidden', view !== 'calendar');
+  qId('schedule-view').classList.toggle('hidden', view !== 'schedule');
+  (document.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).forEach(btn =>
     btn.classList.toggle('active', btn.dataset.view === view)
   );
   if (view === 'schedule') {
     if (!scheduleDate) scheduleDate = getTodayKey();
-    document.querySelectorAll('.ampm-btn').forEach(b =>
+    (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>).forEach(b =>
       b.classList.toggle('active', b.dataset.ampm === clockAmPm)
     );
     renderScheduleView(scheduleDate);
   }
 }
 
-function stepScheduleDay(delta) {
+function stepScheduleDay(delta: number): void {
   if (!scheduleDate) scheduleDate = getTodayKey();
   const [y, m, d] = scheduleDate.split('-').map(Number);
   const dt = new Date(y, m - 1, d + delta);
@@ -1425,52 +1491,44 @@ function stepScheduleDay(delta) {
 }
 
 // ── Schedule / Clock rendering ──────────────────────────
-function renderScheduleView(key) {
+function renderScheduleView(key: string): void {
   scheduleDate = key;
   if (rescheduleBlock && rescheduleBlock._key !== key) rescheduleBlock = null;
 
-  document.getElementById('sched-date-label').textContent = formatDisplayDate(key);
-  const area = document.getElementById('clock-area');
+  qId('sched-date-label').textContent = formatDisplayDate(key);
+  const area = qId('clock-area');
   area.innerHTML = '';
 
-  const allDateBlocks = calData[key]?.timeBlocks || [];
+  const allDateBlocks = getDayData(key)?.timeBlocks || [];
   const recurBlocks   = getRecurringBlocksForDate(key).map(b => ({
     ...b,
     completed:  b.completedDates?.includes(key) || false,
     _recurring: true,
   }));
   const allBlocks     = [...allDateBlocks, ...recurBlocks];
-  const visibleBlocks = allBlocks.filter(b => b.ampm === clockAmPm);
+  const visibleBlocks = allBlocks.filter(b => (b as BlockOrPartial & { ampm?: AmPm }).ampm === clockAmPm);
   // PM clock also renders AM blocks as dimmed overlays — they're always in the past and
   // occupy the same angular positions as their PM counterparts (startMin/endMin are shared
   // 12-hr coordinates). Draw them first so PM blocks layer on top.
   const clockBlocks = clockAmPm === 'PM'
-    ? [...allBlocks.filter(b => b.ampm === 'AM').map(b => ({ ...b, _amOverlay: true })),
+    ? [...allBlocks.filter(b => (b as BlockOrPartial & { ampm?: AmPm }).ampm === 'AM').map(b => ({ ...b, _amOverlay: true })),
        ...visibleBlocks]
     : visibleBlocks;
-  const svg           = buildClockSVG(key, clockBlocks);
+  const svg           = buildClockSVG(key, clockBlocks as BlockOrPartial[]);
   area.appendChild(svg);
   updateClockHand();
 
-  renderBlockLegend(key, visibleBlocks, svg);
-  renderTaskList(key, allBlocks, svg);
+  renderBlockLegend(key, visibleBlocks as (TimeBlock & { _recurring?: boolean })[],  svg);
+  renderTaskList(key, allBlocks as (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[],  svg);
   updateRescheduleBanner();
 }
 
-function buildClockSVG(key, blocks) {
+function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
   const VB = 400, cx = 200, cy = 200, R = 170;
   const r1 = Math.round(R * 0.62);   // inner ring ≈ 105
   const r2 = Math.round(R * 0.85);   // outer ring ≈ 145
-  const NS = 'http://www.w3.org/2000/svg';
 
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${VB} ${VB}`);
-
-  function svgEl(tag, attrs) {
-    const e = document.createElementNS(NS, tag);
-    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
-    return e;
-  }
+  const svg = svgEl('svg', { viewBox: `0 0 ${VB} ${VB}` }) as SVGSVGElement;
 
   // Defs (for arc label text paths)
   const defs = svgEl('defs', {});
@@ -1502,52 +1560,53 @@ function buildClockSVG(key, blocks) {
 
   // Existing time blocks (drawn below preview + hand)
   blocks.forEach(block => {
-    const isRescheduling = rescheduleBlock?.id === block.id;
-    const isPast         = isPastBlock(block);
+    const blockAny = block as BlockOrPartial & { _amOverlay?: boolean; _recurring?: boolean; label?: string; id?: string; recurrence?: string; color?: string };
+    const isRescheduling = rescheduleBlock?.id === blockAny.id;
+    const isPast         = isPastBlock(block as TimeBlock);
 
     // Wrap arc + label in a group so opacity/pointer-events apply to both.
     // AM overlays on PM clock get their own class (readable dimmed opacity).
     // Regular past blocks use crossover-arc (near-zero — signals done).
-    const dimClass = block._amOverlay ? 'am-overlay-arc'
-                   : isPast           ? 'crossover-arc'
-                   :                    '';
+    const dimClass = blockAny._amOverlay ? 'am-overlay-arc'
+                   : isPast              ? 'crossover-arc'
+                   :                       '';
     const g = svgEl('g', {
       class: [isRescheduling ? 'rescheduling-arc' : '', dimClass].filter(Boolean).join(' '),
     });
     // AM overlays are read-only; am-overlay-arc sets pointer-events:none,
     // but skip attaching handlers entirely to keep things clean
-    if (!block._amOverlay) {
-      g.addEventListener('click', (e) => {
+    if (!blockAny._amOverlay) {
+      g.addEventListener('click', (e: Event) => {
         e.stopPropagation();
         showTimeBlockPopup('edit', block, key, svg, cx, cy, R);
       });
-      g.addEventListener('mouseenter', () => { hoveredClockBlock = { block, key }; });
+      g.addEventListener('mouseenter', () => { hoveredClockBlock = { block: block as TimeBlock | RecurringBlock, key }; });
       g.addEventListener('mouseleave', () => { hoveredClockBlock = null; });
     }
 
     const path = svgEl('path', {
-      class: 'clock-block-arc' + (block._recurring ? ' recurring-arc' : ''),
+      class: 'clock-block-arc' + (blockAny._recurring ? ' recurring-arc' : ''),
       d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin, document.body.classList.contains('skin-glass') ? 6 : 0),
-      fill: block.color,
+      fill: blockAny.color || '#888',
     });
     g.appendChild(path);
 
     // Label follows the arc's curve so text reads naturally inside the block's shape
     const spanMin = (block.endMin - block.startMin + 720) % 720;
-    if (spanMin >= 30 && block.label) {
+    if (spanMin >= 30 && blockAny.label) {
       const rMid    = (r1 + r2) / 2;
       const arcLen  = (spanMin / 720) * 2 * Math.PI * rMid;
       const maxChars = Math.max(1, Math.floor(arcLen / 7));
-      const display  = block.label.length > maxChars
-        ? block.label.slice(0, maxChars - 1) + '\u2026'
-        : block.label;
+      const display  = blockAny.label.length > maxChars
+        ? blockAny.label.slice(0, maxChars - 1) + '\u2026'
+        : blockAny.label;
 
       const startAng = (block.startMin / 720) * 2 * Math.PI - Math.PI / 2;
       const endAng   = startAng + (spanMin / 720) * 2 * Math.PI;
       const large    = spanMin > 360 ? 1 : 0;
       const lx1 = cx + rMid * Math.cos(startAng), ly1 = cy + rMid * Math.sin(startAng);
       const lx2 = cx + rMid * Math.cos(endAng),   ly2 = cy + rMid * Math.sin(endAng);
-      const pathId = `arc-label-path-${block.id}`;
+      const pathId = `arc-label-path-${blockAny.id}`;
 
       defs.appendChild(svgEl('path', { id: pathId, d: `M ${lx1} ${ly1} A ${rMid} ${rMid} 0 ${large} 1 ${lx2} ${ly2}` }));
 
@@ -1577,7 +1636,7 @@ function buildClockSVG(key, blocks) {
 }
 
 // ── Clock arc geometry ──────────────────────────────────
-function arcPath(cx, cy, r1, r2, startMin, endMin, rnd = 0) {
+function arcPath(cx: number, cy: number, r1: number, r2: number, startMin: number, endMin: number, rnd = 0): string {
   const spanMin  = (endMin - startMin + 720) % 720;
   if (spanMin === 0) return '';
   const startAng = (startMin / 720) * 2 * Math.PI - Math.PI / 2;
@@ -1603,23 +1662,23 @@ function arcPath(cx, cy, r1, r2, startMin, endMin, rnd = 0) {
   // CW tangent at angle θ (SVG Y-down): (-sin θ, cos θ)
   // Radial outward at θ:                 (cos θ,  sin θ)
   const r = Math.min(rnd, (r2 - r1) * 0.45);
-  const p = (x, y) => `${x.toFixed(2)} ${y.toFixed(2)}`;
+  const p = (x: number, y: number) => `${x.toFixed(2)} ${y.toFixed(2)}`;
 
   // Corner A (ox1,oy1): arrives radially outward (c1,s1), departs CW tangent (-s1,c1)
-  const Aa = [ox1 - r * c1,  oy1 - r * s1];
-  const Ad = [ox1 - r * s1,  oy1 + r * c1];
+  const Aa: [number, number] = [ox1 - r * c1,  oy1 - r * s1];
+  const Ad: [number, number] = [ox1 - r * s1,  oy1 + r * c1];
 
   // Corner B (ox2,oy2): arrives CW tangent (-s2,c2), departs radially inward (-c2,-s2)
-  const Ba = [ox2 + r * s2,  oy2 - r * c2];
-  const Bd = [ox2 - r * c2,  oy2 - r * s2];
+  const Ba: [number, number] = [ox2 + r * s2,  oy2 - r * c2];
+  const Bd: [number, number] = [ox2 - r * c2,  oy2 - r * s2];
 
   // Corner C (ix1,iy1): arrives radially inward (-c2,-s2), departs CCW tangent (s2,-c2)
-  const Ca = [ix1 + r * c2,  iy1 + r * s2];
-  const Cd = [ix1 + r * s2,  iy1 - r * c2];
+  const Ca: [number, number] = [ix1 + r * c2,  iy1 + r * s2];
+  const Cd: [number, number] = [ix1 + r * s2,  iy1 - r * c2];
 
   // Corner D (ix2,iy2): arrives CCW tangent (s1,-c1), departs radially outward (c1,s1)
-  const Da = [ix2 - r * s1,  iy2 + r * c1];
-  const Dd = [ix2 + r * c1,  iy2 + r * s1];
+  const Da: [number, number] = [ix2 - r * s1,  iy2 + r * c1];
+  const Dd: [number, number] = [ix2 + r * c1,  iy2 + r * s1];
 
   return (
     `M ${p(...Ad)} ` +
@@ -1635,7 +1694,7 @@ function arcPath(cx, cy, r1, r2, startMin, endMin, rnd = 0) {
 }
 
 // Convert screen mouse event to SVG viewBox coordinates
-function svgPoint(svg, e) {
+function svgPoint(svg: SVGSVGElement, e: MouseEvent): { x: number; y: number } {
   const rect = svg.getBoundingClientRect();
   return {
     x: (e.clientX - rect.left) * (400 / rect.width),
@@ -1644,38 +1703,38 @@ function svgPoint(svg, e) {
 }
 
 // Cursor position → 12-hour clock minutes (snapped to 15)
-function minutesFromPoint(cx, cy, px, py) {
+function minutesFromPoint(cx: number, cy: number, px: number, py: number): number {
   const ang = Math.atan2(py - cy, px - cx) + Math.PI / 2;
   const raw = ((ang / (2 * Math.PI)) * 720 + 720) % 720;
   return Math.round(raw / 15) * 15 % 720;
 }
 
 // ── Clock drag interaction ──────────────────────────────
-function bindClockInteraction(svg, cx, cy, r1, r2, key) {
-  svg.addEventListener('mousedown', (e) => {
+function bindClockInteraction(svg: SVGSVGElement, cx: number, cy: number, r1: number, r2: number, key: string): void {
+  svg.addEventListener('mousedown', (e: MouseEvent) => {
     if (timeBlockPopupState) return;
     const pt   = svgPoint(svg, e);
     const dist = Math.hypot(pt.x - cx, pt.y - cy);
     if (dist < r1 - 10 || dist > r2 + 10) return;
 
     const startMin     = minutesFromPoint(cx, cy, pt.x, pt.y);
-    const previewPath  = document.getElementById('clock-preview-arc');
-    const previewColor = BLOCK_COLORS[(calData[key]?.timeBlocks?.length || 0) % BLOCK_COLORS.length];
-    previewPath.setAttribute('fill', previewColor);
+    const previewPath  = document.getElementById('clock-preview-arc') as SVGPathElement | null;
+    const previewColor = BLOCK_COLORS[(getDayData(key)?.timeBlocks?.length || 0) % BLOCK_COLORS.length];
+    previewPath?.setAttribute('fill', previewColor);
 
     let lastMin = startMin;
 
-    function onClockDragMove(ev) {
+    function onClockDragMove(ev: MouseEvent): void {
       const pt2 = svgPoint(svg, ev);
       lastMin   = minutesFromPoint(cx, cy, pt2.x, pt2.y);
       const span = (lastMin - startMin + 720) % 720;
-      previewPath.setAttribute('d', span >= 15 ? arcPath(cx, cy, r1, r2, startMin, lastMin) : '');
+      previewPath?.setAttribute('d', span >= 15 ? arcPath(cx, cy, r1, r2, startMin, lastMin) : '');
     }
 
-    function onClockDragEnd() {
+    function onClockDragEnd(): void {
       document.removeEventListener('mousemove', onClockDragMove);
       document.removeEventListener('mouseup', onClockDragEnd);
-      previewPath.setAttribute('d', '');
+      previewPath?.setAttribute('d', '');
       clockDragState = null;
 
       const endMin = lastMin;
@@ -1692,24 +1751,25 @@ function bindClockInteraction(svg, cx, cy, r1, r2, key) {
 }
 
 // ── Block popup ─────────────────────────────────────────
-function showTimeBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
-  const popup          = document.getElementById('block-label-popup');
-  const input          = document.getElementById('block-label-input');
-  const confirmBtn     = document.getElementById('block-label-confirm');
-  const delBtn         = document.getElementById('block-label-del');
-  const recurSel       = document.getElementById('block-recurrence-select');
-  const scopeRow       = document.getElementById('block-scope-row');
-  const { startMin, endMin, id, label } = blockOrData;
-  const isRecurring    = !!blockOrData._recurring;
+function showTimeBlockPopup(mode: 'new' | 'edit', blockOrData: BlockOrPartial, key: string, svg: SVGSVGElement, cx: number, cy: number, R: number): void {
+  const popup          = qId('block-label-popup');
+  const input          = qId<HTMLInputElement>('block-label-input');
+  const confirmBtn     = qId('block-label-confirm');
+  const delBtn         = qId('block-label-del');
+  const recurSel       = qId<HTMLSelectElement>('block-recurrence-select');
+  const scopeRow       = qId('block-scope-row');
+  const { startMin, endMin, id, label } = blockOrData as BlockOrPartial & { id?: string; label?: string };
+  const blockAny       = blockOrData as BlockOrPartial & { _recurring?: boolean; recurrence?: string };
+  const isRecurring    = !!blockAny._recurring;
 
   timeBlockPopupState = { mode, key, startMin, endMin, id };
   input.value    = label || '';
-  recurSel.value = isRecurring ? (blockOrData.recurrence || 'daily') : 'none';
+  recurSel.value = isRecurring ? (blockAny.recurrence || 'daily') : 'none';
 
   // Scope row: visible only when editing an existing recurring block
   if (mode === 'edit' && isRecurring) {
     scopeRow.classList.remove('hidden');
-    scopeRow.querySelector('input[value="all"]').checked = true;
+    (scopeRow.querySelector('input[value="all"]') as HTMLInputElement).checked = true;
   } else {
     scopeRow.classList.add('hidden');
   }
@@ -1730,11 +1790,11 @@ function showTimeBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
   popup.classList.remove('hidden');
   input.focus();
 
-  function getSelectedBlockScope() {
-    return scopeRow.querySelector('input[name="block-scope"]:checked')?.value || 'all';
+  function getSelectedBlockScope(): string {
+    return (scopeRow.querySelector('input[name="block-scope"]:checked') as HTMLInputElement | null)?.value || 'all';
   }
 
-  function commitBlockEdit() {
+  function commitBlockEdit(): void {
     const lbl        = input.value.trim();
     const recurrence = recurSel.value;
     const scope      = getSelectedBlockScope();
@@ -1750,14 +1810,14 @@ function showTimeBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
     }
   }
 
-  function onBlockLabelKeyDown(ev) {
+  function onBlockLabelKeyDown(ev: KeyboardEvent): void {
     if (ev.key === 'Enter')  { ev.preventDefault(); commitBlockEdit(); }
     if (ev.key === 'Escape') { closeTimeBlockPopup(); }
   }
   // Delay blur so the delete-button click fires first;
   // only commit if focus has moved outside the popup entirely (not to the select/radios inside it)
-  function onBlockLabelBlur() { setTimeout(() => { if (timeBlockPopupState && !popup.contains(document.activeElement)) commitBlockEdit(); }, 150); }
-  function onBlockDeleteClick()  {
+  function onBlockLabelBlur(): void { setTimeout(() => { if (timeBlockPopupState && !popup.contains(document.activeElement)) commitBlockEdit(); }, 150); }
+  function onBlockDeleteClick(): void  {
     const scope = getSelectedBlockScope();
     closeTimeBlockPopup();
     if (mode === 'edit' && id) deleteTimeBlock(key, id, isRecurring ? scope : undefined);
@@ -1769,7 +1829,7 @@ function showTimeBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
   delBtn.addEventListener('click',     onBlockDeleteClick);
 
   // When recurrence select changes, show/hide scope row accordingly
-  function onBlockRecurrenceChange() {
+  function onBlockRecurrenceChange(): void {
     if (mode === 'edit' && isRecurring) {
       // scope row stays visible regardless (block is already recurring)
     } else {
@@ -1788,15 +1848,15 @@ function showTimeBlockPopup(mode, blockOrData, key, svg, cx, cy, R) {
   };
 }
 
-function closeTimeBlockPopup() {
-  const popup = document.getElementById('block-label-popup');
+function closeTimeBlockPopup(): void {
+  const popup = qId('block-label-popup');
   popup.classList.add('hidden');
   if (timeBlockPopupState?._cleanup) timeBlockPopupState._cleanup();
   timeBlockPopupState = null;
 }
 
 // ── Time block data operations ──────────────────────────
-async function saveTimeBlock(key, { startMin, endMin, label }, recurrence = 'none') {
+async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMin: number; endMin: number; label: string }, recurrence = 'none'): Promise<void> {
   pushCalendarSnapshot();
   const ampm = inferBlockAmPm(startMin);
   if (recurrence === 'none') {
@@ -1810,7 +1870,7 @@ async function saveTimeBlock(key, { startMin, endMin, label }, recurrence = 'non
     const date = new Date(y, m - 1, d);
     calData._recurring.push({
       id: generateCalendarEntryId(), startMin, endMin, label, color, ampm,
-      recurrence,
+      recurrence: recurrence as RecurringBlock['recurrence'],
       dayOfWeek:  date.getDay(),
       dayOfMonth: d,
       completedDates: [],
@@ -1821,13 +1881,13 @@ async function saveTimeBlock(key, { startMin, endMin, label }, recurrence = 'non
   // If the inferred period differs from the current clock view, switch to show the new block
   if (ampm !== clockAmPm) {
     clockAmPm = ampm;
-    document.querySelectorAll('.ampm-btn')
+    (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>)
       .forEach(b => b.classList.toggle('active', b.dataset.ampm === clockAmPm));
   }
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
-async function updateTimeBlock(key, blockId, label, recurrence, scope) {
+async function updateTimeBlock(key: string, blockId: string, label: string, recurrence: string, scope: string): Promise<void> {
   pushCalendarSnapshot();
   const recurring    = calData._recurring || [];
   const rIdx         = recurring.findIndex(b => b.id === blockId);
@@ -1857,7 +1917,7 @@ async function updateTimeBlock(key, blockId, label, recurrence, scope) {
           label, color: block.color, ampm: block.ampm, completed,
         });
       } else {
-        block.recurrence = recurrence;
+        block.recurrence = recurrence as RecurringBlock['recurrence'];
         const [y, m, d] = key.split('-').map(Number);
         const date = new Date(y, m - 1, d);
         block.dayOfWeek  = date.getDay();
@@ -1866,19 +1926,20 @@ async function updateTimeBlock(key, blockId, label, recurrence, scope) {
     }
   } else {
     // Block lives on a single date in calData[key].timeBlocks, not in calData._recurring
-    const block = calData[key]?.timeBlocks?.find(b => b.id === blockId);
+    const block = getDayData(key)?.timeBlocks?.find(b => b.id === blockId);
     if (!block) return;
     block.label = label;
     if (recurrence !== 'none') {
       // Move the block out of date-specific storage and into calData._recurring
-      calData[key].timeBlocks = calData[key].timeBlocks.filter(b => b.id !== blockId);
+      const day = getDayData(key)!;
+      day.timeBlocks = day.timeBlocks.filter(b => b.id !== blockId);
       if (!calData._recurring) calData._recurring = [];
       const [y, m, d] = key.split('-').map(Number);
       const date = new Date(y, m - 1, d);
       calData._recurring.push({
         id: block.id, startMin: block.startMin, endMin: block.endMin,
         label, color: block.color, ampm: block.ampm,
-        recurrence,
+        recurrence: recurrence as RecurringBlock['recurrence'],
         dayOfWeek:  date.getDay(),
         dayOfMonth: d,
         completedDates: block.completed ? [key] : [],
@@ -1890,7 +1951,7 @@ async function updateTimeBlock(key, blockId, label, recurrence, scope) {
   if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
 }
 
-async function deleteTimeBlock(key, blockId, scope) {
+async function deleteTimeBlock(key: string, blockId: string, scope?: string): Promise<void> {
   pushCalendarSnapshot();
   const recurring = calData._recurring || [];
   const rIdx      = recurring.findIndex(b => b.id === blockId);
@@ -1908,7 +1969,7 @@ async function deleteTimeBlock(key, blockId, scope) {
     if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
     return;
   }
-  const day = calData[key];
+  const day = getDayData(key);
   if (!day?.timeBlocks) return;
   day.timeBlocks = day.timeBlocks.filter(b => b.id !== blockId);
   await saveCalendarData();
@@ -1916,8 +1977,8 @@ async function deleteTimeBlock(key, blockId, scope) {
 }
 
 // ── Block legend ────────────────────────────────────────
-function renderBlockLegend(key, blocks, svg) {
-  const legend = document.getElementById('block-legend');
+function renderBlockLegend(key: string, blocks: (TimeBlock & { _recurring?: boolean })[], svg: SVGSVGElement): void {
+  const legend = qId('block-legend');
   legend.innerHTML = '';
 
   if (!blocks.length) {
@@ -1939,7 +2000,7 @@ function renderBlockLegend(key, blocks, svg) {
   });
 }
 
-function formatClockMinutes(min, ampm = '') {
+function formatClockMinutes(min: number, ampm = ''): string {
   const h = Math.floor(min / 60) % 12 || 12;
   const m = min % 60;
   const base = `${h}:${String(m).padStart(2, '0')}`;
@@ -1947,8 +2008,8 @@ function formatClockMinutes(min, ampm = '') {
 }
 
 // ── Task list sidebar ───────────────────────────────────
-function renderTaskList(key, allBlocks, svg) {
-  const list = document.getElementById('task-list');
+function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[], svg: SVGSVGElement): void {
+  const list = qId('task-list');
   list.innerHTML = '';
 
   if (!allBlocks.length) {
@@ -2058,7 +2119,7 @@ function renderTaskList(key, allBlocks, svg) {
 // Compares both 12-hr interpretations against the current wall-clock time:
 //   - one past, one future → pick the future one
 //   - both past or both future → fall back to the current clock mode
-function inferBlockAmPm(startMin) {
+function inferBlockAmPm(startMin: number): AmPm {
   const now    = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const amStart = startMin;
@@ -2068,18 +2129,19 @@ function inferBlockAmPm(startMin) {
   return clockAmPm;
 }
 
-function isPastBlock(block) {
+function isPastBlock(block: TimeBlock | (BlockOrPartial & { ampm?: AmPm })): boolean {
   const now    = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  let endMin = block.ampm === 'PM' ? block.endMin + 720 : block.endMin;
+  const ampm   = (block as BlockOrPartial & { ampm?: AmPm }).ampm;
+  let endMin   = ampm === 'PM' ? block.endMin + 720 : block.endMin;
   // AM block crossing noon (e.g. 10 AM→12 PM): endMin wraps to a value < startMin on the 12-hr face
-  if (block.ampm === 'AM' && block.endMin < block.startMin) {
+  if (ampm === 'AM' && block.endMin < block.startMin) {
     endMin = block.endMin + 720;
   }
   return nowMin >= endMin;
 }
 
-async function toggleBlockCompleted(key, blockId) {
+async function toggleBlockCompleted(key: string, blockId: string): Promise<void> {
   pushCalendarSnapshot();
   const rBlock = (calData._recurring || []).find(b => b.id === blockId);
   if (rBlock) {
@@ -2091,7 +2153,7 @@ async function toggleBlockCompleted(key, blockId) {
     if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
     return;
   }
-  const block = calData[key]?.timeBlocks?.find(b => b.id === blockId);
+  const block = getDayData(key)?.timeBlocks?.find(b => b.id === blockId);
   if (!block) return;
   block.completed = !block.completed;
   await saveCalendarData();
@@ -2099,21 +2161,21 @@ async function toggleBlockCompleted(key, blockId) {
 }
 
 // ── Reschedule (move to another day) ───────────────────
-function startReschedule(block, key) {
+function startReschedule(block: TimeBlock & { _recurring?: boolean }, key: string): void {
   rescheduleBlock = { ...block, _key: key };
   updateRescheduleBanner();
   renderScheduleView(key);
 }
 
-function updateRescheduleBanner() {
-  const banner = document.getElementById('reschedule-banner');
+function updateRescheduleBanner(): void {
+  const banner = qId('reschedule-banner');
   if (!rescheduleBlock) { banner.classList.add('hidden'); return; }
 
   banner.classList.remove('hidden');
-  document.getElementById('reschedule-label').textContent = rescheduleBlock.label;
+  qId('reschedule-label').textContent = rescheduleBlock.label;
 
   // Default date input to tomorrow (or today if not set)
-  const input = document.getElementById('reschedule-date-input');
+  const input = qId<HTMLInputElement>('reschedule-date-input');
   if (!input.value) {
     const src   = rescheduleBlock._key.split('-').map(Number);
     const dt    = new Date(src[0], src[1] - 1, src[2] + 1);
@@ -2121,17 +2183,17 @@ function updateRescheduleBanner() {
   }
 }
 
-async function confirmReschedule() {
+async function confirmReschedule(): Promise<void> {
   if (!rescheduleBlock) return;
   pushCalendarSnapshot();
-  const input   = document.getElementById('reschedule-date-input');
+  const input   = qId<HTMLInputElement>('reschedule-date-input');
   const newKey  = input.value;
   if (!newKey || newKey === rescheduleBlock._key) { cancelReschedule(); return; }
 
   const { id, startMin, endMin, label, color, ampm, completed, _key: oldKey } = rescheduleBlock;
 
   // Remove from old day without full re-render yet
-  const oldDay = calData[oldKey];
+  const oldDay = getDayData(oldKey);
   if (oldDay?.timeBlocks) {
     oldDay.timeBlocks = oldDay.timeBlocks.filter(b => b.id !== id);
     if (!oldDay.timeBlocks.length && !oldDay.events?.length) delete calData[oldKey];
@@ -2143,38 +2205,38 @@ async function confirmReschedule() {
 
   rescheduleBlock = null;
   await saveCalendarData();
-  renderScheduleView(scheduleDate); // stay on current day view; new day visible when navigated
+  renderScheduleView(scheduleDate!); // stay on current day view; new day visible when navigated
 }
 
-function cancelReschedule() {
+function cancelReschedule(): void {
   rescheduleBlock = null;
   const banner = document.getElementById('reschedule-banner');
   if (banner) banner.classList.add('hidden');
-  document.getElementById('reschedule-date-input').value = '';
+  qId<HTMLInputElement>('reschedule-date-input').value = '';
   if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
 }
 
 // ── Current time hand ───────────────────────────────────
 // fromInterval=true only when called from setInterval — prevents overriding manual AM/PM toggles
-function updateClockHand(fromInterval = false) {
-  const hand = document.getElementById('clock-hand');
+function updateClockHand(fromInterval = false): void {
+  const hand = document.getElementById('clock-hand') as SVGLineElement | null;
   if (!hand) return;
   const now = new Date();
   const min = (now.getHours() % 12) * 60 + now.getMinutes();
   const ang = (min / 720) * 2 * Math.PI - Math.PI / 2;
   const cx = 200, cy = 200, R = 170;
   const r1 = Math.round(R * 0.62);
-  hand.setAttribute('x1', cx + 10 * Math.cos(ang));
-  hand.setAttribute('y1', cy + 10 * Math.sin(ang));
-  hand.setAttribute('x2', cx + r1 * Math.cos(ang));
-  hand.setAttribute('y2', cy + r1 * Math.sin(ang));
+  hand.setAttribute('x1', String(cx + 10 * Math.cos(ang)));
+  hand.setAttribute('y1', String(cy + 10 * Math.sin(ang)));
+  hand.setAttribute('x2', String(cx + r1 * Math.cos(ang)));
+  hand.setAttribute('y2', String(cy + r1 * Math.sin(ang)));
 
   // Auto-switch AM/PM only from the interval timer, so manual toggles are respected
   if (fromInterval) {
-    const expected = now.getHours() < 12 ? 'AM' : 'PM';
+    const expected: AmPm = now.getHours() < 12 ? 'AM' : 'PM';
     if (clockAmPm !== expected) {
       clockAmPm = expected;
-      document.querySelectorAll('.ampm-btn')
+      (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>)
         .forEach(b => b.classList.toggle('active', b.dataset.ampm === clockAmPm));
       if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
     }

@@ -1,34 +1,9 @@
 import { app, ipcMain, BrowserWindow, safeStorage } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { AiConfig, AiEvent, AiImportResult } from './types';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface AiConfig {
-  provider: 'claude' | 'ollama';
-  // Claude
-  apiKey: string;
-  mode: 'fetch' | 'websearch';
-  // Ollama
-  ollamaUrl: string;
-  ollamaModel: string;
-  // Shared
-  interests: string;
-  sites: string[];
-}
-
-interface AiEvent {
-  title: string;
-  date: string;        // YYYY-MM-DD
-  time: string | null; // HH:MM or null
-  notes: string;
-  sourceUrl: string;
-}
-
-interface AiImportResult {
-  events?: AiEvent[];
-  error?: string;
-}
+// ── Types (private to ai-import) ─────────────────────────────────────────────
 
 interface ClaudeContentBlock {
   type: 'text' | 'tool_use' | 'tool_result';

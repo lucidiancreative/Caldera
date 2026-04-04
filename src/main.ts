@@ -1,13 +1,13 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-const path = require('path');
-const fs = require('fs');
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import * as path from 'path';
+import * as fs from 'fs';
 
 // Suppress Chromium GPU shader disk-cache errors on Windows
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
-let calderaWindow;
+let calderaWindow: BrowserWindow | null = null;
 
-function createCalderaWindow() {
+function createCalderaWindow(): void {
   calderaWindow = new BrowserWindow({
     width: 1200,
     height: 820,
@@ -15,6 +15,7 @@ function createCalderaWindow() {
     minHeight: 650,
     backgroundColor: '#f5f5f5',
     webPreferences: {
+      // __dirname at runtime is dist/ — preload.js is co-located there
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
@@ -42,8 +43,8 @@ function createCalderaWindow() {
   // Block all navigation except back to the app's own index.html.
   // Checking only 'file://' would still allow navigation to arbitrary local files
   // (e.g. ../../etc/passwd via a crafted link or XSS), so we compare against the
-  // exact URL that loadFile() generates.
-  const appIndexFileUrl = 'file:///' + path.resolve(__dirname, 'index.html').replace(/\\/g, '/');
+  // exact URL that loadFile() generates. __dirname is dist/, so index.html is one level up.
+  const appIndexFileUrl = 'file:///' + path.resolve(__dirname, '..', 'index.html').replace(/\\/g, '/');
   calderaWindow.webContents.on('will-navigate', (event, url) => {
     if (url !== appIndexFileUrl) event.preventDefault();
   });
@@ -51,10 +52,12 @@ function createCalderaWindow() {
   // Block any attempt to open new windows
   calderaWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  calderaWindow.loadFile('index.html');
+  // index.html stays at the project root; main.js is compiled to dist/,
+  // so we step one directory up to find it
+  calderaWindow.loadFile(path.join(__dirname, '..', 'index.html'));
 
   calderaWindow.once('ready-to-show', () => {
-    calderaWindow.show();
+    calderaWindow!.show();
   });
 }
 
@@ -70,8 +73,9 @@ app.on('activate', () => {
 
 // ---- Paths & helpers ----
 
-const calendarDataFilePath = () => path.join(app.getPath('userData'), 'calendar-data.json');
-const calendarImagesDir = () => {
+const calendarDataFilePath = (): string => path.join(app.getPath('userData'), 'calendar-data.json');
+
+const calendarImagesDir = (): string => {
   const imagesDirPath = path.join(app.getPath('userData'), 'images');
   if (!fs.existsSync(imagesDirPath)) fs.mkdirSync(imagesDirPath, { recursive: true });
   return imagesDirPath;
@@ -81,7 +85,7 @@ const ALLOWED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
 
 /** relPath arrives via IPC from the renderer — validate it stays inside userData so a crafted path like ../../sensitive can't escape the sandbox.
  *  realpathSync resolves symlinks so a symlink inside userData pointing outside cannot bypass the boundary check. */
-function resolveCalendarStoragePath(relPath) {
+function resolveCalendarStoragePath(relPath: string): string {
   const userDataBasePath = fs.realpathSync(path.resolve(app.getPath('userData')));
   const resolvedFullPath = path.resolve(userDataBasePath, relPath);
   if (!resolvedFullPath.startsWith(userDataBasePath + path.sep)) throw new Error('Invalid path');
@@ -89,14 +93,14 @@ function resolveCalendarStoragePath(relPath) {
     const realPath = fs.realpathSync(resolvedFullPath);
     if (!realPath.startsWith(userDataBasePath + path.sep)) throw new Error('Symlink escapes sandbox');
     return realPath;
-  } catch (e) {
-    if (e.code === 'ENOENT') return resolvedFullPath; // file not yet written, lexical check above is sufficient
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return resolvedFullPath; // file not yet written, lexical check above is sufficient
     throw e;
   }
 }
 
 /** Returns a relative path (not absolute) so stored image references in calendar-data.json remain valid if userData moves between machines or installs. */
-function saveImageToCalendarStore(destName, writeFn) {
+function saveImageToCalendarStore(destName: string, writeFn: (dest: string) => void): string {
   const imagesDirPath = fs.realpathSync(calendarImagesDir()); // resolve symlinks on the images dir itself
   const destAbsPath   = path.resolve(imagesDirPath, destName);
   if (!destAbsPath.startsWith(imagesDirPath + path.sep)) throw new Error('Invalid image path');
@@ -116,7 +120,7 @@ ipcMain.handle('load-data', () => {
   }
 });
 
-ipcMain.handle('save-data', (_event, data) => {
+ipcMain.handle('save-data', (_event, data: unknown) => {
   try {
     fs.writeFileSync(calendarDataFilePath(), JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
@@ -127,27 +131,28 @@ ipcMain.handle('save-data', (_event, data) => {
 
 // ---- IPC: image management ----
 
-ipcMain.handle('copy-image', (_event, sourcePath, fileName) => {
+ipcMain.handle('copy-image', (_event, sourcePath: string, fileName: string) => {
   const ext = path.extname(sourcePath).toLowerCase();
   if (!ALLOWED_IMAGE_EXTS.includes(ext)) throw new Error('Unsupported file type');
   return saveImageToCalendarStore(`${fileName}${ext}`, (dest) => fs.copyFileSync(sourcePath, dest));
 });
 
-ipcMain.handle('save-image-buffer', (_event, buffer, fileName, ext) => {
+ipcMain.handle('save-image-buffer', (_event, buffer: number[], fileName: string, ext: string) => {
   if (!ALLOWED_IMAGE_EXTS.includes(ext)) throw new Error('Unsupported file type');
   return saveImageToCalendarStore(`${fileName}${ext}`, (dest) => fs.writeFileSync(dest, Buffer.from(buffer)));
 });
 
-ipcMain.handle('delete-image', (_event, relPath) => {
+ipcMain.handle('delete-image', (_event, relPath: string) => {
   const resolvedStoragePath = resolveCalendarStoragePath(relPath);
   if (fs.existsSync(resolvedStoragePath)) fs.unlinkSync(resolvedStoragePath);
 });
 
-ipcMain.handle('resolve-image', (_event, relPath) => {
+ipcMain.handle('resolve-image', (_event, relPath: string) => {
   return resolveCalendarStoragePath(relPath);
 });
 
 ipcMain.handle('open-file-dialog', async () => {
+  if (!calderaWindow) return null;
   const fileDialogResult = await dialog.showOpenDialog(calderaWindow, {
     properties: ['openFile'],
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
@@ -156,14 +161,15 @@ ipcMain.handle('open-file-dialog', async () => {
   return fileDialogResult.filePaths[0];
 });
 
-// ---- AI import (compiled from src/ai-import.ts) ----
-require('./dist/ai-import');
+// ---- AI import (compiled from src/ai-import.ts, co-located in dist/) ----
+import './ai-import';
 
 // ---- IPC: window controls ----
 
-ipcMain.on('win-minimize', () => calderaWindow.minimize());
+ipcMain.on('win-minimize', () => calderaWindow?.minimize());
 ipcMain.on('win-maximize', () => {
+  if (!calderaWindow) return;
   if (calderaWindow.isMaximized()) calderaWindow.unmaximize();
   else calderaWindow.maximize();
 });
-ipcMain.on('win-close', () => calderaWindow.close());
+ipcMain.on('win-close', () => calderaWindow?.close());

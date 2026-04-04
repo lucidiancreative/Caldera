@@ -2,12 +2,12 @@
   "name": "caldera",
   "version": "1.3.0",
   "description": "A visual event calendar with drag and drop support and Ai assistant connectivity.",
-  "main": "main.js",
+  "main": "dist/main.js",
   "scripts": {
     "start": "electron .",
-    "build": "tsc",
-    "dist": "tsc && electron-builder",
-    "dist:win": "tsc && electron-builder --win"
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win"
   },
   "keywords": [],
   "author": "Lucidian Creative",
@@ -16,13 +16,13 @@
     "appId": "com.caldera.app",
     "productName": "Caldera",
     "files": [
-      "main.js",
-      "preload.js",
-      "renderer.js",
+      "dist/main.js",
+      "dist/preload.js",
+      "dist/renderer.js",
+      "dist/ai-import.js",
       "index.html",
       "styles.css",
-      "build/icon.png",
-      "dist/ai-import.js"
+      "build/icon.png"
     ],
     "win": {
       "target": ["nsis", "dir"],

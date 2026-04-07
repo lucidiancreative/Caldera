@@ -931,14 +931,14 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 .am-overlay-arc { opacity: 0.3; pointer-events: none; }
 
 /* All SVG clock primitives use CSS variables so they theme correctly in dark mode */
-.clock-face     { fill: var(--surface); stroke: var(--border); stroke-width: 2; }
-.clock-tick     { stroke: var(--border); stroke-width: 1.5; stroke-linecap: round; }
-.clock-tick-major { stroke: var(--text-muted); stroke-width: 2.5; }
-.clock-num      { font-size: 18px; font-weight: 600; fill: var(--text-muted);
+.clock-face     { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+.clock-tick     { stroke: var(--border); stroke-width: 1.0; stroke-linecap: round; }
+.clock-tick-major { stroke: var(--text-muted); stroke-width: 1.5; }
+.clock-num      { font-size: 18px; font-weight: 400; fill: var(--text-muted);
                   text-anchor: middle; dominant-baseline: central; font-family: inherit; }
 .clock-center   { fill: var(--text-muted); }
-.clock-hand     { stroke: var(--today-ring); stroke-width: 2.5; stroke-linecap: round; }
-.clock-hand-dot { fill: var(--today-ring); }
+.clock-hand     { stroke: var(--today-ring); stroke-width: 1.5; stroke-linecap: round; }
+.clock-hand-dot { fill: var(--text-muted); }
 .clock-block-arc { opacity: 0.82; cursor: pointer; transition: opacity 0.1s; }
 .clock-block-arc:hover { opacity: 1; }
 .clock-block-label { font-size: 10px; font-weight: 700; fill: rgba(255,255,255,0.92); pointer-events: none; }
@@ -1852,7 +1852,7 @@ body.skin-glass #ai-review-modal { animation: glass-cell-enter 0.22s ease both; 
 body.skin-glass .clock-block-arc {
   opacity: 0.35;
   stroke: rgba(255, 255, 255, 0.55);
-  stroke-width: 2;
+  stroke-width: 1;
 }
 /* Keep recurring dashes but blend with the glass stroke colour */
 body.skin-glass .clock-block-arc.recurring-arc {

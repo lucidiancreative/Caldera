@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils, shell } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { AiConfig, AiImportResult, CalAPI } from './types';
 
 // Satisfy TypeScript's structural check against CalAPI without importing DOM types.
@@ -25,9 +25,10 @@ const calBridge: CalAPI = {
   openExternal: (url: string): void => {
     let parsed: URL;
     try { parsed = new URL(url); } catch { return; }
-    // Only allow http/https — reject file:, javascript:, and any other scheme
+    // Only allow http/https — reject file:, javascript:, and any other scheme.
+    // shell is main-process only; route through IPC so sandbox is not violated.
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
-    shell.openExternal(url);
+    ipcRenderer.send('open-external', url);
   },
 };
 

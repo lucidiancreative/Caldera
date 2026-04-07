@@ -1629,7 +1629,7 @@ function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
   svg.appendChild(hand);
 
   // Covers the arc endpoints that converge at center, hiding the jagged joins
-  svg.appendChild(svgEl('circle', { class: 'clock-hand-dot', cx, cy, r: 5 }));
+  svg.appendChild(svgEl('circle', { class: 'clock-hand-dot', cx, cy, r: 2}));
 
   bindClockInteraction(svg, cx, cy, r1, r2, key);
   return svg;

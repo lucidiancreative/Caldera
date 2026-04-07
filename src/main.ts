@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -71,7 +71,7 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createCalderaWindow();
 });
 
-// ---- Paths & helpers ----
+// Paths & helpers
 
 const calendarDataFilePath = (): string => path.join(app.getPath('userData'), 'calendar-data.json');
 
@@ -108,7 +108,7 @@ function saveImageToCalendarStore(destName: string, writeFn: (dest: string) => v
   return 'images/' + path.basename(destAbsPath);
 }
 
-// ---- IPC: data persistence ----
+// IPC: data persistence
 
 ipcMain.handle('load-data', () => {
   const calendarDataPath = calendarDataFilePath();
@@ -129,7 +129,7 @@ ipcMain.handle('save-data', (_event, data: unknown) => {
   }
 });
 
-// ---- IPC: image management ----
+// IPC: image management
 
 ipcMain.handle('copy-image', (_event, sourcePath: string, fileName: string) => {
   const ext = path.extname(sourcePath).toLowerCase();
@@ -161,10 +161,10 @@ ipcMain.handle('open-file-dialog', async () => {
   return fileDialogResult.filePaths[0];
 });
 
-// ---- AI import (compiled from src/ai-import.ts, co-located in dist/) ----
+// AI import (compiled from src/ai-import.ts, co-located in dist/)
 import './ai-import';
 
-// ---- IPC: window controls ----
+// IPC: window controls
 
 ipcMain.on('win-minimize', () => calderaWindow?.minimize());
 ipcMain.on('win-maximize', () => {
@@ -173,3 +173,12 @@ ipcMain.on('win-maximize', () => {
   else calderaWindow.maximize();
 });
 ipcMain.on('win-close', () => calderaWindow?.close());
+
+// shell is a main-process module — not available in sandboxed preloads, so
+// openExternal must be routed through IPC rather than called directly in preload.ts.
+ipcMain.on('open-external', (_event, url: string) => {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+  shell.openExternal(url);
+});

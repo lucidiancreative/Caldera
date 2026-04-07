@@ -162,11 +162,30 @@ async function renderPage(rawUrl: string): Promise<string> {
       if (done) return;
       done = true;
       try {
-        const text: string = await win.webContents.executeJavaScript(
-          `document.body ? document.body.innerText : ''`,
-        );
-        const trimmed = text.replace(/\s+/g, ' ').trim().slice(0, 50_000);
-        console.log(`[ai-import] rendered ${url} (${reason}) — ${trimmed.length} chars`);
+        // Extract page text AND anchor hrefs so Claude can return specific event
+        // URLs per event rather than just the source site's homepage.
+        const [text, linksJson]: [string, string] = await win.webContents.executeJavaScript(`
+          (function() {
+            const body = document.body;
+            if (!body) return ['', '[]'];
+            const links = Array.from(body.querySelectorAll('a[href]'))
+              .map(a => ({ text: a.innerText.trim().slice(0, 120), href: a.href }))
+              .filter(l => l.href.startsWith('http') && l.text.length > 0)
+              .slice(0, 300);
+            return [body.innerText, JSON.stringify(links)];
+          })()
+        `);
+        const trimmedText  = text.replace(/\s+/g, ' ').trim().slice(0, 45_000);
+        const linkSection  = linksJson !== '[]'
+          ? `\nLINKS ON PAGE (text → url):\n${
+              (JSON.parse(linksJson) as { text: string; href: string }[])
+                .map(l => `${l.text} → ${l.href}`)
+                .join('\n')
+                .slice(0, 5_000)
+            }`
+          : '';
+        const trimmed = (trimmedText + linkSection).slice(0, 50_000);
+        console.log(`[ai-import] rendered ${url} (${reason}) — ${trimmedText.length} chars text, ${linksJson.length} chars links`);
         resolve(trimmed);
       } catch {
         resolve('');
@@ -231,6 +250,7 @@ function buildFetchPrompt(today: string, interests: string, pageDumps: string[])
     `\nRules:\n` +
     `- Return ONLY a raw JSON array, no markdown, no prose, no code fences\n` +
     `- Each item must have: title (string), date (YYYY-MM-DD), time ("HH:MM" 24h or null), notes (string), sourceUrl (string)\n` +
+    `- sourceUrl must be the direct link to that specific event's page — use the LINKS ON PAGE section to find the matching href. Fall back to the source URL only if no specific event link exists.\n` +
     `- Convert all dates to YYYY-MM-DD format. Only include events on or after ${today}.\n` +
     `- If a page says it is empty or JS-rendered, skip it\n` +
     `- If no events are found at all, return []\n\n` +
@@ -262,6 +282,7 @@ async function runWebSearchImport(aiConfig: AiConfig): Promise<AiImportResult> {
       `Look for specific events with real dates in the next 60 days.\n` +
       `After searching, return ONLY a JSON array with these keys per event:\n` +
       `  title (string), date (YYYY-MM-DD), time (HH:MM or null), notes (string), sourceUrl (string)\n` +
+      `sourceUrl must be the direct URL to that specific event's page (not the site homepage).\n` +
       `Return [] if nothing is found. Do not include any prose outside the JSON array.`,
   }];
 

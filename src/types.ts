@@ -5,7 +5,7 @@ export type DateKey = string;
 
 export type AmPm = 'AM' | 'PM';
 export type RecurrenceType = 'daily' | 'weekly' | 'monthly';
-export type SkinId = 'default' | 'glass';
+export type SkinId = 'default' | 'glass' | 'arctic' | 'glacier' | 'teal';
 export type ViewType = 'calendar' | 'schedule';
 
 // ── Calendar data shapes ─────────────────────────────────────────────────────

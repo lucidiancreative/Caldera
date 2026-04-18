@@ -17,6 +17,18 @@ interface Skin {
   label: string;
   init: () => void;
   destroy: () => void;
+  /** When true, activateSkin also adds skin-glass so all shared glass CSS rules apply */
+  glassVariant?: boolean;
+}
+
+/** Cosine-palette parameters for the WebGL shader background */
+interface ShaderPalette {
+  a: [number, number, number];
+  b: [number, number, number];
+  c: [number, number, number];
+  d: [number, number, number];
+  /** Animation playback speed multiplier (lower = slower drift) */
+  speed: number;
 }
 
 interface TimeBlockPopupState {
@@ -82,10 +94,50 @@ const redoStack:       string[]                                         = [];
 const MAX_HISTORY      = 50;
 const BLOCK_COLORS:    string[]                                         = ['#4f6ef7', '#e03030', '#2eb67d', '#f0a500', '#a259ff', '#ff6b35'];
 
+// Lighter highlight paired with each block color — used for radial/linear gradients on arcs and chips
+const BLOCK_COLOR_HIGHLIGHTS: Record<string, string> = {
+  '#4f6ef7': '#8ba4ff',
+  '#e03030': '#ff6464',
+  '#2eb67d': '#5adba6',
+  '#f0a500': '#ffc84a',
+  '#a259ff': '#c98aff',
+  '#ff6b35': '#ff9468',
+  '#888':    '#aaaaaa',
+};
+
+// ── Shader palette presets ──────────────────────────────
+// Original dark glass — deep purple/indigo plasma
+const PALETTE_DARK: ShaderPalette = {
+  a: [0.04, 0.03, 0.10], b: [0.07, 0.04, 0.12],
+  c: [0.80, 0.00, 0.90], d: [0.20, 0.50, 0.65],
+  speed: 0.15,
+};
+// Near-white with whispers of ice blue — closest to iOS frosted aesthetic
+const PALETTE_ARCTIC: ShaderPalette = {
+  a: [0.82, 0.88, 0.92], b: [0.12, 0.08, 0.08],
+  c: [0.50, 0.40, 0.30], d: [0.00, 0.20, 0.45],
+  speed: 0.08,
+};
+// Sky-blue midtones with white crests — more saturated than arctic
+const PALETTE_GLACIER: ShaderPalette = {
+  a: [0.65, 0.78, 0.85], b: [0.20, 0.15, 0.10],
+  c: [0.50, 0.40, 0.35], d: [0.00, 0.25, 0.50],
+  speed: 0.08,
+};
+// Warm aqua/teal shifting into mint-white zones
+const PALETTE_TEAL: ShaderPalette = {
+  a: [0.62, 0.82, 0.82], b: [0.18, 0.12, 0.14],
+  c: [0.45, 0.50, 0.40], d: [0.10, 0.35, 0.55],
+  speed: 0.08,
+};
+
 // ── Skin registry ───────────────────────────────────────
 const SKINS: Record<SkinId, Skin> = {
-  default: { id: 'default', label: 'Default', init: () => {}, destroy: () => {} },
-  glass:   { id: 'glass',   label: 'Glass',   init: initShaderBackground, destroy: destroyShaderBackground },
+  default:      { id: 'default',      label: 'Default', init: () => {}, destroy: () => {} },
+  glass:        { id: 'glass',        label: 'Glass',   init: () => initShaderBackground(PALETTE_DARK),    destroy: destroyShaderBackground },
+  'arctic':  { id: 'arctic',  label: 'Arctic',  init: () => initShaderBackground(PALETTE_ARCTIC),  destroy: destroyShaderBackground, glassVariant: true },
+  'glacier': { id: 'glacier', label: 'Glacier', init: () => initShaderBackground(PALETTE_GLACIER), destroy: destroyShaderBackground, glassVariant: true },
+  'teal':    { id: 'teal',    label: 'Teal',    init: () => initShaderBackground(PALETTE_TEAL),    destroy: destroyShaderBackground, glassVariant: true },
 };
 
 function getCurrentSkin(): SkinId {
@@ -95,10 +147,15 @@ function getCurrentSkin(): SkinId {
 function activateSkin(id: SkinId): void {
   const prev = getCurrentSkin();
   if (SKINS[prev]) SKINS[prev].destroy();
-  document.body.classList.forEach(cls => {
-    if (cls.startsWith('skin-')) document.body.classList.remove(cls);
-  });
+  [...document.body.classList]
+    .filter(cls => cls.startsWith('skin-'))
+    .forEach(cls => document.body.classList.remove(cls));
   document.body.classList.add(`skin-${id}`);
+  // Frost skins (arctic, glacier, teal) share the glass shader structure and frost
+  // component overrides. Their individual body classes drive shader palette selection.
+  if (SKINS[id]?.glassVariant) {
+    document.body.classList.add('skin-glass', 'skin-frost');
+  }
   localStorage.setItem('skin', id);
   if (SKINS[id]) SKINS[id].init();
 }
@@ -112,7 +169,7 @@ let _shaderLast:          number | null                = null;
 // Module-level variable replacing canvas._shaderResizeHandler (which is not valid on HTMLElement)
 let _shaderResizeHandler: (() => void) | null          = null;
 
-function initShaderBackground(): void {
+function initShaderBackground(palette: ShaderPalette): void {
   const canvas = qId('shader-bg') as HTMLCanvasElement;
   const gl = canvas.getContext('webgl');
   if (!gl) { console.warn('Caldera: WebGL unavailable — glass skin will use CSS only.'); return; }
@@ -136,23 +193,26 @@ function initShaderBackground(): void {
     attribute vec2 a_position;
     void main() { gl_Position = vec4(a_position, 0.0, 1.0); }
   `);
+  // Palette coefficients passed as uniforms so each skin can drive different colours
+  // without recompiling the shader — u_pa/b/c/d are the cosine-palette a/b/c/d vectors.
   const fs = compileShader(glNN.FRAGMENT_SHADER, `
     precision mediump float;
     uniform vec2  u_resolution;
     uniform float u_time;
+    uniform float u_speed;
+    uniform vec3  u_pa;
+    uniform vec3  u_pb;
+    uniform vec3  u_pc;
+    uniform vec3  u_pd;
 
     vec3 palette(float t) {
-      vec3 a = vec3(0.04, 0.03, 0.10);
-      vec3 b = vec3(0.07, 0.04, 0.12);
-      vec3 c = vec3(0.80, 0.00, 0.90);
-      vec3 d = vec3(0.20, 0.50, 0.65);
-      return a + b * cos(6.28318 * (c * t + d));
+      return u_pa + u_pb * cos(6.28318 * (u_pc * t + u_pd));
     }
 
     void main() {
       vec2 uv = gl_FragCoord.xy / u_resolution.xy;
       uv.x *= u_resolution.x / u_resolution.y;
-      float t = u_time * 0.15;
+      float t = u_time * u_speed;
       float d = 0.0;
       vec2  p = uv * 2.5;
       for (int i = 0; i < 4; i++) {
@@ -190,8 +250,17 @@ function initShaderBackground(): void {
   glNN.enableVertexAttribArray(posLoc);
   glNN.vertexAttribPointer(posLoc, 2, glNN.FLOAT, false, 0, 0);
 
-  const uRes  = glNN.getUniformLocation(prog, 'u_resolution');
-  const uTime = glNN.getUniformLocation(prog, 'u_time');
+  const uRes   = glNN.getUniformLocation(prog, 'u_resolution');
+  const uTime  = glNN.getUniformLocation(prog, 'u_time');
+  const uSpeed = glNN.getUniformLocation(prog, 'u_speed');
+
+  // Palette uniforms are constant per-skin — set them once at init time
+  glNN.useProgram(prog);
+  glNN.uniform1f(uSpeed, palette.speed);
+  glNN.uniform3f(glNN.getUniformLocation(prog, 'u_pa'), ...palette.a);
+  glNN.uniform3f(glNN.getUniformLocation(prog, 'u_pb'), ...palette.b);
+  glNN.uniform3f(glNN.getUniformLocation(prog, 'u_pc'), ...palette.c);
+  glNN.uniform3f(glNN.getUniformLocation(prog, 'u_pd'), ...palette.d);
 
   function resizeCanvas(): void {
     canvas.width  = window.innerWidth;
@@ -1530,8 +1599,23 @@ function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
 
   const svg = svgEl('svg', { viewBox: `0 0 ${VB} ${VB}` }) as SVGSVGElement;
 
-  // Defs (for arc label text paths)
+  // Defs: arc label text paths + radial gradients for each block color.
+  // Radial gradient centered at the clock origin so the lighter highlight falls at the
+  // inner ring edge and the base color lands at the outer edge, following the arc's depth.
   const defs = svgEl('defs', {});
+  [...BLOCK_COLORS, '#888'].forEach(color => {
+    const highlight = BLOCK_COLOR_HIGHLIGHTS[color] || color;
+    const grad = svgEl('radialGradient', {
+      id: `block-grad-${color.replace('#', '')}`,
+      cx: String(cx), cy: String(cy), r: String(r2),
+      gradientUnits: 'userSpaceOnUse',
+    });
+    const stop1 = svgEl('stop', { offset: '0%',   'stop-color': highlight });
+    const stop2 = svgEl('stop', { offset: '100%', 'stop-color': color });
+    grad.appendChild(stop1);
+    grad.appendChild(stop2);
+    defs.appendChild(grad);
+  });
   svg.appendChild(defs);
 
   // Background circle that defines the clock's visual boundary
@@ -1587,7 +1671,7 @@ function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
     const path = svgEl('path', {
       class: 'clock-block-arc' + (blockAny._recurring ? ' recurring-arc' : ''),
       d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin, document.body.classList.contains('skin-glass') ? 6 : 0),
-      fill: blockAny.color || '#888',
+      fill: `url(#block-grad-${(blockAny.color || '#888').replace('#', '')})`,
     });
     g.appendChild(path);
 
@@ -1993,7 +2077,7 @@ function renderBlockLegend(key: string, blocks: (TimeBlock & { _recurring?: bool
     const chip = document.createElement('span');
     chip.className   = 'block-chip';
     chip.textContent = block._recurring ? block.label + ' \u21BB' : block.label;
-    chip.style.background = block.color;
+    chip.style.background = `linear-gradient(135deg, ${BLOCK_COLOR_HIGHLIGHTS[block.color] || block.color} 0%, ${block.color} 100%)`;
     chip.title = `${formatClockMinutes(block.startMin)} – ${formatClockMinutes(block.endMin, block.ampm)}`;
     chip.addEventListener('click', () => showTimeBlockPopup('edit', block, key, svg, 200, 200, 170));
     legend.appendChild(chip);
@@ -2037,7 +2121,7 @@ function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: bool
 
     const swatch = document.createElement('div');
     swatch.className        = 'task-color-swatch';
-    swatch.style.background = block.color;
+    swatch.style.background = `linear-gradient(135deg, ${BLOCK_COLOR_HIGHLIGHTS[block.color] || block.color} 0%, ${block.color} 100%)`;
 
     const body = document.createElement('div');
     body.className = 'task-body';

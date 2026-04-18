@@ -11,7 +11,7 @@
 type DateKey = string;
 type AmPm = 'AM' | 'PM';
 type RecurrenceType = 'daily' | 'weekly' | 'monthly';
-type SkinId = 'default' | 'glass';
+type SkinId = 'default' | 'glass' | 'arctic' | 'glacier' | 'teal';
 type ViewType = 'calendar' | 'schedule';
 
 interface CalendarEvent {

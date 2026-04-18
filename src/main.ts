@@ -58,6 +58,7 @@ function createCalderaWindow(): void {
 
   calderaWindow.once('ready-to-show', () => {
     calderaWindow!.show();
+    calderaWindow!.webContents.openDevTools();
   });
 }
 

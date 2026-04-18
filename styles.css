@@ -7,10 +7,13 @@
   --border:      #ddd;
   --text:        #1a1a1a;
   --text-muted:  #888;
-  --accent:      #4f6ef7;
+  --accent:      #6c6e7e;
   --accent-soft: #e8ecff;
   --today-ring:  #e03030;
   --star:        #f0a500;
+  --accent-shadow: rgba(108, 110, 126, 0.18);
+  --today-ring-bg: rgba(224, 48, 48, 0.75);
+
   --titlebar-h:  36px;
   --strip-h:     56px;
   --header-h:    36px;
@@ -34,8 +37,14 @@ html, body {
   width: 100%; height: 100%;
   z-index: 0;
   display: none;
+  transition: filter 0.3s;
 }
 body.skin-glass #shader-bg { display: block; }
+body.skin-arctic.dark #shader-bg,
+body.skin-glacier.dark #shader-bg,
+body.skin-teal.dark #shader-bg {
+  filter: brightness(0.45);
+}
 
 /* ── Title bar ────────────────────────────────────────── */
 #titlebar {
@@ -120,7 +129,7 @@ body.skin-glass #shader-bg { display: block; }
 }
 
 .nav-arrow {
-  background: none;
+  background: transparent;
   border: 1px solid var(--border);
   border-radius: 6px;
   width: 28px; height: 28px;
@@ -128,9 +137,13 @@ body.skin-glass #shader-bg { display: block; }
   font-size: 14px;
   color: var(--text);
   display: flex; align-items: center; justify-content: center;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
 }
-.nav-arrow:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.nav-arrow:hover {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
 #month-tabs {
   display: flex;
@@ -154,10 +167,10 @@ body.skin-glass #shader-bg { display: block; }
   white-space: nowrap;
   transition: all 0.12s;
 }
-.month-tab:hover { background: var(--accent-soft); color: var(--accent); }
+.month-tab:hover { background: transparent; color: var(--text); border-color: var(--text-muted); }
 .month-tab.active {
-  background: var(--accent);
-  color: #fff;
+  background: transparent;
+  color: var(--accent);
   border-color: var(--accent);
 }
 
@@ -211,7 +224,7 @@ body.skin-glass #shader-bg { display: block; }
 
 .day-cell:hover {
   border-color: var(--accent);
-  box-shadow: 0 6px 18px rgba(79, 110, 247, 0.18);
+  box-shadow: 0 6px 18px var(--accent-shadow);
   transform: translateY(-5px);
 }
 
@@ -329,7 +342,7 @@ body.skin-glass #shader-bg { display: block; }
   font-size: 26px;
 }
 .day-cell.today.has-image .day-num {
-  background: rgba(224, 48, 48, 0.75);
+  background: var(--today-ring-bg);
   color: #fff;
 }
 
@@ -420,7 +433,7 @@ body.skin-glass #shader-bg { display: block; }
   font-size: 12px;
   font-weight: 600;
   border-radius: 20px;
-  border: 1.5px dashed var(--accent);
+  border: 1.5px solid var(--accent);
   background: none;
   color: var(--accent);
   cursor: pointer;
@@ -506,17 +519,19 @@ body.dark #event-cards::-webkit-scrollbar-thumb:hover { background: #636366; }
   font-size: 11px;
   cursor: pointer;
   color: var(--text-muted);
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
 }
 .card-toolbar .card-action-btn:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: linear-gradient(150deg, rgba(50,50,62,0.09) 0%, rgba(30,30,42,0.06) 100%);
+  border-color: rgba(75, 75, 90, 0.26);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.36), 0 1px 3px rgba(0,0,0,0.06);
 }
 .card-toolbar .btn-del-card:hover {
   background: #fdf0ef;
   border-color: var(--today-ring);
   color: var(--today-ring);
+  box-shadow: none;
 }
 
 .card-image-area {
@@ -583,7 +598,7 @@ body.dark #event-cards::-webkit-scrollbar-thumb:hover { background: #636366; }
   cursor: pointer;
   transition: border-color 0.12s;
 }
-.card-time:focus { border-color: var(--accent); }
+.card-time:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 .card-notes {
   width: 100%;
@@ -600,7 +615,7 @@ body.dark #event-cards::-webkit-scrollbar-thumb:hover { background: #636366; }
   transition: border-color 0.12s;
   user-select: text;
 }
-.card-notes:focus { border-color: var(--accent); }
+.card-notes:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 /* ── Add-event drop zone ──────────────────────────────── */
 .modal-add-zone {
@@ -669,8 +684,9 @@ body.dark {
   --border:      #38383a;
   --text:        #ebebf0;
   --text-muted:  #8e8e93;
-  --accent:      #6b8aff;
-  --accent-soft: #1a234a;
+  --accent:      #6c6e7e;
+  --accent-soft: #434343;
+  --accent-shadow: rgba(108, 110, 126, 0.25);
 }
 
 /* Smooth dark-mode toggle — applied only to surfaces that visually change color, not every element */
@@ -689,6 +705,17 @@ body.dark #modal-close:hover          { background: #3a3a3c; color: var(--text);
 body.dark #modal                      { box-shadow: 0 24px 64px rgba(0,0,0,0.6); }
 body.dark .event-card                 { background: #111113; }
 body.dark .card-toolbar               { background: #1c1c1e; }
+body.dark .card-toolbar .btn-del-card:hover {
+  background: rgba(58, 20, 20, 0.80);
+  border-color: var(--today-ring);
+  color: var(--today-ring);
+  box-shadow: none;
+}
+body.dark .card-toolbar .card-action-btn:hover {
+  background: linear-gradient(150deg, rgba(200,205,218,0.12) 0%, rgba(170,175,192,0.08) 100%);
+  border-color: rgba(200, 205, 218, 0.20);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 1px 3px rgba(0,0,0,0.28);
+}
 
 /* Dark mode toggle — higher specificity beats #win-controls button rules */
 #win-controls #btn-theme { font-size: 14px; }
@@ -714,10 +741,10 @@ body.dark .card-toolbar               { background: #1c1c1e; }
   white-space: nowrap;
   transition: all 0.12s;
 }
-.view-tab:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.view-tab:hover { background: transparent; color: var(--text); border-color: var(--text-muted); }
 .view-tab.active {
-  background: var(--accent);
-  color: #fff;
+  background: transparent;
+  color: var(--accent);
   border-color: var(--accent);
 }
 
@@ -851,8 +878,12 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   color: var(--text-muted);
   transition: all 0.12s;
 }
-.ampm-btn:hover  { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
-.ampm-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ampm-btn:hover  { background: transparent; color: var(--text); border-color: var(--text-muted); }
+.ampm-btn.active {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
+}
 
 /* ── Reschedule banner ────────────────────────────────── */
 #reschedule-banner {
@@ -1001,7 +1032,7 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   user-select: text;
   transition: border-color 0.12s;
 }
-#block-label-input:focus { border-color: var(--accent); }
+#block-label-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 #block-label-del {
   background: none;
@@ -1054,7 +1085,7 @@ body.dark #block-label-popup { box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
   outline: none;
   width: 100%;
 }
-#block-recurrence-select:focus { border-color: var(--accent); }
+#block-recurrence-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 #block-scope-row {
   display: flex;
@@ -1095,13 +1126,62 @@ body.skin-glass {
   --accent-soft: rgba(160, 184, 255, 0.18);
   --today-ring:  #ff6b6b;
   --star:        #ffd166;
+  --accent-shadow: rgba(160, 184, 255, 0.22);
+  --today-ring-bg: rgba(255, 107, 107, 0.75);
 }
 
 /* ── Variables: dark variant ──────────────────────────── */
 body.skin-glass.dark {
-  --surface:    rgba(10, 10, 20, 0.42);
-  --border:     rgba(255, 255, 255, 0.14);
-  --text-muted: rgba(255, 255, 255, 0.45);
+  --surface:       rgba(10, 10, 20, 0.42);
+  --border:        rgba(255, 255, 255, 0.14);
+  --text-muted:    rgba(255, 255, 255, 0.45);
+}
+
+/* ── Variables: light-glass variants (arctic / glacier / teal) ── */
+/* These override the base skin-glass white-on-dark values so panels
+   read correctly against the near-white shader backgrounds. Higher
+   surface opacity is needed because frosted glass on white requires
+   more contrast than frosted glass on a dark background. */
+body.skin-frost:not(.dark) {
+  --bg:          transparent;
+  --surface:     rgba(255, 255, 255, 0.52);
+  --border:      rgba(140, 180, 210, 0.40);
+  --text:        #162232;
+  --text-muted:  #4a6a88;
+  --accent:      #2e78c0;
+  --accent-soft: rgba(80, 150, 210, 0.14);
+  --today-ring:  #1a5fa8;
+  --star:        #e08800;
+  --accent-shadow: rgba(46, 120, 192, 0.18);
+  --today-ring-bg: rgba(26, 95, 168, 0.75);
+
+  --lg-pill-border: rgba(120, 130, 140, 0.30);
+}
+
+/* ── Frost skin light mode overrides (per-shader) ─────── */
+body.skin-arctic:not(.dark) {
+  --surface: rgba(255, 255, 255, 0.42);
+}
+body.skin-glacier:not(.dark) {
+  --surface: rgba(255, 255, 255, 0.42);
+}
+body.skin-teal:not(.dark) {
+  --surface: rgba(255, 255, 255, 0.42);
+}
+
+body.skin-frost.dark {
+  --lg-pill-border: rgba(170, 180, 195, 0.18);
+}
+
+/* ── Frost skin dark mode overrides (per-shader) ──────── */
+body.skin-arctic.dark {
+  --surface: rgba(10, 10, 20, 0.60);
+}
+body.skin-glacier.dark {
+  --surface: rgba(10, 10, 20, 0.60);
+}
+body.skin-teal.dark {
+  --surface: rgba(10, 10, 20, 0.60);
 }
 
 /* ── Glass panels ─────────────────────────────────────── */
@@ -1173,6 +1253,19 @@ body.skin-glass .card-toolbar {
   border-bottom: 1px solid var(--border);
 }
 
+/* Native <select> ignores CSS backdrop-filter and semi-transparent --bg values,
+   so the OS renders it white in the glass skin — force explicit dark colors here */
+body.skin-glass #block-recurrence-select {
+  background: rgba(30, 30, 40, 0.92);
+  color: var(--text);
+  border-color: var(--border);
+}
+/* Light-glass skins also inherit the rule above via .skin-glass — override back to bright */
+body.skin-frost:not(.dark) #block-recurrence-select {
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text);
+}
+
 body.skin-glass #block-label-popup {
   background: var(--surface);
   backdrop-filter: blur(22px) saturate(160%);
@@ -1189,11 +1282,35 @@ body.skin-glass .task-item {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.20);
 }
 
+body.skin-glass .card-toolbar .btn-del-card:hover {
+  background: rgba(255,107,107,0.14);
+  border-color: var(--today-ring);
+  color: var(--today-ring);
+  box-shadow: none;
+}
+
 /* Dark-mode glass: harden specific elements that have hardcoded colors */
 body.skin-glass.dark #modal-close     { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.70); }
 body.skin-glass.dark #modal-close:hover { background: rgba(255,255,255,0.18); color: #fff; }
 body.skin-glass.dark .event-card      { background: rgba(10,10,20,0.30); }
 body.skin-glass.dark .card-toolbar    { background: rgba(10,10,20,0.28); }
+
+/* Light-glass close buttons — base glass sets rgba(255,255,255,0.14) which is near-invisible
+   on the near-white frosted modal surfaces of arctic/glacier/teal light mode */
+body.skin-frost:not(.dark) #modal-close,
+body.skin-frost:not(.dark) #skin-modal-close,
+body.skin-frost:not(.dark) #ai-modal-close,
+body.skin-frost:not(.dark) #ai-review-close {
+  background: rgba(22, 34, 50, 0.09);
+  color: var(--text-muted);
+}
+body.skin-frost:not(.dark) #modal-close:hover,
+body.skin-frost:not(.dark) #skin-modal-close:hover,
+body.skin-frost:not(.dark) #ai-modal-close:hover,
+body.skin-frost:not(.dark) #ai-review-close:hover {
+  background: rgba(22, 34, 50, 0.17);
+  color: var(--text);
+}
 
 /* ── Entrance animations ──────────────────────────────── */
 @keyframes glass-cell-enter {
@@ -1255,6 +1372,13 @@ body.skin-glass .ampm-btn:hover::before,
 body.skin-glass #btn-add-event:hover::before,
 body.skin-glass #btn-schedule-day:hover::before {
   opacity: 1;
+}
+
+/* Keep pills consistent with non-glass skins: no hover "fill" effect */
+body.skin-glass .month-tab:hover::before,
+body.skin-glass .view-tab:hover::before,
+body.skin-glass .ampm-btn:hover::before {
+  opacity: 0;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -1346,7 +1470,7 @@ body.skin-glass #skin-modal-close:hover { background: rgba(255,255,255,0.26); }
 .skin-card.active {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent);
-  background: var(--accent-soft);
+  background: transparent;
 }
 
 .skin-preview {
@@ -1375,6 +1499,16 @@ body.dark .skin-preview-default {
   inset: 0;
   background: rgba(255,255,255,0.12);
   border-radius: inherit;
+}
+
+.skin-preview-arctic {
+  background: linear-gradient(135deg, #ddeaf5 0%, #c8dff0 40%, #d8eef8 70%, #e8f4fb 100%);
+}
+.skin-preview-glacier {
+  background: linear-gradient(135deg, #b8d4e8 0%, #9dc4df 40%, #bcd8ee 70%, #d0e8f5 100%);
+}
+.skin-preview-teal {
+  background: linear-gradient(135deg, #a8d8d8 0%, #90cac8 40%, #a5d5d2 70%, #c0e5e3 100%);
 }
 
 /* ════════════════════════════════════════════════════════
@@ -1409,72 +1543,233 @@ body.skin-glass .modal-add-zone {
   color: var(--text-muted);
 }
 
-/* ── Fix 2: Nav arrows, month tabs, view tabs, ampm buttons ── */
 body.skin-glass .nav-arrow {
-  background: var(--surface);
+  border-color: rgba(255, 255, 255, 0.26);
+  color: rgba(203, 203, 203, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border-color: var(--border);
-  color: var(--text);
 }
 body.skin-glass .nav-arrow:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: transparent;
   border-color: rgba(255, 255, 255, 0.50);
-  color: var(--text);
+  color: #ffffff;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
 }
-
-body.skin-glass .month-tab {
-  color: var(--text-muted);
-}
-body.skin-glass .month-tab:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--text);
-  border-color: var(--border);
-}
-body.skin-glass .month-tab.active {
-  background: rgba(160, 184, 255, 0.22);
-  color: var(--text);
-  border-color: rgba(160, 184, 255, 0.55);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(160,184,255,0.18);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+body.skin-glass.dark .nav-arrow {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.74);
 }
 
-body.skin-glass .view-tab {
-  color: var(--text-muted);
-  border-color: var(--border);
-}
-body.skin-glass .view-tab:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--text);
-  border-color: rgba(255, 255, 255, 0.35);
-}
-body.skin-glass .view-tab.active {
-  background: rgba(160, 184, 255, 0.22);
-  color: var(--text);
-  border-color: rgba(160, 184, 255, 0.55);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 10px rgba(160,184,255,0.15);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+/* Active pills must not double-blur — disable backdrop-filter on all glass skins */
+body.skin-glass .month-tab.active,
+body.skin-glass .view-tab.active,
+body.skin-glass .ampm-btn.active,
+body.skin-frost .month-tab.active,
+body.skin-frost .view-tab.active,
+body.skin-frost .ampm-btn.active {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
-body.skin-glass .ampm-btn {
-  color: var(--text-muted);
-  border-color: var(--border);
-}
-body.skin-glass .ampm-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--text);
-  border-color: rgba(255, 255, 255, 0.35);
-}
+body.skin-glass .month-tab.active,
+body.skin-glass .view-tab.active,
 body.skin-glass .ampm-btn.active {
-  background: rgba(160, 184, 255, 0.22);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.20);
+}
+
+body.skin-glass .card-toolbar .card-action-btn:hover {
+  background: linear-gradient(150deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.09) 100%);
+  border-color: rgba(255, 255, 255, 0.30);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.24);
+}
+
+/* ── Light-glass pill hover (uses --lg-pill-border for border alignment) ── */
+body.skin-frost .month-tab:hover,
+body.skin-frost .view-tab:hover,
+body.skin-frost .ampm-btn:hover {
+  background: transparent;
   color: var(--text);
-  border-color: rgba(160, 184, 255, 0.55);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border-color: var(--lg-pill-border);
+}
+
+/* Dark-mode hover */
+body.skin-frost.dark .nav-arrow:hover,
+body.skin-frost.dark .month-tab:hover,
+body.skin-frost.dark .view-tab:hover,
+body.skin-frost.dark .ampm-btn:hover {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--lg-pill-border);
+}
+
+/* ── Light-glass nav arrows ────────────────────────────── */
+body.skin-frost:not(.dark) .nav-arrow {
+  background: transparent;
+  border-color: rgba(75, 75, 90, 0.22);
+  color: rgba(55, 55, 70, 0.68);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+body.skin-frost:not(.dark) .nav-arrow:hover {
+  background: transparent;
+  border-color: rgba(120, 130, 140, 0.132);
+  color: rgba(22, 34, 50, 0.92);
+  box-shadow: none;
+}
+body.skin-frost.dark .nav-arrow {
+  background: transparent;
+  border-color: rgba(200, 205, 220, 0.20);
+  color: rgba(200, 205, 220, 0.80);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* ── Light-glass active pills ──────────────────────────── */
+body.skin-frost:not(.dark) .month-tab.active,
+body.skin-frost:not(.dark) .view-tab.active,
+body.skin-frost:not(.dark) .ampm-btn.active {
+  background: rgba(50, 50, 62, 0.09);
+  color: rgba(30, 30, 42, 0.88);
+  border-color: rgba(55, 55, 70, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+}
+body.skin-frost.dark .month-tab.active,
+body.skin-frost.dark .view-tab.active,
+body.skin-frost.dark .ampm-btn.active {
+  background: rgba(200, 205, 220, 0.14);
+  color: rgba(225, 228, 240, 0.92);
+  border-color: rgba(200, 205, 220, 0.26);
+  box-shadow: none;
+}
+
+/* ── Light-glass card action buttons ───────────────────── */
+body.skin-frost:not(.dark) .card-toolbar .card-action-btn {
+  border-color: rgba(55, 55, 70, 0.20);
+  color: rgba(55, 55, 70, 0.60);
+}
+body.skin-frost:not(.dark) .card-toolbar .card-action-btn:hover {
+  background: linear-gradient(150deg, rgba(50,50,62,0.09) 0%, rgba(30,30,42,0.06) 100%);
+  border-color: rgba(55, 55, 70, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.42);
+}
+body.skin-frost.dark .card-toolbar .card-action-btn {
+  border-color: rgba(200, 205, 220, 0.18);
+  color: rgba(200, 205, 220, 0.55);
+}
+body.skin-frost.dark .card-toolbar .card-action-btn:hover {
+  background: linear-gradient(150deg, rgba(200,205,218,0.12) 0%, rgba(170,175,192,0.08) 100%);
+  border-color: rgba(200, 205, 218, 0.20);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 1px 3px rgba(0,0,0,0.28);
+}
+
+/* ── Light-glass task buttons ──────────────────────────── */
+body.skin-frost:not(.dark) .task-btn {
+  border-color: rgba(55, 55, 70, 0.20);
+  color: rgba(55, 55, 70, 0.60);
+}
+body.skin-frost.dark .task-btn {
+  border-color: rgba(200, 205, 220, 0.18);
+  color: rgba(200, 205, 220, 0.55);
+}
+
+/* Base glass (dark shader): override the hardcoded #e0e0e0 hover so it reads as frosted glass */
+body.skin-glass #win-controls button:hover { background: rgba(255,255,255,0.18); }
+
+body.skin-frost #win-controls button:hover {
+  background: rgba(55, 55, 70, 0.10);
+}
+
+/* ── Light-glass action buttons (arctic / glacier / teal) ────────────────────
+   These skins sit on near-white shader backgrounds, so the base glass hover
+   (white radial + pale purple) can feel muddy or too low-contrast. */
+body.skin-frost #btn-add-event,
+body.skin-frost #btn-schedule-day {
+  color: rgba(30, 30, 42, 0.75);
+  border-color: rgba(55, 55, 70, 0.30);
+}
+body.skin-frost #btn-add-event:hover,
+body.skin-frost #btn-schedule-day:hover {
+  background: linear-gradient(150deg, rgba(50,50,62,0.09) 0%, rgba(30,30,42,0.06) 100%);
+  border-color: rgba(55, 55, 70, 0.45);
+  color: rgba(22, 34, 50, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.42);
+}
+
+/* Light mode delete — keep red but matched to light-glass opacity */
+body.skin-frost:not(.dark) .card-toolbar .btn-del-card:hover {
+  background: rgba(224, 48, 48, 0.09);
+  border-color: rgba(224, 48, 48, 0.50);
+  color: var(--today-ring);
+  box-shadow: none;
+}
+
+/* Schedule task list buttons */
+body.skin-frost .task-btn:hover {
+  background: linear-gradient(150deg, rgba(50, 50, 62, 0.09) 0%, rgba(30, 30, 42, 0.06) 100%);
+  border-color: rgba(55, 55, 70, 0.28);
+  color: rgba(30, 30, 42, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.40);
+}
+body.skin-frost .task-btn-del:hover {
+  background: rgba(224, 48, 48, 0.10);
+  border-color: rgba(224, 48, 48, 0.55);
+  color: var(--today-ring);
+}
+
+/* AI modal buttons */
+body.skin-frost .ai-btn-primary,
+body.skin-frost .ai-btn-secondary {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+body.skin-frost .ai-btn-primary:hover,
+body.skin-frost .ai-btn-secondary:hover {
+  background: linear-gradient(150deg, rgba(50,50,62,0.09) 0%, rgba(30,30,42,0.06) 100%);
+  border-color: rgba(55, 55, 70, 0.45);
+  color: rgba(22, 34, 50, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.42);
+}
+body.skin-frost .ai-btn-accent {
+  background: rgba(50, 50, 62, 0.72);
+}
+body.skin-frost .ai-btn-accent:hover {
+  opacity: 1;
+  background: rgba(50, 50, 62, 0.85);
+}
+
+/* Light-follow highlight */
+body.skin-frost:not(.dark) #win-controls button::before,
+body.skin-frost:not(.dark) .nav-arrow::before,
+body.skin-frost:not(.dark) .month-tab::before,
+body.skin-frost:not(.dark) .view-tab::before,
+body.skin-frost:not(.dark) .ampm-btn::before,
+body.skin-frost:not(.dark) #btn-add-event::before,
+body.skin-frost:not(.dark) #btn-schedule-day::before {
+  background: radial-gradient(
+    circle 44px at var(--mx, 50%) var(--my, 50%),
+    rgba(55, 55, 70, 0.14) 0%,
+    transparent 70%
+  );
+}
+body.skin-frost.dark #win-controls button::before,
+body.skin-frost.dark .nav-arrow::before,
+body.skin-frost.dark .month-tab::before,
+body.skin-frost.dark .view-tab::before,
+body.skin-frost.dark .ampm-btn::before,
+body.skin-frost.dark #btn-add-event::before,
+body.skin-frost.dark #btn-schedule-day::before {
+  background: radial-gradient(
+    circle 44px at var(--mx, 50%) var(--my, 50%),
+    rgba(200, 205, 220, 0.12) 0%,
+    transparent 70%
+  );
 }
 
 
@@ -1569,7 +1864,7 @@ body.skin-glass .ampm-btn.active {
   outline: none;
 }
 .ai-input:focus,
-.ai-textarea:focus { border-color: var(--accent); }
+.ai-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .ai-textarea { resize: vertical; min-height: 72px; }
 
 /* ── Mode radio buttons ──────────────────────────────── */
@@ -1598,7 +1893,13 @@ body.skin-glass .ampm-btn.active {
   gap: 4px;
   max-height: 120px;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
+#ai-url-list::-webkit-scrollbar { width: 0; }
+#ai-url-list:hover::-webkit-scrollbar { width: 6px; }
+#ai-url-list::-webkit-scrollbar-track { background: transparent; }
+#ai-url-list::-webkit-scrollbar-thumb { background: rgba(128, 128, 128, 0.3); border-radius: 3px; }
+#ai-url-list::-webkit-scrollbar-thumb:hover { background: rgba(128, 128, 128, 0.5); }
 
 .ai-url-row {
   display: flex;
@@ -1807,6 +2108,7 @@ body.dark #ai-event-list::-webkit-scrollbar-thumb:hover { background: #636366; }
   margin-top: 3px;
   line-height: 1.4;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
@@ -1850,32 +2152,20 @@ body.skin-glass #ai-review-modal { animation: glass-cell-enter 0.22s ease both; 
 
 /* ── Glass skin: clock time blocks ───────────────────── */
 body.skin-glass .clock-block-arc {
-  opacity: 0.35;
+  opacity: 0.62;
   stroke: rgba(255, 255, 255, 0.55);
   stroke-width: 1;
 }
 /* Keep recurring dashes but blend with the glass stroke colour */
 body.skin-glass .clock-block-arc.recurring-arc {
   stroke: rgba(255, 255, 255, 0.42);
-  stroke-width: 1;
+  stroke-width: 1.5;
   stroke-dasharray: 4 3;
 }
 
 /* ── Glass skin: block legend chips ─────────────────── */
 body.skin-glass .block-chip {
-  opacity: 0.35;
+  opacity: 0.72;
   border: 1px solid rgba(255, 255, 255, 0.40);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
-}
-
-/* Glass skin: recurrence dropdown — native <select> ignores transparent --bg
-   and paints white; force a dark frosted background so text is legible */
-body.skin-glass #block-recurrence-select {
-  background: rgba(30, 30, 35, 0.72);
-  color: rgba(255, 255, 255, 0.88);
-  border-color: rgba(255, 255, 255, 0.30);
-}
-body.skin-glass.dark #block-recurrence-select {
-  background: rgba(20, 20, 25, 0.80);
-  color: rgba(255, 255, 255, 0.88);
 }

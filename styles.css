@@ -1867,21 +1867,40 @@ body.skin-frost.dark #btn-schedule-day::before {
 .ai-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .ai-textarea { resize: vertical; min-height: 72px; }
 
-/* ── Mode radio buttons ──────────────────────────────── */
+/* ── Mode radio buttons (pill toggle style) ─────────── */
 .ai-radio-row {
   display: flex;
-  gap: 16px;
+  gap: 6px;
 }
 
 .ai-radio-label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 0;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  color: var(--text);
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: none;
+  transition: all 0.12s;
 }
-.ai-radio-label input[type="radio"] { accent-color: var(--accent); }
+.ai-radio-label:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+.ai-radio-label input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.ai-radio-label:has(input:checked) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: transparent;
+}
 
 /* ── URL list (fetch mode) ────────────────────────────── */
 .ai-panel { display: flex; flex-direction: column; gap: 8px; }
@@ -1894,12 +1913,15 @@ body.skin-frost.dark #btn-schedule-day::before {
   max-height: 120px;
   overflow-y: auto;
   scrollbar-width: thin;
+  scrollbar-color: #ccc transparent;
 }
-#ai-url-list::-webkit-scrollbar { width: 0; }
-#ai-url-list:hover::-webkit-scrollbar { width: 6px; }
+#ai-url-list::-webkit-scrollbar { width: 6px; }
 #ai-url-list::-webkit-scrollbar-track { background: transparent; }
-#ai-url-list::-webkit-scrollbar-thumb { background: rgba(128, 128, 128, 0.3); border-radius: 3px; }
-#ai-url-list::-webkit-scrollbar-thumb:hover { background: rgba(128, 128, 128, 0.5); }
+#ai-url-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+#ai-url-list::-webkit-scrollbar-thumb:hover { background: #aaa; }
+body.dark #ai-url-list { scrollbar-color: #48484a transparent; }
+body.dark #ai-url-list::-webkit-scrollbar-thumb { background: #48484a; }
+body.dark #ai-url-list::-webkit-scrollbar-thumb:hover { background: #636366; }
 
 .ai-url-row {
   display: flex;
@@ -2149,6 +2171,31 @@ body.skin-glass.dark #ai-modal-close:hover,
 body.skin-glass.dark #ai-review-close:hover { background: rgba(255,255,255,0.18); color: #fff; }
 body.skin-glass #ai-modal,
 body.skin-glass #ai-review-modal { animation: glass-cell-enter 0.22s ease both; }
+
+/* Glass skin: AI radio toggle pills */
+body.skin-glass .ai-radio-label:has(input:checked) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+body.skin-frost:not(.dark) .ai-radio-label:has(input:checked) {
+  background: rgba(50, 50, 62, 0.09);
+  color: rgba(30, 30, 42, 0.88);
+  border-color: rgba(55, 55, 70, 0.32);
+}
+body.skin-frost.dark .ai-radio-label:has(input:checked) {
+  background: rgba(200, 205, 220, 0.14);
+  color: rgba(225, 228, 240, 0.92);
+  border-color: rgba(200, 205, 220, 0.26);
+}
+
+/* Glass skin: AI URL list scrollbar */
+body.skin-glass #ai-url-list { scrollbar-color: rgba(255,255,255,0.25) transparent; }
+body.skin-glass #ai-url-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); }
+body.skin-glass #ai-url-list::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.40); }
+body.skin-frost:not(.dark) #ai-url-list { scrollbar-color: rgba(55,55,70,0.25) transparent; }
+body.skin-frost:not(.dark) #ai-url-list::-webkit-scrollbar-thumb { background: rgba(55,55,70,0.25); }
+body.skin-frost:not(.dark) #ai-url-list::-webkit-scrollbar-thumb:hover { background: rgba(55,55,70,0.40); }
 
 /* ── Glass skin: clock time blocks ───────────────────── */
 body.skin-glass .clock-block-arc {

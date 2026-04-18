@@ -105,6 +105,25 @@ const BLOCK_COLOR_HIGHLIGHTS: Record<string, string> = {
   '#888':    '#aaaaaa',
 };
 
+// ── Skin-specific block color palettes ──────────────────
+// Softer, desaturated colors that harmonize with each glass skin's shader
+const BLOCK_COLORS_ARCTIC: string[]  = ['#6a9db8', '#b88a9e', '#7eb89c', '#c4b078', '#9a8ab8', '#b89a7a'];
+const BLOCK_COLORS_GLACIER: string[] = ['#5a8fc0', '#c07878', '#68b898', '#c0a858', '#8878c0', '#c09068'];
+const BLOCK_COLORS_TEAL: string[]    = ['#48a8b8', '#b86860', '#60b888', '#b8a048', '#9060b8', '#b88858'];
+
+const BLOCK_COLOR_HIGHLIGHTS_ARCTIC: Record<string, string> = {
+  '#6a9db8': '#9ac0d0', '#b88a9e': '#d0a8b8', '#7eb89c': '#a8d0c0',
+  '#c4b078': '#d8c8a0', '#9a8ab8': '#b8a8d0', '#b89a7a': '#d0b8a0',
+};
+const BLOCK_COLOR_HIGHLIGHTS_GLACIER: Record<string, string> = {
+  '#5a8fc0': '#8ab8e0', '#c07878': '#e0a0a0', '#68b898': '#98d8c0',
+  '#c0a858': '#e0c880', '#8878c0': '#b0a0e0', '#c09068': '#e0b898',
+};
+const BLOCK_COLOR_HIGHLIGHTS_TEAL: Record<string, string> = {
+  '#48a8b8': '#78c8d8', '#b86860': '#d89890', '#60b888': '#90d8b0',
+  '#b8a048': '#d8c078', '#9060b8': '#b890d8', '#b88858': '#d8b088',
+};
+
 // ── Shader palette presets ──────────────────────────────
 // Original dark glass — deep purple/indigo plasma
 const PALETTE_DARK: ShaderPalette = {
@@ -142,6 +161,26 @@ const SKINS: Record<SkinId, Skin> = {
 
 function getCurrentSkin(): SkinId {
   return (localStorage.getItem('skin') || 'default') as SkinId;
+}
+
+function getBlockColors(): string[] {
+  const skin = getCurrentSkin();
+  switch (skin) {
+    case 'arctic':  return BLOCK_COLORS_ARCTIC;
+    case 'glacier': return BLOCK_COLORS_GLACIER;
+    case 'teal':    return BLOCK_COLORS_TEAL;
+    default:        return BLOCK_COLORS;
+  }
+}
+
+function getBlockHighlights(): Record<string, string> {
+  const skin = getCurrentSkin();
+  switch (skin) {
+    case 'arctic':  return { ...BLOCK_COLOR_HIGHLIGHTS, ...BLOCK_COLOR_HIGHLIGHTS_ARCTIC };
+    case 'glacier': return { ...BLOCK_COLOR_HIGHLIGHTS, ...BLOCK_COLOR_HIGHLIGHTS_GLACIER };
+    case 'teal':    return { ...BLOCK_COLOR_HIGHLIGHTS, ...BLOCK_COLOR_HIGHLIGHTS_TEAL };
+    default:        return BLOCK_COLOR_HIGHLIGHTS;
+  }
 }
 
 function activateSkin(id: SkinId): void {
@@ -1076,8 +1115,38 @@ function bindCalendarUIEvents(): void {
   qId('ai-url-input').addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key === 'Enter') qId('ai-url-add-btn').click();
   });
+  qId('ai-keyword-add-btn').addEventListener('click', () => {
+    const input = qId<HTMLInputElement>('ai-keyword-input');
+    const kw    = input.value.trim();
+    if (!kw) return;
+    const current = getAiKeywordsFromList();
+    if (!current.includes(kw)) renderAiKeywordList([...current, kw]);
+    input.value = '';
+  });
+  qId('ai-keyword-input').addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter') qId('ai-keyword-add-btn').click();
+  });
   qId('ai-save-btn').addEventListener('click', saveAiSettings);
   qId('ai-run-btn').addEventListener('click', runAiImport);
+
+  qId('ai-date-start-btn').addEventListener('click', (e: MouseEvent) => {
+    openAiDatePicker('ai-date-start', e.currentTarget as HTMLElement);
+  });
+  qId('ai-date-end-btn').addEventListener('click', (e: MouseEvent) => {
+    openAiDatePicker('ai-date-end', e.currentTarget as HTMLElement);
+  });
+  qId('ai-dp-prev').addEventListener('click', aiDatePickerPrev);
+  qId('ai-dp-next').addEventListener('click', aiDatePickerNext);
+  qId('ai-dp-today').addEventListener('click', aiDatePickerToday);
+  qId('ai-dp-clear').addEventListener('click', aiDatePickerClear);
+  document.addEventListener('click', (e: MouseEvent) => {
+    const picker = qId('ai-datepicker');
+    if (picker.classList.contains('hidden')) return;
+    const target = e.target as HTMLElement;
+    if (!picker.contains(target) && !target.closest('.ai-date-btn')) {
+      closeAiDatePicker();
+    }
+  });
 
   qId('ai-review-close').addEventListener('click', closeAiReviewModal);
   qId('ai-review-overlay').addEventListener('click', (e: MouseEvent) => {
@@ -1231,7 +1300,10 @@ async function openAiSettingsModal(): Promise<void> {
     qId<HTMLInputElement>('ai-interests-input').value = cfg.interests   || '';
     qId<HTMLInputElement>('ai-ollama-url').value      = cfg.ollamaUrl   || 'http://localhost:11434';
     qId<HTMLInputElement>('ai-ollama-model').value    = cfg.ollamaModel || 'llama3.2';
+    setAiDateValue('ai-date-start', cfg.dateRangeStart || '');
+    setAiDateValue('ai-date-end', cfg.dateRangeEnd || '');
     renderAiUrlList(cfg.sites || []);
+    renderAiKeywordList(cfg.keywords || []);
     const providerRadio = document.querySelector(`input[name="ai-provider"][value="${cfg.provider || 'claude'}"]`) as HTMLInputElement | null;
     if (providerRadio) { providerRadio.checked = true; syncAiProviderPanel(cfg.provider || 'claude'); }
     const modeRadio = document.querySelector(`input[name="ai-mode"][value="${cfg.mode || 'fetch'}"]`) as HTMLInputElement | null;
@@ -1241,9 +1313,12 @@ async function openAiSettingsModal(): Promise<void> {
     qId<HTMLInputElement>('ai-mode-fetch').checked      = true;
     qId<HTMLInputElement>('ai-ollama-url').value        = 'http://localhost:11434';
     qId<HTMLInputElement>('ai-ollama-model').value      = 'llama3.2';
+    setAiDateValue('ai-date-start', '');
+    setAiDateValue('ai-date-end', '');
     syncAiProviderPanel('claude');
     syncAiModePanel('fetch');
     renderAiUrlList([]);
+    renderAiKeywordList([]);
   }
   setAiStatus('', '');
   qId('ai-overlay').classList.remove('hidden');
@@ -1270,6 +1345,144 @@ function syncAiModePanel(mode: string): void {
   qId('ai-websearch-panel').classList.toggle('hidden', mode !== 'websearch');
 }
 
+// ── AI Date Picker ────────────────────────────────────
+
+let aiDatePickerTarget: string | null = null;
+let aiDatePickerYear = new Date().getFullYear();
+let aiDatePickerMonth = new Date().getMonth();
+
+function setAiDateValue(inputId: string, value: string): void {
+  qId<HTMLInputElement>(inputId).value = value;
+  const btn = qId<HTMLButtonElement>(inputId + '-btn');
+  const textSpan = btn.querySelector('.ai-date-btn-text') as HTMLSpanElement;
+  if (value) {
+    textSpan.textContent = formatDisplayDate(value);
+    btn.classList.add('has-value');
+  } else {
+    textSpan.textContent = inputId === 'ai-date-start' ? 'Start date' : 'End date';
+    btn.classList.remove('has-value');
+  }
+}
+
+function openAiDatePicker(targetId: string, anchorBtn: HTMLElement): void {
+  aiDatePickerTarget = targetId;
+  const currentVal = qId<HTMLInputElement>(targetId).value;
+  if (currentVal && /^\d{4}-\d{2}-\d{2}$/.test(currentVal)) {
+    const [y, m] = currentVal.split('-').map(Number);
+    aiDatePickerYear = y;
+    aiDatePickerMonth = m - 1;
+  } else {
+    const now = new Date();
+    aiDatePickerYear = now.getFullYear();
+    aiDatePickerMonth = now.getMonth();
+  }
+  renderAiDatePicker();
+  const picker = qId('ai-datepicker');
+  picker.classList.remove('hidden');
+  const rect = anchorBtn.getBoundingClientRect();
+  const pickerHeight = 280;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const showAbove = spaceBelow < pickerHeight && rect.top > pickerHeight;
+  picker.style.left = rect.left + 'px';
+  picker.style.top = showAbove ? (rect.top - pickerHeight - 4) + 'px' : (rect.bottom + 4) + 'px';
+}
+
+function closeAiDatePicker(): void {
+  qId('ai-datepicker').classList.add('hidden');
+  aiDatePickerTarget = null;
+}
+
+function renderAiDatePicker(): void {
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+  qId('ai-dp-month-year').textContent = `${monthNames[aiDatePickerMonth]} ${aiDatePickerYear}`;
+
+  const daysContainer = qId('ai-dp-days');
+  daysContainer.innerHTML = '';
+
+  const firstDay = new Date(aiDatePickerYear, aiDatePickerMonth, 1).getDay();
+  const daysInMonth = new Date(aiDatePickerYear, aiDatePickerMonth + 1, 0).getDate();
+  const daysInPrevMonth = new Date(aiDatePickerYear, aiDatePickerMonth, 0).getDate();
+
+  const today = getTodayKey();
+  const selectedVal = aiDatePickerTarget ? qId<HTMLInputElement>(aiDatePickerTarget).value : '';
+
+  for (let i = firstDay - 1; i >= 0; i--) {
+    const day = daysInPrevMonth - i;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ai-dp-day other-month';
+    btn.textContent = String(day);
+    const m = aiDatePickerMonth === 0 ? 12 : aiDatePickerMonth;
+    const y = aiDatePickerMonth === 0 ? aiDatePickerYear - 1 : aiDatePickerYear;
+    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    btn.addEventListener('click', () => selectAiDate(dateStr));
+    daysContainer.appendChild(btn);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ai-dp-day';
+    btn.textContent = String(day);
+    const dateStr = `${aiDatePickerYear}-${String(aiDatePickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if (dateStr === today) btn.classList.add('today');
+    if (dateStr === selectedVal) btn.classList.add('selected');
+    btn.addEventListener('click', () => selectAiDate(dateStr));
+    daysContainer.appendChild(btn);
+  }
+
+  const totalCells = firstDay + daysInMonth;
+  const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+  for (let day = 1; day <= remaining; day++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ai-dp-day other-month';
+    btn.textContent = String(day);
+    const m = aiDatePickerMonth === 11 ? 1 : aiDatePickerMonth + 2;
+    const y = aiDatePickerMonth === 11 ? aiDatePickerYear + 1 : aiDatePickerYear;
+    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    btn.addEventListener('click', () => selectAiDate(dateStr));
+    daysContainer.appendChild(btn);
+  }
+}
+
+function selectAiDate(dateStr: string): void {
+  if (aiDatePickerTarget) {
+    setAiDateValue(aiDatePickerTarget, dateStr);
+  }
+  closeAiDatePicker();
+}
+
+function aiDatePickerPrev(): void {
+  aiDatePickerMonth--;
+  if (aiDatePickerMonth < 0) {
+    aiDatePickerMonth = 11;
+    aiDatePickerYear--;
+  }
+  renderAiDatePicker();
+}
+
+function aiDatePickerNext(): void {
+  aiDatePickerMonth++;
+  if (aiDatePickerMonth > 11) {
+    aiDatePickerMonth = 0;
+    aiDatePickerYear++;
+  }
+  renderAiDatePicker();
+}
+
+function aiDatePickerToday(): void {
+  selectAiDate(getTodayKey());
+}
+
+function aiDatePickerClear(): void {
+  if (aiDatePickerTarget) {
+    setAiDateValue(aiDatePickerTarget, '');
+  }
+  closeAiDatePicker();
+}
+
 function renderAiUrlList(sites: string[]): void {
   const list = qId('ai-url-list');
   list.innerHTML = '';
@@ -1293,18 +1506,47 @@ function renderAiUrlList(sites: string[]): void {
 }
 
 function getAiSitesFromList(): string[] {
-  return Array.from(document.querySelectorAll('.ai-url-row span')).map(s => s.textContent || '');
+  return Array.from(document.querySelectorAll('#ai-url-list .ai-url-row span')).map(s => s.textContent || '');
+}
+
+function renderAiKeywordList(keywords: string[]): void {
+  const list = qId('ai-keyword-list');
+  list.innerHTML = '';
+  keywords.forEach((kw, i) => {
+    const row  = document.createElement('div');
+    row.className = 'ai-url-row';
+    const span = document.createElement('span');
+    span.textContent = kw;
+    const btn  = document.createElement('button');
+    btn.className   = 'ai-url-remove';
+    btn.textContent = '\u2715';
+    btn.title       = 'Remove';
+    btn.addEventListener('click', () => {
+      const current = getAiKeywordsFromList();
+      current.splice(i, 1);
+      renderAiKeywordList(current);
+    });
+    row.append(span, btn);
+    list.appendChild(row);
+  });
+}
+
+function getAiKeywordsFromList(): string[] {
+  return Array.from(document.querySelectorAll('#ai-keyword-list .ai-url-row span')).map(s => s.textContent || '');
 }
 
 function getAiConfig(): AiConfig {
-  const provider    = (document.querySelector('input[name="ai-provider"]:checked') as HTMLInputElement | null)?.value || 'claude';
-  const apiKey      = qId<HTMLInputElement>('ai-apikey-input').value.trim();
-  const ollamaUrl   = qId<HTMLInputElement>('ai-ollama-url').value.trim();
-  const ollamaModel = qId<HTMLInputElement>('ai-ollama-model').value.trim();
-  const mode        = (document.querySelector('input[name="ai-mode"]:checked') as HTMLInputElement | null)?.value || 'fetch';
-  const interests   = qId<HTMLInputElement>('ai-interests-input').value.trim();
-  const sites       = getAiSitesFromList();
-  return { provider: provider as AiConfig['provider'], apiKey, ollamaUrl, ollamaModel, mode: mode as AiConfig['mode'], interests, sites };
+  const provider       = (document.querySelector('input[name="ai-provider"]:checked') as HTMLInputElement | null)?.value || 'claude';
+  const apiKey         = qId<HTMLInputElement>('ai-apikey-input').value.trim();
+  const ollamaUrl      = qId<HTMLInputElement>('ai-ollama-url').value.trim();
+  const ollamaModel    = qId<HTMLInputElement>('ai-ollama-model').value.trim();
+  const mode           = (document.querySelector('input[name="ai-mode"]:checked') as HTMLInputElement | null)?.value || 'fetch';
+  const interests      = qId<HTMLInputElement>('ai-interests-input').value.trim();
+  const sites          = getAiSitesFromList();
+  const keywords       = getAiKeywordsFromList();
+  const dateRangeStart = qId<HTMLInputElement>('ai-date-start').value.trim();
+  const dateRangeEnd   = qId<HTMLInputElement>('ai-date-end').value.trim();
+  return { provider: provider as AiConfig['provider'], apiKey, ollamaUrl, ollamaModel, mode: mode as AiConfig['mode'], interests, sites, keywords, dateRangeStart, dateRangeEnd };
 }
 
 function setAiStatus(msg: string, type: string): void {
@@ -1603,8 +1845,11 @@ function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
   // Radial gradient centered at the clock origin so the lighter highlight falls at the
   // inner ring edge and the base color lands at the outer edge, following the arc's depth.
   const defs = svgEl('defs', {});
-  [...BLOCK_COLORS, '#888'].forEach(color => {
-    const highlight = BLOCK_COLOR_HIGHLIGHTS[color] || color;
+  const blockHighlights = getBlockHighlights();
+  // Include default colors (for existing saved blocks) + current skin colors + gray
+  const allColors = [...new Set([...BLOCK_COLORS, ...getBlockColors(), '#888'])];
+  allColors.forEach(color => {
+    const highlight = blockHighlights[color] || BLOCK_COLOR_HIGHLIGHTS[color] || color;
     const grad = svgEl('radialGradient', {
       id: `block-grad-${color.replace('#', '')}`,
       cx: String(cx), cy: String(cy), r: String(r2),
@@ -1803,7 +2048,8 @@ function bindClockInteraction(svg: SVGSVGElement, cx: number, cy: number, r1: nu
 
     const startMin     = minutesFromPoint(cx, cy, pt.x, pt.y);
     const previewPath  = document.getElementById('clock-preview-arc') as SVGPathElement | null;
-    const previewColor = BLOCK_COLORS[(getDayData(key)?.timeBlocks?.length || 0) % BLOCK_COLORS.length];
+    const colors = getBlockColors();
+    const previewColor = colors[(getDayData(key)?.timeBlocks?.length || 0) % colors.length];
     previewPath?.setAttribute('fill', previewColor);
 
     let lastMin = startMin;
@@ -1943,13 +2189,14 @@ function closeTimeBlockPopup(): void {
 async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMin: number; endMin: number; label: string }, recurrence = 'none'): Promise<void> {
   pushCalendarSnapshot();
   const ampm = inferBlockAmPm(startMin);
+  const blockColors = getBlockColors();
   if (recurrence === 'none') {
     const day   = getOrInitDayData(key);
-    const color = BLOCK_COLORS[day.timeBlocks.length % BLOCK_COLORS.length];
+    const color = blockColors[day.timeBlocks.length % blockColors.length];
     day.timeBlocks.push({ id: generateCalendarEntryId(), startMin, endMin, label, color, ampm, completed: false });
   } else {
     if (!calData._recurring) calData._recurring = [];
-    const color = BLOCK_COLORS[calData._recurring.length % BLOCK_COLORS.length];
+    const color = blockColors[calData._recurring.length % blockColors.length];
     const [y, m, d] = key.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     calData._recurring.push({

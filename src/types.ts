@@ -75,6 +75,11 @@ export interface AiConfig {
   ollamaModel: string;
   interests: string;
   sites: string[];
+  keywords: string[];
+  /** Optional start of date range filter (YYYY-MM-DD) */
+  dateRangeStart: string;
+  /** Optional end of date range filter (YYYY-MM-DD) */
+  dateRangeEnd: string;
 }
 
 export interface AiEvent {

@@ -51,7 +51,7 @@
       <button class="month-tab" data-month="11">Dec</button>
     </div>
     <div id="view-tabs">
-      <button class="view-tab" id="btn-ai"   title="AI Event Import">&#10022;</button>
+      <button class="view-tab" id="btn-ai"   title="Event Import">&#10022;</button>
       <button class="view-tab active" data-view="calendar">Calendar</button>
       <button class="view-tab" data-view="schedule">Schedule</button>
     </div>
@@ -145,7 +145,7 @@
   <div id="ai-overlay" class="hidden">
     <div id="ai-modal">
       <button id="ai-modal-close">&#10005;</button>
-      <h2 id="ai-modal-title">AI Event Import</h2>
+      <h2 id="ai-modal-title">Event Import</h2>
 
       <div class="ai-field-group">
         <label class="ai-label">Provider</label>
@@ -206,6 +206,15 @@
             <button id="ai-url-add-btn" class="ai-btn-secondary">Add</button>
           </div>
         </div>
+        <div class="ai-field-group">
+          <label class="ai-label">Filter Keywords <span class="ai-label-hint">(optional)</span></label>
+          <div id="ai-keyword-list"></div>
+          <div class="ai-url-add-row">
+            <input id="ai-keyword-input" type="text" class="ai-input"
+                   placeholder="jazz, concert, meetup" autocomplete="off" />
+            <button id="ai-keyword-add-btn" class="ai-btn-secondary">Add</button>
+          </div>
+        </div>
       </div>
 
       <div id="ai-websearch-panel" class="ai-panel hidden">
@@ -217,12 +226,50 @@
         </div>
       </div>
 
+      <div class="ai-field-group">
+        <label class="ai-label">Date Range <span class="ai-label-hint">(optional)</span></label>
+        <div class="ai-date-range-row">
+          <button type="button" id="ai-date-start-btn" class="ai-date-btn" data-target="ai-date-start">
+            <span class="ai-date-btn-text">Start date</span>
+            <svg class="ai-date-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
+          </button>
+          <input id="ai-date-start" type="hidden" />
+          <span class="ai-date-sep">to</span>
+          <button type="button" id="ai-date-end-btn" class="ai-date-btn" data-target="ai-date-end">
+            <span class="ai-date-btn-text">End date</span>
+            <svg class="ai-date-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
+          </button>
+          <input id="ai-date-end" type="hidden" />
+        </div>
+      </div>
+
       <div class="ai-modal-actions">
         <button id="ai-save-btn" class="ai-btn-primary">Save Settings</button>
         <button id="ai-run-btn" class="ai-btn-primary">Run Import</button>
       </div>
 
       <div id="ai-status" class="ai-status hidden"></div>
+    </div>
+
+    <!-- Custom Date Picker (outside modal for proper overlay) -->
+    <div id="ai-datepicker" class="ai-datepicker hidden">
+      <div class="ai-datepicker-header">
+        <button type="button" id="ai-dp-prev" class="ai-dp-nav">&#9664;</button>
+        <span id="ai-dp-month-year"></span>
+        <button type="button" id="ai-dp-next" class="ai-dp-nav">&#9654;</button>
+      </div>
+      <div class="ai-datepicker-weekdays">
+        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+      </div>
+      <div id="ai-dp-days" class="ai-datepicker-days"></div>
+      <div class="ai-datepicker-footer">
+        <button type="button" id="ai-dp-clear" class="ai-btn-secondary">Clear</button>
+        <button type="button" id="ai-dp-today" class="ai-btn-secondary">Today</button>
+      </div>
     </div>
   </div>
 

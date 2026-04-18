@@ -1218,8 +1218,13 @@ body.skin-glass .day-cell:hover {
 
 body.skin-glass .day-cell.today {
   border-color: var(--today-ring);
-  background: rgba(255, 107, 107, 0.10);
-  box-shadow: inset 0 1px 0 rgba(255,107,107,0.20), 0 0 18px rgba(255,107,107,0.12);
+  background: rgba(255, 107, 107, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255,107,107,0.28), 0 0 18px rgba(255,107,107,0.18);
+}
+
+body.skin-frost:not(.dark) .day-cell.today {
+  background: rgba(26, 95, 168, 0.28);
+  box-shadow: inset 0 1px 0 rgba(26, 95, 168, 0.20), 0 0 18px rgba(26, 95, 168, 0.12);
 }
 
 body.skin-glass .day-cell.empty {
@@ -1848,6 +1853,12 @@ body.skin-frost.dark #btn-schedule-day::before {
   letter-spacing: 0.07em;
   color: var(--text-muted);
 }
+.ai-label-hint {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0.7;
+}
 
 .ai-input,
 .ai-textarea {
@@ -1906,7 +1917,8 @@ body.skin-frost.dark #btn-schedule-day::before {
 .ai-panel { display: flex; flex-direction: column; gap: 8px; }
 .ai-panel.hidden { display: none; }
 
-#ai-url-list {
+#ai-url-list,
+#ai-keyword-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1915,13 +1927,20 @@ body.skin-frost.dark #btn-schedule-day::before {
   scrollbar-width: thin;
   scrollbar-color: #ccc transparent;
 }
-#ai-url-list::-webkit-scrollbar { width: 6px; }
-#ai-url-list::-webkit-scrollbar-track { background: transparent; }
-#ai-url-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
-#ai-url-list::-webkit-scrollbar-thumb:hover { background: #aaa; }
-body.dark #ai-url-list { scrollbar-color: #48484a transparent; }
-body.dark #ai-url-list::-webkit-scrollbar-thumb { background: #48484a; }
-body.dark #ai-url-list::-webkit-scrollbar-thumb:hover { background: #636366; }
+#ai-url-list::-webkit-scrollbar,
+#ai-keyword-list::-webkit-scrollbar { width: 6px; }
+#ai-url-list::-webkit-scrollbar-track,
+#ai-keyword-list::-webkit-scrollbar-track { background: transparent; }
+#ai-url-list::-webkit-scrollbar-thumb,
+#ai-keyword-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+#ai-url-list::-webkit-scrollbar-thumb:hover,
+#ai-keyword-list::-webkit-scrollbar-thumb:hover { background: #aaa; }
+body.dark #ai-url-list,
+body.dark #ai-keyword-list { scrollbar-color: #48484a transparent; }
+body.dark #ai-url-list::-webkit-scrollbar-thumb,
+body.dark #ai-keyword-list::-webkit-scrollbar-thumb { background: #48484a; }
+body.dark #ai-url-list::-webkit-scrollbar-thumb:hover,
+body.dark #ai-keyword-list::-webkit-scrollbar-thumb:hover { background: #636366; }
 
 .ai-url-row {
   display: flex;
@@ -1958,6 +1977,122 @@ body.dark #ai-url-list::-webkit-scrollbar-thumb:hover { background: #636366; }
   gap: 6px;
 }
 .ai-url-add-row .ai-input { flex: 1; }
+
+/* ── Date range row ──────────────────────────────────── */
+.ai-date-range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-date-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s;
+  text-align: left;
+}
+.ai-date-btn:hover { border-color: var(--accent); }
+.ai-date-btn:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.ai-date-btn-text { flex: 1; }
+.ai-date-btn-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.ai-date-btn.has-value .ai-date-btn-text { color: var(--text); }
+.ai-date-btn:not(.has-value) .ai-date-btn-text { color: var(--text-muted); }
+.ai-date-sep {
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* ── Custom Date Picker ─────────────────────────────── */
+.ai-datepicker {
+  position: fixed;
+  z-index: 10000;
+  background: var(--card-glass, var(--card));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  width: 240px;
+}
+.ai-datepicker.hidden { display: none; }
+.ai-datepicker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ai-dp-nav {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 10px;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.ai-dp-nav:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.ai-datepicker-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ai-datepicker-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.ai-dp-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.ai-dp-day:hover { background: var(--accent-soft); color: var(--accent); }
+.ai-dp-day.other-month { color: var(--text-muted); opacity: 0.4; }
+.ai-dp-day.today { border: 1px solid var(--accent); }
+.ai-dp-day.selected { background: var(--accent); color: #fff; }
+.ai-datepicker-footer {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.ai-datepicker-footer .ai-btn-secondary { flex: 1; padding: 5px 10px; font-size: 11px; }
 
 /* ── Buttons ─────────────────────────────────────────── */
 .ai-modal-actions {
@@ -2197,22 +2332,77 @@ body.skin-frost:not(.dark) #ai-url-list { scrollbar-color: rgba(55,55,70,0.25) t
 body.skin-frost:not(.dark) #ai-url-list::-webkit-scrollbar-thumb { background: rgba(55,55,70,0.25); }
 body.skin-frost:not(.dark) #ai-url-list::-webkit-scrollbar-thumb:hover { background: rgba(55,55,70,0.40); }
 
-/* ── Glass skin: clock time blocks ───────────────────── */
+/* ── Glass skin: clock time blocks (frosted glass aesthetic) ─ */
 body.skin-glass .clock-block-arc {
-  opacity: 0.62;
-  stroke: rgba(255, 255, 255, 0.55);
-  stroke-width: 1;
-}
-/* Keep recurring dashes but blend with the glass stroke colour */
-body.skin-glass .clock-block-arc.recurring-arc {
-  stroke: rgba(255, 255, 255, 0.42);
+  opacity: 0.52;
+  stroke: rgba(255, 255, 255, 0.6);
   stroke-width: 1.5;
-  stroke-dasharray: 4 3;
+  filter:
+    saturate(0.82)
+    drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15))
+    drop-shadow(0 0 14px rgba(255, 255, 255, 0.25));
+}
+body.skin-glass .clock-block-arc:hover {
+  opacity: 0.7;
+  filter:
+    saturate(0.88)
+    drop-shadow(0 3px 10px rgba(0, 0, 0, 0.2))
+    drop-shadow(0 0 18px rgba(255, 255, 255, 0.35));
+}
+body.skin-glass .clock-block-arc.recurring-arc {
+  stroke: rgba(255, 255, 255, 0.45);
+  stroke-width: 1.5;
+  stroke-dasharray: none;
+}
+
+/* ── Light-glass skins: softer palette for frosted backgrounds ─ */
+body.skin-frost:not(.dark) .clock-block-arc {
+  opacity: 0.48;
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 2;
+  filter:
+    saturate(0.75)
+    drop-shadow(0 2px 10px rgba(40, 80, 120, 0.12))
+    drop-shadow(0 0 16px rgba(255, 255, 255, 0.5));
+}
+body.skin-frost:not(.dark) .clock-block-arc:hover {
+  opacity: 0.65;
+  filter:
+    saturate(0.82)
+    drop-shadow(0 3px 12px rgba(40, 80, 120, 0.18))
+    drop-shadow(0 0 20px rgba(255, 255, 255, 0.6));
+}
+body.skin-frost:not(.dark) .clock-block-arc.recurring-arc {
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-dasharray: none;
 }
 
 /* ── Glass skin: block legend chips ─────────────────── */
 body.skin-glass .block-chip {
-  opacity: 0.72;
-  border: 1px solid rgba(255, 255, 255, 0.40);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  opacity: 0.65;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 8px rgba(0, 0, 0, 0.12),
+    0 0 12px rgba(255, 255, 255, 0.15);
+  filter: saturate(0.82);
+}
+body.skin-glass .block-chip:hover {
+  opacity: 0.8;
+  filter: saturate(0.9);
+}
+
+/* ── Light-glass skins: block legend chips ────────────── */
+body.skin-frost:not(.dark) .block-chip {
+  opacity: 0.6;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 2px 10px rgba(40, 80, 120, 0.1),
+    0 0 14px rgba(255, 255, 255, 0.35);
+  filter: saturate(0.75);
+}
+body.skin-frost:not(.dark) .block-chip:hover {
+  opacity: 0.75;
+  filter: saturate(0.85);
 }

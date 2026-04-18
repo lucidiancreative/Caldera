@@ -177,12 +177,7 @@ async function renderPage(rawUrl: string): Promise<string> {
         `);
         const trimmedText  = text.replace(/\s+/g, ' ').trim().slice(0, 45_000);
         const linkSection  = linksJson !== '[]'
-          ? `\nLINKS ON PAGE (text → url):\n${
-              (JSON.parse(linksJson) as { text: string; href: string }[])
-                .map(l => `${l.text} → ${l.href}`)
-                .join('\n')
-                .slice(0, 5_000)
-            }`
+          ? `\nLINKS ON PAGE (JSON array — use these to find sourceUrl for each event):\n${linksJson.slice(0, 8_000)}`
           : '';
         const trimmed = (trimmedText + linkSection).slice(0, 50_000);
         console.log(`[ai-import] rendered ${url} (${reason}) — ${trimmedText.length} chars text, ${linksJson.length} chars links`);
@@ -243,15 +238,36 @@ async function buildPageDumps(sites: string[]): Promise<string[]> {
   return results;
 }
 
-function buildFetchPrompt(today: string, interests: string, pageDumps: string[]): string {
+function buildFetchPrompt(
+  today: string,
+  interests: string,
+  keywords: string[],
+  pageDumps: string[],
+  dateRangeStart?: string,
+  dateRangeEnd?: string,
+): string {
+  const keywordRule = keywords.length
+    ? `- IMPORTANT: Only include events where the title or description contains at least one of these keywords (case-insensitive): ${keywords.join(', ')}. If no events match these keywords, return []\n`
+    : '';
+  const rangeStart = dateRangeStart || today;
+  const rangeEnd   = dateRangeEnd || '';
+  const dateRangeRule = rangeEnd
+    ? `- Only include events with dates from ${rangeStart} to ${rangeEnd} (inclusive).\n`
+    : `- Only include events on or after ${rangeStart}.\n`;
   return (
     `Today is ${today}. Extract upcoming calendar events from the page text below.\n` +
     (interests ? `Focus on events related to: ${interests}\n` : '') +
     `\nRules:\n` +
     `- Return ONLY a raw JSON array, no markdown, no prose, no code fences\n` +
     `- Each item must have: title (string), date (YYYY-MM-DD), time ("HH:MM" 24h or null), notes (string), sourceUrl (string)\n` +
-    `- sourceUrl must be the direct link to that specific event's page — use the LINKS ON PAGE section to find the matching href. Fall back to the source URL only if no specific event link exists.\n` +
-    `- Convert all dates to YYYY-MM-DD format. Only include events on or after ${today}.\n` +
+    `- sourceUrl must be the direct link to that specific event's page, NOT the site homepage.\n` +
+    `  • Search the LINKS ON PAGE JSON for hrefs matching the event by keyword overlap in the link text.\n` +
+    `  • Prefer URLs containing /event/, /show/, /tickets/, /details/, dates, or slugified event names.\n` +
+    `  • Avoid short paths like "/" or "/events" — those are listing pages, not event pages.\n` +
+    `  • Only fall back to the SOURCE header URL if no specific event link exists.\n` +
+    `- Convert all dates to YYYY-MM-DD format.\n` +
+    dateRangeRule +
+    keywordRule +
     `- If a page says it is empty or JS-rendered, skip it\n` +
     `- If no events are found at all, return []\n\n` +
     pageDumps.join('\n\n')
@@ -263,26 +279,39 @@ function buildFetchPrompt(today: string, interests: string, pageDumps: string[])
 async function runFetchImport(aiConfig: AiConfig): Promise<AiImportResult> {
   const today     = new Date().toISOString().split('T')[0];
   const pageDumps = await buildPageDumps(aiConfig.sites ?? []);
-  const prompt    = buildFetchPrompt(today, aiConfig.interests, pageDumps);
+  const prompt    = buildFetchPrompt(today, aiConfig.interests, aiConfig.keywords ?? [], pageDumps, aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
   const response  = await callClaude(aiConfig.apiKey, [{ role: 'user', content: prompt }]);
   const rawText   = response.content.filter(b => b.type === 'text').map(b => b.text ?? '').join('');
   console.log('[ai-import] Claude raw response:', rawText.slice(0, 500));
-  return parseEventText(rawText, 'Claude');
+  return filterEventsByDateRange(parseEventText(rawText, 'Claude'), aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
 }
 
 // ── Claude: Web Search mode ───────────────────────────────────────────────────
 
 async function runWebSearchImport(aiConfig: AiConfig): Promise<AiImportResult> {
-  const today   = new Date().toISOString().split('T')[0];
+  const today    = new Date().toISOString().split('T')[0];
+  const keywords = aiConfig.keywords ?? [];
+  const keywordRule = keywords.length
+    ? `\nIMPORTANT: Only include events where the title or description contains at least one of these keywords (case-insensitive): ${keywords.join(', ')}. If no events match these keywords, return [].`
+    : '';
+  const rangeStart = aiConfig.dateRangeStart || today;
+  const rangeEnd   = aiConfig.dateRangeEnd || '';
+  const dateRangeRule = rangeEnd
+    ? `Look for specific events with dates from ${rangeStart} to ${rangeEnd}.\n`
+    : `Look for specific events on or after ${rangeStart}.\n`;
   const tools   = [{ type: 'web_search_20250305', name: 'web_search' }];
   const messages: ClaudeMessage[] = [{
     role: 'user',
     content:
       `Today is ${today}. Search the web to find upcoming events matching these interests: "${aiConfig.interests}".\n` +
-      `Look for specific events with real dates in the next 60 days.\n` +
+      dateRangeRule +
       `After searching, return ONLY a JSON array with these keys per event:\n` +
-      `  title (string), date (YYYY-MM-DD), time (HH:MM or null), notes (string), sourceUrl (string)\n` +
-      `sourceUrl must be the direct URL to that specific event's page (not the site homepage).\n` +
+      `  title (string), date (YYYY-MM-DD), time (HH:MM or null), notes (string), sourceUrl (string)\n\n` +
+      `CRITICAL: sourceUrl must be the direct link to that specific event's detail page.\n` +
+      `  • Click through search results to find the actual event page URL.\n` +
+      `  • Look for URLs containing /event/, /show/, /tickets/, dates, or event IDs.\n` +
+      `  • NEVER return homepage URLs like "https://example.com/" or listing pages like "/events".\n` +
+      `  • If you cannot find a specific event page URL, omit that event entirely.${keywordRule}\n` +
       `Return [] if nothing is found. Do not include any prose outside the JSON array.`,
   }];
 
@@ -305,7 +334,7 @@ async function runWebSearchImport(aiConfig: AiConfig): Promise<AiImportResult> {
       break;
     }
   }
-  return parseEventText(finalText, 'Claude');
+  return filterEventsByDateRange(parseEventText(finalText, 'Claude'), aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
 }
 
 // ── Claude API call ───────────────────────────────────────────────────────────
@@ -346,10 +375,10 @@ async function callClaude(
 async function runOllamaFetchImport(aiConfig: AiConfig): Promise<AiImportResult> {
   const today     = new Date().toISOString().split('T')[0];
   const pageDumps = await buildPageDumps(aiConfig.sites ?? []);
-  const prompt    = buildFetchPrompt(today, aiConfig.interests, pageDumps);
+  const prompt    = buildFetchPrompt(today, aiConfig.interests, aiConfig.keywords ?? [], pageDumps, aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
   const text      = await callOllama(aiConfig.ollamaUrl, aiConfig.ollamaModel, prompt);
   console.log('[ai-import] Ollama raw response:', text.slice(0, 500));
-  return parseEventText(text, 'Ollama');
+  return filterEventsByDateRange(parseEventText(text, 'Ollama'), aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
 }
 
 // ── Ollama API call ───────────────────────────────────────────────────────────
@@ -407,6 +436,16 @@ function sanitizeSourceUrl(raw: string): string {
   } catch { return ''; }
 }
 
+/** Checks if a URL looks like a homepage or listing page rather than a specific event page. */
+function isLikelyHomepage(url: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname;
+    return path === '/' || path === '' || /^\/(events|shows|calendar|listings)\/?$/i.test(path);
+  } catch { return false; }
+}
+
 // ── Shared response parser ────────────────────────────────────────────────────
 
 function tryParseJsonArray(candidate: string): unknown[] | null {
@@ -454,10 +493,29 @@ function parseEventText(text: string, source: string): AiImportResult {
         notes:     typeof e.notes === 'string' ? e.notes.trim().slice(0, MAX_NOTES_LEN) : '',
         sourceUrl: typeof e.sourceUrl === 'string' ? sanitizeSourceUrl(e.sourceUrl.trim()) : '',
       }));
+    const homepageCount = events.filter(e => isLikelyHomepage(e.sourceUrl)).length;
+    if (homepageCount > 0) {
+      console.warn(`[ai-import] ${source}: ${homepageCount}/${events.length} events have homepage-like URLs — links may not be specific`);
+    }
     console.log(`[ai-import] ${source}: parsed ${events.length} valid events (${raw.length} raw)`);
     return { events };
   } catch (err) {
     console.error(`[ai-import] ${source}: event mapping error:`, err);
     return { error: `${source} returned malformed JSON.` };
   }
+}
+
+// ── Date range filter ─────────────────────────────────────────────────────────
+
+function filterEventsByDateRange(result: AiImportResult, start?: string, end?: string): AiImportResult {
+  if (result.error || !result.events) return result;
+  if (!start && !end) return result;
+
+  const filtered = result.events.filter(ev => {
+    if (start && ev.date < start) return false;
+    if (end && ev.date > end) return false;
+    return true;
+  });
+  console.log(`[ai-import] date range filter: ${result.events.length} → ${filtered.length} events (${start || 'any'} to ${end || 'any'})`);
+  return { events: filtered };
 }

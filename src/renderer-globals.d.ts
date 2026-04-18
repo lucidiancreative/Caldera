@@ -66,6 +66,9 @@ interface AiConfig {
   ollamaModel: string;
   interests: string;
   sites: string[];
+  keywords: string[];
+  dateRangeStart: string;
+  dateRangeEnd: string;
 }
 
 interface AiEvent {

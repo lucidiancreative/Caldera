@@ -1,5 +1,6 @@
 /* ── Reset & base ─────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button:focus, [role="button"]:focus { outline: none; }
 
 :root {
   --bg:          #f0f0f0;
@@ -1100,7 +1101,7 @@ body.dark #block-label-popup { box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
 /* Recurring arc — dashed outline to distinguish from one-off blocks */
 .clock-block-arc.recurring-arc {
   stroke: rgba(255,255,255,0.35);
-  stroke-width: 1.5;
+  stroke-width: 0.5;
   stroke-dasharray: 4 3;
 }
 
@@ -1161,9 +1162,13 @@ body.skin-frost:not(.dark) {
 /* ── Frost skin light mode overrides (per-shader) ─────── */
 body.skin-arctic:not(.dark) {
   --surface: rgba(255, 255, 255, 0.42);
+  --today-ring:  rgba(120, 140, 160, 0.80);
+  --today-ring-bg: rgba(160, 180, 200, 0.70);
 }
 body.skin-glacier:not(.dark) {
   --surface: rgba(255, 255, 255, 0.42);
+  --today-ring:  rgba(100, 130, 160, 0.80);
+  --today-ring-bg: rgba(140, 170, 200, 0.70);
 }
 body.skin-teal:not(.dark) {
   --surface: rgba(255, 255, 255, 0.42);
@@ -1174,14 +1179,44 @@ body.skin-frost.dark {
 }
 
 /* ── Frost skin dark mode overrides (per-shader) ──────── */
+/* Arctic: icy white-grey, very subtle */
 body.skin-arctic.dark {
-  --surface: rgba(10, 10, 20, 0.60);
+  --surface:     rgba(18, 24, 32, 0.72);
+  --border:      rgba(200, 215, 230, 0.26);
+  --text:        #e8f0f6;
+  --text-muted:  rgba(200, 218, 235, 0.62);
+  --accent:      #a8c8e0;
+  --accent-soft: rgba(180, 205, 225, 0.16);
+  --today-ring:  rgba(200, 215, 230, 0.85);
+  --star:        #f0c050;
+  --accent-shadow: rgba(180, 205, 225, 0.20);
+  --today-ring-bg: rgba(200, 215, 230, 0.65);
 }
+/* Glacier: muted blue-grey */
 body.skin-glacier.dark {
-  --surface: rgba(10, 10, 20, 0.60);
+  --surface:     rgba(16, 26, 38, 0.72);
+  --border:      rgba(170, 195, 220, 0.28);
+  --text:        #e4eef8;
+  --text-muted:  rgba(180, 205, 230, 0.65);
+  --accent:      #90b8d8;
+  --accent-soft: rgba(160, 190, 220, 0.18);
+  --today-ring:  rgba(170, 195, 220, 0.85);
+  --star:        #e8a830;
+  --accent-shadow: rgba(160, 190, 220, 0.22);
+  --today-ring-bg: rgba(170, 195, 220, 0.65);
 }
+/* Teal: warm aqua-green, minty */
 body.skin-teal.dark {
-  --surface: rgba(10, 10, 20, 0.60);
+  --surface:     rgba(16, 30, 32, 0.72);
+  --border:      rgba(100, 180, 175, 0.28);
+  --text:        #e4f4f2;
+  --text-muted:  rgba(175, 215, 210, 0.65);
+  --accent:      #50b8a8;
+  --accent-soft: rgba(80, 184, 168, 0.18);
+  --today-ring:  #40a898;
+  --star:        #e8b040;
+  --accent-shadow: rgba(80, 184, 168, 0.22);
+  --today-ring-bg: rgba(64, 168, 152, 0.75);
 }
 
 /* ── Glass panels ─────────────────────────────────────── */
@@ -1222,9 +1257,41 @@ body.skin-glass .day-cell.today {
   box-shadow: inset 0 1px 0 rgba(255,107,107,0.28), 0 0 18px rgba(255,107,107,0.18);
 }
 
-body.skin-frost:not(.dark) .day-cell.today {
-  background: rgba(26, 95, 168, 0.28);
-  box-shadow: inset 0 1px 0 rgba(26, 95, 168, 0.20), 0 0 18px rgba(26, 95, 168, 0.12);
+/* Arctic light: icy white-grey */
+body.skin-arctic:not(.dark) .day-cell.today {
+  border-color: rgba(120, 140, 160, 0.55);
+  background: rgba(180, 195, 210, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.50), 0 0 18px rgba(160, 180, 200, 0.20);
+}
+/* Arctic dark: pale blue-grey */
+body.skin-arctic.dark .day-cell.today {
+  border-color: rgba(200, 215, 230, 0.50);
+  background: rgba(200, 215, 230, 0.18);
+  box-shadow: inset 0 1px 0 rgba(220, 230, 240, 0.22), 0 0 18px rgba(200, 215, 230, 0.14);
+}
+/* Glacier light: soft blue-grey */
+body.skin-glacier:not(.dark) .day-cell.today {
+  border-color: rgba(100, 130, 160, 0.55);
+  background: rgba(150, 175, 200, 0.30);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 0 18px rgba(140, 170, 200, 0.18);
+}
+/* Glacier dark: muted sky-grey */
+body.skin-glacier.dark .day-cell.today {
+  border-color: rgba(170, 195, 220, 0.50);
+  background: rgba(170, 195, 220, 0.20);
+  box-shadow: inset 0 1px 0 rgba(190, 210, 230, 0.22), 0 0 18px rgba(170, 195, 220, 0.14);
+}
+/* Teal light: aqua-green */
+body.skin-teal:not(.dark) .day-cell.today {
+  border-color: var(--today-ring);
+  background: rgba(26, 120, 110, 0.24);
+  box-shadow: inset 0 1px 0 rgba(26, 120, 110, 0.20), 0 0 18px rgba(26, 120, 110, 0.12);
+}
+/* Teal dark: minty aqua */
+body.skin-teal.dark .day-cell.today {
+  border-color: var(--today-ring);
+  background: rgba(64, 168, 152, 0.22);
+  box-shadow: inset 0 1px 0 rgba(64, 168, 152, 0.24), 0 0 18px rgba(64, 168, 152, 0.16);
 }
 
 body.skin-glass .day-cell.empty {
@@ -1315,6 +1382,41 @@ body.skin-frost:not(.dark) #ai-modal-close:hover,
 body.skin-frost:not(.dark) #ai-review-close:hover {
   background: rgba(22, 34, 50, 0.17);
   color: var(--text);
+}
+
+/* Light-glass event cards and toolbar — base glass uses white overlays which
+   are invisible on the near-white frosted surfaces of arctic/glacier/teal */
+body.skin-frost:not(.dark) .event-card {
+  background: rgba(22, 34, 50, 0.06);
+  border-color: rgba(55, 55, 70, 0.18);
+}
+body.skin-frost:not(.dark) .card-toolbar {
+  background: rgba(22, 34, 50, 0.05);
+  border-bottom-color: rgba(55, 55, 70, 0.14);
+}
+body.skin-arctic.dark .event-card {
+  background: rgba(18, 24, 32, 0.45);
+  border-color: rgba(180, 200, 220, 0.20);
+}
+body.skin-arctic.dark .card-toolbar {
+  background: rgba(18, 24, 32, 0.40);
+  border-bottom-color: rgba(180, 200, 220, 0.16);
+}
+body.skin-glacier.dark .event-card {
+  background: rgba(16, 26, 38, 0.45);
+  border-color: rgba(120, 170, 210, 0.22);
+}
+body.skin-glacier.dark .card-toolbar {
+  background: rgba(16, 26, 38, 0.40);
+  border-bottom-color: rgba(120, 170, 210, 0.18);
+}
+body.skin-teal.dark .event-card {
+  background: rgba(16, 30, 32, 0.45);
+  border-color: rgba(100, 180, 175, 0.22);
+}
+body.skin-teal.dark .card-toolbar {
+  background: rgba(16, 30, 32, 0.40);
+  border-bottom-color: rgba(100, 180, 175, 0.18);
 }
 
 /* ── Entrance animations ──────────────────────────────── */
@@ -1493,17 +1595,6 @@ body.skin-glass #skin-modal-close:hover { background: rgba(255,255,255,0.26); }
 }
 body.dark .skin-preview-default {
   background: linear-gradient(135deg, #111113 0%, #1a234a 100%);
-}
-
-.skin-preview-glass {
-  background: linear-gradient(135deg, #0d0d1f 0%, #1a2a40 40%, #2a1a3a 70%, #0a1a2a 100%);
-}
-.skin-preview-glass::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(255,255,255,0.12);
-  border-radius: inherit;
 }
 
 .skin-preview-arctic {
@@ -1687,24 +1778,39 @@ body.skin-frost.dark .task-btn {
 /* Base glass (dark shader): override the hardcoded #e0e0e0 hover so it reads as frosted glass */
 body.skin-glass #win-controls button:hover { background: rgba(255,255,255,0.18); }
 
-body.skin-frost #win-controls button:hover {
+body.skin-frost:not(.dark) #win-controls button:hover {
   background: rgba(55, 55, 70, 0.10);
+}
+body.skin-frost.dark #win-controls button:hover {
+  background: rgba(200, 205, 220, 0.14);
 }
 
 /* ── Light-glass action buttons (arctic / glacier / teal) ────────────────────
    These skins sit on near-white shader backgrounds, so the base glass hover
    (white radial + pale purple) can feel muddy or too low-contrast. */
-body.skin-frost #btn-add-event,
-body.skin-frost #btn-schedule-day {
+body.skin-frost:not(.dark) #btn-add-event,
+body.skin-frost:not(.dark) #btn-schedule-day {
   color: rgba(30, 30, 42, 0.75);
   border-color: rgba(55, 55, 70, 0.30);
 }
-body.skin-frost #btn-add-event:hover,
-body.skin-frost #btn-schedule-day:hover {
+body.skin-frost:not(.dark) #btn-add-event:hover,
+body.skin-frost:not(.dark) #btn-schedule-day:hover {
   background: linear-gradient(150deg, rgba(50,50,62,0.09) 0%, rgba(30,30,42,0.06) 100%);
   border-color: rgba(55, 55, 70, 0.45);
   color: rgba(22, 34, 50, 0.92);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.42);
+}
+body.skin-frost.dark #btn-add-event,
+body.skin-frost.dark #btn-schedule-day {
+  color: rgba(200, 205, 220, 0.80);
+  border-color: rgba(200, 205, 220, 0.26);
+}
+body.skin-frost.dark #btn-add-event:hover,
+body.skin-frost.dark #btn-schedule-day:hover {
+  background: linear-gradient(150deg, rgba(200,205,218,0.12) 0%, rgba(170,175,192,0.08) 100%);
+  border-color: rgba(200, 205, 220, 0.38);
+  color: rgba(225, 228, 240, 0.95);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.09);
 }
 
 /* Light mode delete — keep red but matched to light-glass opacity */
@@ -1716,37 +1822,67 @@ body.skin-frost:not(.dark) .card-toolbar .btn-del-card:hover {
 }
 
 /* Schedule task list buttons */
-body.skin-frost .task-btn:hover {
+body.skin-frost:not(.dark) .task-btn:hover {
   background: linear-gradient(150deg, rgba(50, 50, 62, 0.09) 0%, rgba(30, 30, 42, 0.06) 100%);
   border-color: rgba(55, 55, 70, 0.28);
   color: rgba(30, 30, 42, 0.88);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.40);
 }
-body.skin-frost .task-btn-del:hover {
+body.skin-frost.dark .task-btn:hover {
+  background: linear-gradient(150deg, rgba(200,205,218,0.12) 0%, rgba(170,175,192,0.08) 100%);
+  border-color: rgba(200, 205, 220, 0.26);
+  color: rgba(225, 228, 240, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.09);
+}
+body.skin-frost:not(.dark) .task-btn-del:hover {
   background: rgba(224, 48, 48, 0.10);
   border-color: rgba(224, 48, 48, 0.55);
   color: var(--today-ring);
 }
+body.skin-frost.dark .task-btn-del:hover {
+  background: rgba(255, 107, 107, 0.14);
+  border-color: rgba(255, 107, 107, 0.45);
+  color: var(--today-ring);
+}
 
 /* AI modal buttons */
-body.skin-frost .ai-btn-primary,
-body.skin-frost .ai-btn-secondary {
+body.skin-frost:not(.dark) .ai-btn-primary,
+body.skin-frost:not(.dark) .ai-btn-secondary {
   color: var(--text-muted);
   border-color: var(--border);
 }
-body.skin-frost .ai-btn-primary:hover,
-body.skin-frost .ai-btn-secondary:hover {
+body.skin-frost:not(.dark) .ai-btn-primary:hover,
+body.skin-frost:not(.dark) .ai-btn-secondary:hover {
   background: linear-gradient(150deg, rgba(50,50,62,0.09) 0%, rgba(30,30,42,0.06) 100%);
   border-color: rgba(55, 55, 70, 0.45);
   color: rgba(22, 34, 50, 0.92);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.42);
 }
-body.skin-frost .ai-btn-accent {
+body.skin-frost.dark .ai-btn-primary,
+body.skin-frost.dark .ai-btn-secondary {
+  color: rgba(200, 205, 220, 0.70);
+  border-color: rgba(200, 205, 220, 0.22);
+}
+body.skin-frost.dark .ai-btn-primary:hover,
+body.skin-frost.dark .ai-btn-secondary:hover {
+  background: linear-gradient(150deg, rgba(200,205,218,0.12) 0%, rgba(170,175,192,0.08) 100%);
+  border-color: rgba(200, 205, 220, 0.35);
+  color: rgba(225, 228, 240, 0.95);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.09);
+}
+body.skin-frost:not(.dark) .ai-btn-accent {
   background: rgba(50, 50, 62, 0.72);
 }
-body.skin-frost .ai-btn-accent:hover {
+body.skin-frost:not(.dark) .ai-btn-accent:hover {
   opacity: 1;
   background: rgba(50, 50, 62, 0.85);
+}
+body.skin-frost.dark .ai-btn-accent {
+  background: rgba(200, 205, 220, 0.25);
+}
+body.skin-frost.dark .ai-btn-accent:hover {
+  opacity: 1;
+  background: rgba(200, 205, 220, 0.38);
 }
 
 /* Light-follow highlight */
@@ -1877,6 +2013,127 @@ body.skin-frost.dark #btn-schedule-day::before {
 .ai-input:focus,
 .ai-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .ai-textarea { resize: vertical; min-height: 72px; }
+
+/* ── Model selector row ──────────────────────────────── */
+.ai-model-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ── Custom model dropdown ───────────────────────────── */
+.ai-model-dropdown {
+  flex: 1;
+  position: relative;
+}
+
+.ai-model-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  outline: none;
+}
+.ai-model-trigger:hover { border-color: var(--text-muted); }
+.ai-model-trigger:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ai-model-trigger.open { border-color: var(--accent); }
+.ai-model-trigger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ai-model-value {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-model-value.placeholder { color: var(--text-muted); }
+
+.ai-model-arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 8px;
+  transition: transform 0.15s;
+}
+.ai-model-trigger.open .ai-model-arrow { transform: rotate(180deg); }
+
+.ai-model-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 500;
+  padding: 4px;
+}
+.ai-model-list.hidden { display: none; }
+
+.ai-model-item {
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.ai-model-item:hover { background: var(--accent-soft); }
+.ai-model-item.selected { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.ai-model-item.no-models {
+  color: var(--text-muted);
+  font-style: italic;
+  cursor: default;
+}
+.ai-model-item.no-models:hover { background: transparent; }
+
+/* Scrollbar for model list */
+.ai-model-list::-webkit-scrollbar { width: 6px; }
+.ai-model-list::-webkit-scrollbar-track { background: transparent; }
+.ai-model-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+.ai-model-list::-webkit-scrollbar-thumb:hover { background: #aaa; }
+body.dark .ai-model-list::-webkit-scrollbar-thumb { background: #48484a; }
+body.dark .ai-model-list::-webkit-scrollbar-thumb:hover { background: #636366; }
+
+.ai-btn-icon {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.ai-btn-icon:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.ai-btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ai-btn-icon.loading {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Mode radio buttons (pill toggle style) ─────────── */
 .ai-radio-row {
@@ -2324,6 +2581,78 @@ body.skin-frost.dark .ai-radio-label:has(input:checked) {
   border-color: rgba(200, 205, 220, 0.26);
 }
 
+/* Glass skin: AI model dropdown */
+body.skin-glass .ai-model-trigger {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.18);
+  color: var(--text);
+}
+body.skin-glass .ai-model-trigger:hover {
+  border-color: rgba(255,255,255,0.30);
+}
+body.skin-glass .ai-model-list {
+  background: rgba(20, 20, 30, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-color: rgba(255,255,255,0.15);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+}
+body.skin-glass .ai-model-item:hover {
+  background: rgba(255,255,255,0.12);
+}
+body.skin-glass .ai-model-item.selected {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+body.skin-glass .ai-model-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); }
+body.skin-glass .ai-model-list::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.40); }
+
+/* Light frost skins (arctic, glacier, teal in light mode) */
+body.skin-frost:not(.dark) .ai-model-trigger {
+  background: rgba(255,255,255,0.65);
+  border-color: rgba(55, 55, 70, 0.18);
+  color: var(--text);
+}
+body.skin-frost:not(.dark) .ai-model-trigger:hover {
+  border-color: rgba(55, 55, 70, 0.30);
+}
+body.skin-frost:not(.dark) .ai-model-list {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-color: rgba(55, 55, 70, 0.12);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+}
+body.skin-frost:not(.dark) .ai-model-item:hover {
+  background: rgba(55, 55, 70, 0.08);
+}
+body.skin-frost:not(.dark) .ai-model-item.selected {
+  background: rgba(55, 55, 70, 0.12);
+  color: var(--text);
+}
+body.skin-frost:not(.dark) .ai-model-list::-webkit-scrollbar-thumb { background: rgba(55,55,70,0.25); }
+body.skin-frost:not(.dark) .ai-model-list::-webkit-scrollbar-thumb:hover { background: rgba(55,55,70,0.40); }
+body.skin-glass .ai-btn-icon {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.70);
+}
+body.skin-glass .ai-btn-icon:hover {
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.30);
+  color: #fff;
+}
+body.skin-frost:not(.dark) .ai-btn-icon {
+  background: rgba(50, 50, 62, 0.06);
+  border-color: rgba(55, 55, 70, 0.20);
+  color: var(--text-muted);
+}
+body.skin-frost:not(.dark) .ai-btn-icon:hover {
+  background: rgba(50, 50, 62, 0.12);
+  border-color: rgba(55, 55, 70, 0.32);
+  color: var(--text);
+}
+
 /* Glass skin: AI URL list scrollbar */
 body.skin-glass #ai-url-list { scrollbar-color: rgba(255,255,255,0.25) transparent; }
 body.skin-glass #ai-url-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); }
@@ -2336,18 +2665,16 @@ body.skin-frost:not(.dark) #ai-url-list::-webkit-scrollbar-thumb:hover { backgro
 body.skin-glass .clock-block-arc {
   opacity: 0.52;
   stroke: rgba(255, 255, 255, 0.6);
-  stroke-width: 1.5;
+  stroke-width: 0.5;
   filter:
     saturate(0.82)
-    drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15))
-    drop-shadow(0 0 14px rgba(255, 255, 255, 0.25));
+    drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));
 }
 body.skin-glass .clock-block-arc:hover {
   opacity: 0.7;
   filter:
     saturate(0.88)
-    drop-shadow(0 3px 10px rgba(0, 0, 0, 0.2))
-    drop-shadow(0 0 18px rgba(255, 255, 255, 0.35));
+    drop-shadow(0 3px 10px rgba(0, 0, 0, 0.2));
 }
 body.skin-glass .clock-block-arc.recurring-arc {
   stroke: rgba(255, 255, 255, 0.45);
@@ -2359,18 +2686,16 @@ body.skin-glass .clock-block-arc.recurring-arc {
 body.skin-frost:not(.dark) .clock-block-arc {
   opacity: 0.48;
   stroke: rgba(255, 255, 255, 0.7);
-  stroke-width: 2;
+  stroke-width: 0.5;
   filter:
     saturate(0.75)
-    drop-shadow(0 2px 10px rgba(40, 80, 120, 0.12))
-    drop-shadow(0 0 16px rgba(255, 255, 255, 0.5));
+    drop-shadow(0 2px 10px rgba(40, 80, 120, 0.12));
 }
 body.skin-frost:not(.dark) .clock-block-arc:hover {
   opacity: 0.65;
   filter:
     saturate(0.82)
-    drop-shadow(0 3px 12px rgba(40, 80, 120, 0.18))
-    drop-shadow(0 0 20px rgba(255, 255, 255, 0.6));
+    drop-shadow(0 3px 12px rgba(40, 80, 120, 0.18));
 }
 body.skin-frost:not(.dark) .clock-block-arc.recurring-arc {
   stroke: rgba(255, 255, 255, 0.55);

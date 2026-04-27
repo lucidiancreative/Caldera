@@ -155,17 +155,21 @@
             <span>Claude (Haiku)</span>
           </label>
           <label class="ai-radio-label">
+            <input type="radio" name="ai-provider" value="openai" id="ai-provider-openai" />
+            <span>OpenAI</span>
+          </label>
+          <label class="ai-radio-label">
             <input type="radio" name="ai-provider" value="ollama" id="ai-provider-ollama" />
             <span>Ollama (local)</span>
           </label>
         </div>
       </div>
 
-      <div id="ai-claude-panel" class="ai-panel">
+      <div id="ai-apikey-panel" class="ai-panel">
         <div class="ai-field-group">
-          <label class="ai-label" for="ai-apikey-input">Anthropic API Key</label>
+          <label class="ai-label" for="ai-apikey-input" id="ai-apikey-label">API Key</label>
           <input id="ai-apikey-input" type="password" class="ai-input"
-                 placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false" />
+                 placeholder="sk-..." autocomplete="off" spellcheck="false" />
         </div>
       </div>
 
@@ -176,9 +180,18 @@
                  placeholder="http://localhost:11434" autocomplete="off" />
         </div>
         <div class="ai-field-group">
-          <label class="ai-label" for="ai-ollama-model">Model</label>
-          <input id="ai-ollama-model" type="text" class="ai-input"
-                 placeholder="llama3.2" autocomplete="off" spellcheck="false" />
+          <label class="ai-label">Model</label>
+          <div class="ai-model-row">
+            <div class="ai-model-dropdown" id="ai-model-dropdown">
+              <button type="button" class="ai-model-trigger" id="ai-model-trigger">
+                <span class="ai-model-value" id="ai-model-value">Select a model...</span>
+                <span class="ai-model-arrow">&#9662;</span>
+              </button>
+              <div class="ai-model-list hidden" id="ai-model-list"></div>
+            </div>
+            <input type="hidden" id="ai-ollama-model" value="" />
+            <button id="ai-refresh-models" type="button" class="ai-btn-icon" title="Refresh models">&#8635;</button>
+          </div>
         </div>
       </div>
 

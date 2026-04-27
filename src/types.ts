@@ -5,7 +5,7 @@ export type DateKey = string;
 
 export type AmPm = 'AM' | 'PM';
 export type RecurrenceType = 'daily' | 'weekly' | 'monthly';
-export type SkinId = 'default' | 'glass' | 'arctic' | 'glacier' | 'teal';
+export type SkinId = 'default' | 'arctic' | 'glacier' | 'teal';
 export type ViewType = 'calendar' | 'schedule';
 
 // ── Calendar data shapes ─────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ export interface CalData {
 // ── AI types (shared between ai-import.ts and renderer.ts) ──────────────────
 
 export interface AiConfig {
-  provider: 'claude' | 'ollama';
+  provider: 'claude' | 'ollama' | 'openai';
   apiKey: string;
   mode: 'fetch' | 'websearch';
   ollamaUrl: string;
@@ -117,5 +117,6 @@ export interface CalAPI {
   aiSaveConfig(config: AiConfig): Promise<void>;
   aiLoadConfig(): Promise<AiConfig | null>;
   aiRunImport(): Promise<AiImportResult>;
+  ollamaListModels(): Promise<string[]>;
   openExternal(url: string): void;
 }

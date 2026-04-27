@@ -11,7 +11,7 @@
 type DateKey = string;
 type AmPm = 'AM' | 'PM';
 type RecurrenceType = 'daily' | 'weekly' | 'monthly';
-type SkinId = 'default' | 'glass' | 'arctic' | 'glacier' | 'teal';
+type SkinId = 'default' | 'arctic' | 'glacier' | 'teal';
 type ViewType = 'calendar' | 'schedule';
 
 interface CalendarEvent {
@@ -59,7 +59,7 @@ interface CalData {
 }
 
 interface AiConfig {
-  provider: 'claude' | 'ollama';
+  provider: 'claude' | 'ollama' | 'openai';
   apiKey: string;
   mode: 'fetch' | 'websearch';
   ollamaUrl: string;
@@ -99,6 +99,7 @@ interface CalAPI {
   aiSaveConfig(config: AiConfig): Promise<void>;
   aiLoadConfig(): Promise<AiConfig | null>;
   aiRunImport(): Promise<AiImportResult>;
+  ollamaListModels(): Promise<string[]>;
   openExternal(url: string): void;
 }
 

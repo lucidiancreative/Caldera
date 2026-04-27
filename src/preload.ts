@@ -22,6 +22,7 @@ const calBridge: CalAPI = {
   aiSaveConfig:    (config: AiConfig): Promise<void>              => ipcRenderer.invoke('ai-save-config', config),
   aiLoadConfig:    (): Promise<AiConfig | null>                   => ipcRenderer.invoke('ai-load-config'),
   aiRunImport:     (): Promise<AiImportResult>                    => ipcRenderer.invoke('ai-run-import'),
+  ollamaListModels: (): Promise<string[]>                         => ipcRenderer.invoke('ollama-list-models'),
   openExternal: (url: string): void => {
     let parsed: URL;
     try { parsed = new URL(url); } catch { return; }

@@ -23,6 +23,10 @@ interface OllamaResponse {
   done: boolean;
 }
 
+interface OpenAIResponse {
+  choices: { message: { role: string; content: string } }[];
+}
+
 // content can be a plain text string (user prompts) or a structured block array
 // (assistant turns with tool_use results). Using unknown here would lose type narrowing
 // at every call site, so we keep it broad but explicit.
@@ -41,7 +45,7 @@ function isValidStoredAiConfig(stored: unknown): stored is StoredAiConfig {
   if (!stored || typeof stored !== 'object') return false;
   const s = stored as Record<string, unknown>;
   return (
-    (s.provider === 'claude' || s.provider === 'ollama') &&
+    (s.provider === 'claude' || s.provider === 'ollama' || s.provider === 'openai') &&
     typeof s.interests === 'string' &&
     Array.isArray(s.sites)
   );
@@ -121,11 +125,35 @@ ipcMain.handle('ai-run-import', async (): Promise<AiImportResult> => {
 
   try {
     if (aiConfig.provider === 'ollama') return await runOllamaFetchImport(aiConfig);
+    if (aiConfig.provider === 'openai') return await runOpenAIFetchImport(aiConfig);
     if (aiConfig.mode === 'websearch')   return await runWebSearchImport(aiConfig);
     return await runFetchImport(aiConfig);
   } catch (err) {
     console.error('[ai-run-import]', err);
     return { error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+});
+
+// ── IPC: list Ollama models ───────────────────────────────────────────────────
+
+ipcMain.handle('ollama-list-models', async (): Promise<string[]> => {
+  const filePath = calendarDataFilePath();
+  let ollamaUrl = 'http://localhost:11434';
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const stored = data._aiConfig;
+    if (isValidStoredAiConfig(stored) && stored.ollamaUrl) {
+      ollamaUrl = stored.ollamaUrl;
+    }
+  } catch {}
+
+  try {
+    const resp = await fetch(`${ollamaUrl.replace(/\/$/, '')}/api/tags`);
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { models?: { name: string }[] };
+    return (json.models || []).map((m) => m.name);
+  } catch {
+    return [];
   }
 });
 
@@ -402,7 +430,7 @@ async function callOllama(baseUrl: string, model: string, prompt: string): Promi
       messages: [{ role: 'user', content: prompt }],
       stream: false,
     }),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(300_000),
   });
 
   if (!res.ok) {
@@ -411,6 +439,42 @@ async function callOllama(baseUrl: string, model: string, prompt: string): Promi
   }
   const data = await res.json() as OllamaResponse;
   return data.message?.content ?? '';
+}
+
+// ── OpenAI: Fetch mode ───────────────────────────────────────────────────────
+
+async function runOpenAIFetchImport(aiConfig: AiConfig): Promise<AiImportResult> {
+  const today     = new Date().toISOString().split('T')[0];
+  const pageDumps = await buildPageDumps(aiConfig.sites ?? []);
+  const prompt    = buildFetchPrompt(today, aiConfig.interests, aiConfig.keywords ?? [], pageDumps, aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
+  const text      = await callOpenAI(aiConfig.apiKey, prompt);
+  console.log('[ai-import] OpenAI raw response:', text.slice(0, 500));
+  return filterEventsByDateRange(parseEventText(text, 'OpenAI'), aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
+}
+
+// ── OpenAI API call ──────────────────────────────────────────────────────────
+
+async function callOpenAI(apiKey: string, prompt: string): Promise<string> {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 8192,
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenAI API ${res.status}: ${text}`);
+  }
+  const data = await res.json() as OpenAIResponse;
+  return data.choices?.[0]?.message?.content ?? '';
 }
 
 // ── Event field validation helpers ───────────────────────────────────────────

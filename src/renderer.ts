@@ -125,12 +125,6 @@ const BLOCK_COLOR_HIGHLIGHTS_TEAL: Record<string, string> = {
 };
 
 // ── Shader palette presets ──────────────────────────────
-// Original dark glass — deep purple/indigo plasma
-const PALETTE_DARK: ShaderPalette = {
-  a: [0.04, 0.03, 0.10], b: [0.07, 0.04, 0.12],
-  c: [0.80, 0.00, 0.90], d: [0.20, 0.50, 0.65],
-  speed: 0.15,
-};
 // Near-white with whispers of ice blue — closest to iOS frosted aesthetic
 const PALETTE_ARCTIC: ShaderPalette = {
   a: [0.82, 0.88, 0.92], b: [0.12, 0.08, 0.08],
@@ -152,15 +146,16 @@ const PALETTE_TEAL: ShaderPalette = {
 
 // ── Skin registry ───────────────────────────────────────
 const SKINS: Record<SkinId, Skin> = {
-  default:      { id: 'default',      label: 'Default', init: () => {}, destroy: () => {} },
-  glass:        { id: 'glass',        label: 'Glass',   init: () => initShaderBackground(PALETTE_DARK),    destroy: destroyShaderBackground },
-  'arctic':  { id: 'arctic',  label: 'Arctic',  init: () => initShaderBackground(PALETTE_ARCTIC),  destroy: destroyShaderBackground, glassVariant: true },
-  'glacier': { id: 'glacier', label: 'Glacier', init: () => initShaderBackground(PALETTE_GLACIER), destroy: destroyShaderBackground, glassVariant: true },
-  'teal':    { id: 'teal',    label: 'Teal',    init: () => initShaderBackground(PALETTE_TEAL),    destroy: destroyShaderBackground, glassVariant: true },
+  default:   { id: 'default',  label: 'Default', init: () => {}, destroy: () => {} },
+  'arctic':  { id: 'arctic',   label: 'Arctic',  init: () => initShaderBackground(PALETTE_ARCTIC),  destroy: destroyShaderBackground, glassVariant: true },
+  'glacier': { id: 'glacier',  label: 'Glacier', init: () => initShaderBackground(PALETTE_GLACIER), destroy: destroyShaderBackground, glassVariant: true },
+  'teal':    { id: 'teal',     label: 'Teal',    init: () => initShaderBackground(PALETTE_TEAL),    destroy: destroyShaderBackground, glassVariant: true },
 };
 
 function getCurrentSkin(): SkinId {
-  return (localStorage.getItem('skin') || 'default') as SkinId;
+  const stored = localStorage.getItem('skin');
+  if (stored && stored in SKINS) return stored as SkinId;
+  return 'default';
 }
 
 function getBlockColors(): string[] {
@@ -1101,7 +1096,14 @@ function bindCalendarUIEvents(): void {
     if (e.target === qId('ai-overlay')) closeAiSettingsModal();
   });
   qId<HTMLInputElement>('ai-provider-claude').addEventListener('change', () => syncAiProviderPanel('claude'));
-  qId<HTMLInputElement>('ai-provider-ollama').addEventListener('change', () => syncAiProviderPanel('ollama'));
+  qId<HTMLInputElement>('ai-provider-openai').addEventListener('change', () => syncAiProviderPanel('openai'));
+  qId<HTMLInputElement>('ai-provider-ollama').addEventListener('change', () => { syncAiProviderPanel('ollama'); refreshOllamaModels(); });
+  qId('ai-refresh-models').addEventListener('click', refreshOllamaModels);
+  qId('ai-model-trigger').addEventListener('click', toggleModelDropdown);
+  document.addEventListener('click', (e: MouseEvent) => {
+    const dropdown = qId('ai-model-dropdown');
+    if (!dropdown.contains(e.target as Node)) closeModelDropdown();
+  });
   qId<HTMLInputElement>('ai-mode-fetch').addEventListener('change', () => syncAiModePanel('fetch'));
   qId<HTMLInputElement>('ai-mode-websearch').addEventListener('change', () => syncAiModePanel('websearch'));
   qId('ai-url-add-btn').addEventListener('click', () => {
@@ -1295,11 +1297,11 @@ function closeSkinPicker(): void {
 
 async function openAiSettingsModal(): Promise<void> {
   const cfg = await calBridge.aiLoadConfig();
+  const savedModel = cfg?.ollamaModel || '';
   if (cfg) {
     qId<HTMLInputElement>('ai-apikey-input').value    = cfg.apiKey      || '';
     qId<HTMLInputElement>('ai-interests-input').value = cfg.interests   || '';
     qId<HTMLInputElement>('ai-ollama-url').value      = cfg.ollamaUrl   || 'http://localhost:11434';
-    qId<HTMLInputElement>('ai-ollama-model').value    = cfg.ollamaModel || 'llama3.2';
     setAiDateValue('ai-date-start', cfg.dateRangeStart || '');
     setAiDateValue('ai-date-end', cfg.dateRangeEnd || '');
     renderAiUrlList(cfg.sites || []);
@@ -1308,11 +1310,14 @@ async function openAiSettingsModal(): Promise<void> {
     if (providerRadio) { providerRadio.checked = true; syncAiProviderPanel(cfg.provider || 'claude'); }
     const modeRadio = document.querySelector(`input[name="ai-mode"][value="${cfg.mode || 'fetch'}"]`) as HTMLInputElement | null;
     if (modeRadio) { modeRadio.checked = true; syncAiModePanel(cfg.mode || 'fetch'); }
+    if (cfg.provider === 'ollama') {
+      await refreshOllamaModels();
+      if (savedModel) selectModel(savedModel);
+    }
   } else {
     qId<HTMLInputElement>('ai-provider-claude').checked = true;
     qId<HTMLInputElement>('ai-mode-fetch').checked      = true;
     qId<HTMLInputElement>('ai-ollama-url').value        = 'http://localhost:11434';
-    qId<HTMLInputElement>('ai-ollama-model').value      = 'llama3.2';
     setAiDateValue('ai-date-start', '');
     setAiDateValue('ai-date-end', '');
     syncAiProviderPanel('claude');
@@ -1330,11 +1335,23 @@ function closeAiSettingsModal(): void {
 
 function syncAiProviderPanel(provider: string): void {
   const isOllama = provider === 'ollama';
-  qId('ai-claude-panel').classList.toggle('hidden', isOllama);
+  const needsApiKey = provider === 'claude' || provider === 'openai';
+  qId('ai-apikey-panel').classList.toggle('hidden', !needsApiKey);
   qId('ai-ollama-panel').classList.toggle('hidden', !isOllama);
-  // Ollama only supports fetch mode — hide the mode selector and force fetch
-  qId('ai-mode-group').classList.toggle('hidden', isOllama);
-  if (isOllama) {
+  // Update API key label and placeholder based on provider
+  const label = qId('ai-apikey-label');
+  const input = qId<HTMLInputElement>('ai-apikey-input');
+  if (provider === 'claude') {
+    label.textContent = 'Anthropic API Key';
+    input.placeholder = 'sk-ant-api03-…';
+  } else if (provider === 'openai') {
+    label.textContent = 'OpenAI API Key';
+    input.placeholder = 'sk-...';
+  }
+  // Only Claude supports web search mode — hide mode selector for others
+  const showModeSelector = provider === 'claude';
+  qId('ai-mode-group').classList.toggle('hidden', !showModeSelector);
+  if (!showModeSelector) {
     qId<HTMLInputElement>('ai-mode-fetch').checked = true;
     syncAiModePanel('fetch');
   }
@@ -1343,6 +1360,73 @@ function syncAiProviderPanel(provider: string): void {
 function syncAiModePanel(mode: string): void {
   qId('ai-fetch-panel').classList.toggle('hidden', mode !== 'fetch');
   qId('ai-websearch-panel').classList.toggle('hidden', mode !== 'websearch');
+}
+
+function toggleModelDropdown(): void {
+  const trigger = qId('ai-model-trigger');
+  const list = qId('ai-model-list');
+  const isOpen = !list.classList.contains('hidden');
+  if (isOpen) {
+    closeModelDropdown();
+  } else {
+    trigger.classList.add('open');
+    list.classList.remove('hidden');
+  }
+}
+
+function closeModelDropdown(): void {
+  qId('ai-model-trigger').classList.remove('open');
+  qId('ai-model-list').classList.add('hidden');
+}
+
+function selectModel(model: string): void {
+  qId<HTMLInputElement>('ai-ollama-model').value = model;
+  const valueEl = qId('ai-model-value');
+  valueEl.textContent = model || 'Select a model...';
+  valueEl.classList.toggle('placeholder', !model);
+  qId('ai-model-list').querySelectorAll('.ai-model-item').forEach((item) => {
+    item.classList.toggle('selected', item.getAttribute('data-model') === model);
+  });
+  closeModelDropdown();
+}
+
+async function refreshOllamaModels(): Promise<void> {
+  const list = qId('ai-model-list');
+  const btn = qId<HTMLButtonElement>('ai-refresh-models');
+  const trigger = qId<HTMLButtonElement>('ai-model-trigger');
+  const currentValue = qId<HTMLInputElement>('ai-ollama-model').value;
+
+  btn.classList.add('loading');
+  btn.disabled = true;
+  trigger.disabled = true;
+
+  try {
+    const models = await calBridge.ollamaListModels();
+    list.innerHTML = '';
+    if (models.length === 0) {
+      const item = document.createElement('div');
+      item.className = 'ai-model-item no-models';
+      item.textContent = 'No models found';
+      list.appendChild(item);
+    } else {
+      models.forEach((name) => {
+        const item = document.createElement('div');
+        item.className = 'ai-model-item';
+        if (name === currentValue) item.classList.add('selected');
+        item.setAttribute('data-model', name);
+        item.textContent = name;
+        item.addEventListener('click', () => selectModel(name));
+        list.appendChild(item);
+      });
+      if (!currentValue && models.length > 0) selectModel(models[0]);
+    }
+  } catch {
+    list.innerHTML = '<div class="ai-model-item no-models">Error fetching models</div>';
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+    trigger.disabled = false;
+  }
 }
 
 // ── AI Date Picker ────────────────────────────────────
@@ -1539,7 +1623,7 @@ function getAiConfig(): AiConfig {
   const provider       = (document.querySelector('input[name="ai-provider"]:checked') as HTMLInputElement | null)?.value || 'claude';
   const apiKey         = qId<HTMLInputElement>('ai-apikey-input').value.trim();
   const ollamaUrl      = qId<HTMLInputElement>('ai-ollama-url').value.trim();
-  const ollamaModel    = qId<HTMLInputElement>('ai-ollama-model').value.trim();
+  const ollamaModel    = qId<HTMLInputElement>('ai-ollama-model').value;
   const mode           = (document.querySelector('input[name="ai-mode"]:checked') as HTMLInputElement | null)?.value || 'fetch';
   const interests      = qId<HTMLInputElement>('ai-interests-input').value.trim();
   const sites          = getAiSitesFromList();
@@ -1560,6 +1644,9 @@ async function saveAiSettings(): Promise<void> {
   if (cfg.provider === 'claude' && !cfg.apiKey) {
     setAiStatus('Please enter your Anthropic API key.', 'error'); return;
   }
+  if (cfg.provider === 'openai' && !cfg.apiKey) {
+    setAiStatus('Please enter your OpenAI API key.', 'error'); return;
+  }
   if (cfg.provider === 'ollama' && !cfg.ollamaUrl) {
     setAiStatus('Please enter the Ollama endpoint URL.', 'error'); return;
   }
@@ -1570,6 +1657,9 @@ async function saveAiSettings(): Promise<void> {
 async function runAiImport(): Promise<void> {
   const cfg = getAiConfig();
   if (cfg.provider === 'claude' && !cfg.apiKey) {
+    setAiStatus('Please enter and save your API key first.', 'error'); return;
+  }
+  if (cfg.provider === 'openai' && !cfg.apiKey) {
     setAiStatus('Please enter and save your API key first.', 'error'); return;
   }
   if (cfg.provider === 'ollama' && !cfg.ollamaUrl) {

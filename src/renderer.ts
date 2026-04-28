@@ -206,8 +206,12 @@ function activateSkin(id: SkinId): void {
       document.body.classList.add('shader-static');
     }
   }
+  _skinSwitchPending = true;
   localStorage.setItem('skin', id);
 }
+
+// ── Skin switch animation flag ─────────────────────────
+let _skinSwitchPending = false;
 
 // ── Shader preference & low-power detection ────────────
 type ShaderPref = 'on' | 'off' | 'auto';
@@ -581,9 +585,14 @@ async function renderCalendarGrid(): Promise<void> {
   // bindCalendarUIEvents so the opacity/transform fill-mode never lingers on the compositor —
   // a persisted animation state can be reset by Chromium when backdrop-filter overlays are
   // shown or hidden, leaving the grid invisible after the overlay closes.
-  if (document.body.classList.contains('skin-glass')) {
+  if (_skinSwitchPending) {
+    grid.classList.remove('skin-fade-in');
+    void grid.offsetHeight;
+    grid.classList.add('skin-fade-in');
+    _skinSwitchPending = false;
+  } else if (document.body.classList.contains('skin-glass')) {
     grid.classList.remove('is-entering');
-    void grid.offsetHeight; // force reflow so re-adding the class triggers a fresh animation
+    void grid.offsetHeight;
     grid.classList.add('is-entering');
   }
 
@@ -1136,7 +1145,9 @@ function bindCalendarUIEvents(): void {
   // animated opacity/transform don't persist on the compositor — see renderCalendarGrid
   // for a full explanation of why this matters.
   qId('calendar-grid').addEventListener('animationend', (e: AnimationEvent) => {
-    if (e.animationName === 'glass-cell-enter') (e.currentTarget as HTMLElement).classList.remove('is-entering');
+    const el = e.currentTarget as HTMLElement;
+    if (e.animationName === 'glass-cell-enter') el.classList.remove('is-entering');
+    if (e.animationName === 'skin-fade') el.classList.remove('skin-fade-in');
   });
 
   qId('btn-min').addEventListener('click', () => calBridge.winMinimize());

@@ -1172,9 +1172,9 @@ body.skin-frost:not(.dark) {
   --border:      rgba(140, 180, 210, 0.40);
   --text:        #162232;
   --text-muted:  #4a6a88;
-  --accent:      #2e78c0;
+  --accent:      #1a477184;
   --accent-soft: rgba(80, 150, 210, 0.14);
-  --today-ring:  #1a5fa8;
+  --today-ring:  #79a5d3;
   --star:        #e08800;
   --accent-shadow: rgba(46, 120, 192, 0.18);
   --today-ring-bg: rgba(26, 95, 168, 0.75);
@@ -1187,7 +1187,7 @@ body.skin-frost:not(.dark) {
 body.skin-arctic:not(.dark) {
   --surface: rgba(255, 255, 255, 0.42);
   --border: rgba(120, 140, 160, 0.35);
-  --accent: #5a6a7a;
+  --accent: #3e5d7c60;
   --accent-soft: rgba(90, 106, 122, 0.14);
   --accent-shadow: rgba(90, 106, 122, 0.18);
   --today-ring: rgba(120, 140, 160, 0.80);
@@ -1203,10 +1203,10 @@ body.skin-glacier:not(.dark) {
 body.skin-teal:not(.dark) {
   --surface: rgba(255, 255, 255, 0.42);
   --border: rgba(26, 136, 120, 0.35);
-  --accent: #1a8878;
+  --accent: #a8e4e8ab;
   --accent-soft: rgba(26, 136, 120, 0.14);
   --accent-shadow: rgba(26, 136, 120, 0.18);
-  --today-ring: #1a8878;
+  --today-ring: #a8e4e8ab;
   --today-ring-bg: rgba(26, 136, 120, 0.70);
 }
 
@@ -1221,7 +1221,7 @@ body.skin-arctic.dark {
   --border:      rgba(200, 215, 230, 0.26);
   --text:        #e8f0f6;
   --text-muted:  rgba(200, 218, 235, 0.62);
-  --accent:      #a8c8e0;
+  --accent:      #55677493;
   --accent-soft: rgba(180, 205, 225, 0.16);
   --today-ring:  rgba(200, 215, 230, 0.85);
   --star:        #f0c050;

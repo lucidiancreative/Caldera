@@ -191,6 +191,7 @@ function activateSkin(id: SkinId): void {
   [...document.body.classList]
     .filter(cls => cls.startsWith('skin-'))
     .forEach(cls => document.body.classList.remove(cls));
+  document.body.classList.remove('shader-static');
   document.body.classList.add(`skin-${id}`);
   // Frost skins (arctic, glacier, teal) share the glass shader structure and frost
   // component overrides. Their individual body classes drive shader palette selection.
@@ -199,7 +200,10 @@ function activateSkin(id: SkinId): void {
     // Only init shader if preference allows (on, or auto without low-power)
     const palette = SKIN_PALETTES[id];
     if (palette && shouldEnableShader()) {
+      document.body.classList.remove('shader-static');
       initShaderBackground(palette);
+    } else {
+      document.body.classList.add('shader-static');
     }
   }
   localStorage.setItem('skin', id);

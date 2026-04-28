@@ -47,6 +47,29 @@ body.skin-teal.dark #shader-bg {
   filter: brightness(0.45);
 }
 
+/* Static gradient fallbacks when shader is disabled */
+body.shader-static.skin-arctic #shader-bg {
+  background: linear-gradient(135deg, #ddeaf5 0%, #c8dff0 40%, #d8eef8 70%, #e8f4fb 100%);
+}
+body.shader-static.skin-glacier #shader-bg {
+  background: linear-gradient(135deg, #b8d4e8 0%, #9dc4df 40%, #bcd8ee 70%, #d0e8f5 100%);
+}
+body.shader-static.skin-teal #shader-bg {
+  background: linear-gradient(135deg, #a8d8d8 0%, #90cac8 40%, #a5d5d2 70%, #c0e5e3 100%);
+}
+body.shader-static.skin-arctic.dark #shader-bg {
+  background: linear-gradient(135deg, #0a1420 0%, #12202e 50%, #0e1822 100%);
+  filter: none;
+}
+body.shader-static.skin-glacier.dark #shader-bg {
+  background: linear-gradient(135deg, #081828 0%, #102438 50%, #0c1c2c 100%);
+  filter: none;
+}
+body.shader-static.skin-teal.dark #shader-bg {
+  background: linear-gradient(135deg, #081c1c 0%, #0c2828 50%, #0a2020 100%);
+  filter: none;
+}
+
 /* ── Title bar ────────────────────────────────────────── */
 #titlebar {
   height: var(--titlebar-h);
@@ -1160,18 +1183,31 @@ body.skin-frost:not(.dark) {
 }
 
 /* ── Frost skin light mode overrides (per-shader) ─────── */
+/* Arctic: neutral grey */
 body.skin-arctic:not(.dark) {
   --surface: rgba(255, 255, 255, 0.42);
-  --today-ring:  rgba(120, 140, 160, 0.80);
+  --border: rgba(120, 140, 160, 0.35);
+  --accent: #5a6a7a;
+  --accent-soft: rgba(90, 106, 122, 0.14);
+  --accent-shadow: rgba(90, 106, 122, 0.18);
+  --today-ring: rgba(120, 140, 160, 0.80);
   --today-ring-bg: rgba(160, 180, 200, 0.70);
 }
+/* Glacier: blue-grey (inherits shared frost blue) */
 body.skin-glacier:not(.dark) {
   --surface: rgba(255, 255, 255, 0.42);
-  --today-ring:  rgba(100, 130, 160, 0.80);
+  --today-ring: rgba(100, 130, 160, 0.80);
   --today-ring-bg: rgba(140, 170, 200, 0.70);
 }
+/* Teal: aqua-green */
 body.skin-teal:not(.dark) {
   --surface: rgba(255, 255, 255, 0.42);
+  --border: rgba(26, 136, 120, 0.35);
+  --accent: #1a8878;
+  --accent-soft: rgba(26, 136, 120, 0.14);
+  --accent-shadow: rgba(26, 136, 120, 0.18);
+  --today-ring: #1a8878;
+  --today-ring-bg: rgba(26, 136, 120, 0.70);
 }
 
 body.skin-frost.dark {
@@ -1516,10 +1552,27 @@ body.skin-glass .ampm-btn:hover::before {
   box-shadow: 0 24px 64px rgba(0,0,0,0.28);
 }
 
+body.skin-glass #settings-overlay {
+  background: rgba(0,0,0,0.18);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 body.skin-glass #settings-modal {
+  background: rgba(255,255,255,0.12);
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), 0 32px 80px rgba(0,0,0,0.38);
+}
+
+/* Per-skin settings modal tints (light mode) */
+body.skin-arctic:not(.dark) #settings-modal {
+  background: rgba(180, 200, 220, 0.25);
+}
+body.skin-glacier:not(.dark) #settings-modal {
+  background: rgba(160, 195, 230, 0.25);
+}
+body.skin-teal:not(.dark) #settings-modal {
+  background: rgba(140, 210, 200, 0.25);
 }
 
 #settings-modal-title {

@@ -1370,14 +1370,14 @@ body.skin-glass.dark .card-toolbar    { background: rgba(10,10,20,0.28); }
 /* Light-glass close buttons — base glass sets rgba(255,255,255,0.14) which is near-invisible
    on the near-white frosted modal surfaces of arctic/glacier/teal light mode */
 body.skin-frost:not(.dark) #modal-close,
-body.skin-frost:not(.dark) #skin-modal-close,
+body.skin-frost:not(.dark) #settings-modal-close,
 body.skin-frost:not(.dark) #ai-modal-close,
 body.skin-frost:not(.dark) #ai-review-close {
   background: rgba(22, 34, 50, 0.09);
   color: var(--text-muted);
 }
 body.skin-frost:not(.dark) #modal-close:hover,
-body.skin-frost:not(.dark) #skin-modal-close:hover,
+body.skin-frost:not(.dark) #settings-modal-close:hover,
 body.skin-frost:not(.dark) #ai-modal-close:hover,
 body.skin-frost:not(.dark) #ai-review-close:hover {
   background: rgba(22, 34, 50, 0.17);
@@ -1491,7 +1491,7 @@ body.skin-glass .ampm-btn:hover::before {
 /* ════════════════════════════════════════════════════════
    SKIN PICKER MODAL
    ════════════════════════════════════════════════════════ */
-#skin-overlay {
+#settings-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.45);
@@ -1501,34 +1501,36 @@ body.skin-glass .ampm-btn:hover::before {
   justify-content: center;
   z-index: 400;
 }
-#skin-overlay.hidden { display: none; }
+#settings-overlay.hidden { display: none; }
 
-#skin-modal {
+#settings-modal {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 24px;
   width: 360px;
   max-width: 92vw;
+  max-height: 88vh;
+  overflow-y: auto;
   position: relative;
   box-shadow: 0 24px 64px rgba(0,0,0,0.28);
 }
 
-body.skin-glass #skin-modal {
+body.skin-glass #settings-modal {
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), 0 32px 80px rgba(0,0,0,0.38);
 }
 
-#skin-modal-title {
+#settings-modal-title {
   font-size: 17px;
   font-weight: 700;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   padding-right: 36px;
   color: var(--text);
 }
 
-#skin-modal-close {
+#settings-modal-close {
   position: absolute;
   top: 14px; right: 14px;
   background: #f0f0f0;
@@ -1541,11 +1543,63 @@ body.skin-glass #skin-modal {
   color: var(--text-muted);
   transition: background 0.12s;
 }
-#skin-modal-close:hover               { background: #e0e0e0; color: var(--text); }
-body.dark #skin-modal-close           { background: #2c2c2e; }
-body.dark #skin-modal-close:hover     { background: #3a3a3c; color: var(--text); }
-body.skin-glass #skin-modal-close     { background: rgba(255,255,255,0.14); color: var(--text); }
-body.skin-glass #skin-modal-close:hover { background: rgba(255,255,255,0.26); }
+#settings-modal-close:hover               { background: #e0e0e0; color: var(--text); }
+body.dark #settings-modal-close           { background: #2c2c2e; }
+body.dark #settings-modal-close:hover     { background: #3a3a3c; color: var(--text); }
+body.skin-glass #settings-modal-close     { background: rgba(255,255,255,0.14); color: var(--text); }
+body.skin-glass #settings-modal-close:hover { background: rgba(255,255,255,0.26); }
+
+/* Settings modal sections */
+.settings-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+}
+.settings-section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+  margin-top: 0;
+}
+.settings-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+/* Theme toggle */
+#theme-toggle-row {
+  display: flex;
+  gap: 6px;
+}
+.theme-opt {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.theme-opt:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.theme-opt.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+body.skin-glass .theme-opt {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+}
+body.skin-glass .theme-opt:hover { background: rgba(255,255,255,0.14); }
+body.skin-glass .theme-opt.active { background: var(--accent); }
 
 #skin-grid {
   display: grid;
@@ -1605,6 +1659,56 @@ body.dark .skin-preview-default {
 }
 .skin-preview-teal {
   background: linear-gradient(135deg, #a8d8d8 0%, #90cac8 40%, #a5d5d2 70%, #c0e5e3 100%);
+}
+
+/* ── Shader toggle ──────────────────────────────────────── */
+.shader-toggle-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+#shader-toggle-row {
+  display: flex;
+  gap: 6px;
+}
+.shader-opt {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.shader-opt:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.shader-opt.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+body.skin-glass .shader-opt {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+body.skin-glass .shader-opt:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+body.skin-glass .shader-opt.active {
+  background: var(--accent);
+}
+#shader-toggle-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -2411,6 +2515,7 @@ body.dark #ai-keyword-list::-webkit-scrollbar-thumb:hover { background: #636366;
 }
 .ai-status.hidden { display: none; }
 .ai-status.error   { color: var(--today-ring); border-color: var(--today-ring); background: rgba(224,48,48,0.07); }
+.ai-status.warning { color: #f0a500; border-color: #f0a500; background: rgba(240,165,0,0.08); }
 .ai-status.loading { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
 /* ── AI Review Modal ─────────────────────────────────── */

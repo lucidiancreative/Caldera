@@ -3,6 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { AiConfig, AiEvent, AiImportResult } from './types';
 
+// Debug logging only in development builds
+const debugLog = (...args: unknown[]) => { if (!app.isPackaged) console.log(...args); };
+
 // ── Types (private to ai-import) ─────────────────────────────────────────────
 
 interface ClaudeContentBlock {
@@ -208,7 +211,7 @@ async function renderPage(rawUrl: string): Promise<string> {
           ? `\nLINKS ON PAGE (JSON array — use these to find sourceUrl for each event):\n${linksJson.slice(0, 8_000)}`
           : '';
         const trimmed = (trimmedText + linkSection).slice(0, 50_000);
-        console.log(`[ai-import] rendered ${url} (${reason}) — ${trimmedText.length} chars text, ${linksJson.length} chars links`);
+        debugLog(`[ai-import] rendered ${url} (${reason}) — ${trimmedText.length} chars text, ${linksJson.length} chars links`);
         resolve(trimmed);
       } catch {
         resolve('');
@@ -310,7 +313,7 @@ async function runFetchImport(aiConfig: AiConfig): Promise<AiImportResult> {
   const prompt    = buildFetchPrompt(today, aiConfig.interests, aiConfig.keywords ?? [], pageDumps, aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
   const response  = await callClaude(aiConfig.apiKey, [{ role: 'user', content: prompt }]);
   const rawText   = response.content.filter(b => b.type === 'text').map(b => b.text ?? '').join('');
-  console.log('[ai-import] Claude raw response:', rawText.slice(0, 500));
+  debugLog('[ai-import] Claude raw response:', rawText.slice(0, 500));
   return filterEventsByDateRange(parseEventText(rawText, 'Claude'), aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
 }
 
@@ -405,7 +408,7 @@ async function runOllamaFetchImport(aiConfig: AiConfig): Promise<AiImportResult>
   const pageDumps = await buildPageDumps(aiConfig.sites ?? []);
   const prompt    = buildFetchPrompt(today, aiConfig.interests, aiConfig.keywords ?? [], pageDumps, aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
   const text      = await callOllama(aiConfig.ollamaUrl, aiConfig.ollamaModel, prompt);
-  console.log('[ai-import] Ollama raw response:', text.slice(0, 500));
+  debugLog('[ai-import] Ollama raw response:', text.slice(0, 500));
   return filterEventsByDateRange(parseEventText(text, 'Ollama'), aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
 }
 
@@ -448,7 +451,7 @@ async function runOpenAIFetchImport(aiConfig: AiConfig): Promise<AiImportResult>
   const pageDumps = await buildPageDumps(aiConfig.sites ?? []);
   const prompt    = buildFetchPrompt(today, aiConfig.interests, aiConfig.keywords ?? [], pageDumps, aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
   const text      = await callOpenAI(aiConfig.apiKey, prompt);
-  console.log('[ai-import] OpenAI raw response:', text.slice(0, 500));
+  debugLog('[ai-import] OpenAI raw response:', text.slice(0, 500));
   return filterEventsByDateRange(parseEventText(text, 'OpenAI'), aiConfig.dateRangeStart, aiConfig.dateRangeEnd);
 }
 
@@ -561,7 +564,7 @@ function parseEventText(text: string, source: string): AiImportResult {
     if (homepageCount > 0) {
       console.warn(`[ai-import] ${source}: ${homepageCount}/${events.length} events have homepage-like URLs — links may not be specific`);
     }
-    console.log(`[ai-import] ${source}: parsed ${events.length} valid events (${raw.length} raw)`);
+    debugLog(`[ai-import] ${source}: parsed ${events.length} valid events (${raw.length} raw)`);
     return { events };
   } catch (err) {
     console.error(`[ai-import] ${source}: event mapping error:`, err);
@@ -580,6 +583,6 @@ function filterEventsByDateRange(result: AiImportResult, start?: string, end?: s
     if (end && ev.date > end) return false;
     return true;
   });
-  console.log(`[ai-import] date range filter: ${result.events.length} → ${filtered.length} events (${start || 'any'} to ${end || 'any'})`);
+  debugLog(`[ai-import] date range filter: ${result.events.length} → ${filtered.length} events (${start || 'any'} to ${end || 'any'})`);
   return { events: filtered };
 }

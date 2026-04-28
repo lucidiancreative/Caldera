@@ -19,8 +19,7 @@
     <img id="app-icon" src="build/icon.png" alt="" />
     <span id="app-name">Caldera</span>
     <div id="win-controls">
-      <button id="btn-theme" title="Toggle dark mode">&#9790;</button>
-      <button id="btn-skin"  title="Change skin">&#9671;</button>
+      <button id="btn-settings" title="Settings">&#9881;</button>
       <button id="btn-min" title="Minimize">&#8211;</button>
       <button id="btn-max" title="Maximize">&#9633;</button>
       <button id="btn-close" title="Close">&#10005;</button>
@@ -132,12 +131,37 @@
     <img id="lightbox-img" alt="" />
   </div>
 
-  <!-- Skin picker modal -->
-  <div id="skin-overlay" class="hidden">
-    <div id="skin-modal">
-      <button id="skin-modal-close">&#10005;</button>
-      <h2 id="skin-modal-title">Appearance</h2>
-      <div id="skin-grid"></div>
+  <!-- Settings modal -->
+  <div id="settings-overlay" class="hidden">
+    <div id="settings-modal">
+      <button id="settings-modal-close">&#10005;</button>
+      <h2 id="settings-modal-title">Settings</h2>
+
+      <!-- Theme toggle -->
+      <div id="theme-toggle-section" class="settings-section">
+        <label class="settings-label">Theme</label>
+        <div id="theme-toggle-row">
+          <button class="theme-opt" data-theme="light">Light</button>
+          <button class="theme-opt" data-theme="dark">Dark</button>
+        </div>
+      </div>
+
+      <!-- Skin selection -->
+      <div id="skin-section" class="settings-section">
+        <label class="settings-label">Skin</label>
+        <div id="skin-grid"></div>
+      </div>
+
+      <!-- Shader toggle (only visible for glass skins) -->
+      <div id="shader-toggle-section" class="settings-section">
+        <label class="settings-label">Animated Background</label>
+        <div id="shader-toggle-row">
+          <button class="shader-opt" data-pref="auto">Auto</button>
+          <button class="shader-opt" data-pref="on">On</button>
+          <button class="shader-opt" data-pref="off">Off</button>
+        </div>
+        <p id="shader-toggle-hint"></p>
+      </div>
     </div>
   </div>
 

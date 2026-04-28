@@ -145,11 +145,18 @@ const PALETTE_TEAL: ShaderPalette = {
 };
 
 // ── Skin registry ───────────────────────────────────────
+// Palette stored separately so activateSkin can conditionally init shader based on user pref
+const SKIN_PALETTES: Partial<Record<SkinId, ShaderPalette>> = {
+  arctic:  PALETTE_ARCTIC,
+  glacier: PALETTE_GLACIER,
+  teal:    PALETTE_TEAL,
+};
+
 const SKINS: Record<SkinId, Skin> = {
   default:   { id: 'default',  label: 'Default', init: () => {}, destroy: () => {} },
-  'arctic':  { id: 'arctic',   label: 'Arctic',  init: () => initShaderBackground(PALETTE_ARCTIC),  destroy: destroyShaderBackground, glassVariant: true },
-  'glacier': { id: 'glacier',  label: 'Glacier', init: () => initShaderBackground(PALETTE_GLACIER), destroy: destroyShaderBackground, glassVariant: true },
-  'teal':    { id: 'teal',     label: 'Teal',    init: () => initShaderBackground(PALETTE_TEAL),    destroy: destroyShaderBackground, glassVariant: true },
+  'arctic':  { id: 'arctic',   label: 'Arctic',  init: () => {}, destroy: destroyShaderBackground, glassVariant: true },
+  'glacier': { id: 'glacier',  label: 'Glacier', init: () => {}, destroy: destroyShaderBackground, glassVariant: true },
+  'teal':    { id: 'teal',     label: 'Teal',    init: () => {}, destroy: destroyShaderBackground, glassVariant: true },
 };
 
 function getCurrentSkin(): SkinId {
@@ -189,9 +196,58 @@ function activateSkin(id: SkinId): void {
   // component overrides. Their individual body classes drive shader palette selection.
   if (SKINS[id]?.glassVariant) {
     document.body.classList.add('skin-glass', 'skin-frost');
+    // Only init shader if preference allows (on, or auto without low-power)
+    const palette = SKIN_PALETTES[id];
+    if (palette && shouldEnableShader()) {
+      initShaderBackground(palette);
+    }
   }
   localStorage.setItem('skin', id);
-  if (SKINS[id]) SKINS[id].init();
+}
+
+// ── Shader preference & low-power detection ────────────
+type ShaderPref = 'on' | 'off' | 'auto';
+let _shaderDisabledByLowPower = false;
+
+function getShaderPref(): ShaderPref {
+  const stored = localStorage.getItem('shaderPref');
+  if (stored === 'on' || stored === 'off' || stored === 'auto') return stored;
+  return 'auto';
+}
+
+function setShaderPref(pref: ShaderPref): void {
+  localStorage.setItem('shaderPref', pref);
+}
+
+function shouldEnableShader(): boolean {
+  const pref = getShaderPref();
+  if (pref === 'off') return false;
+  if (pref === 'on') return true;
+  // Auto mode: disable on low power or reduced motion preference
+  if (_shaderDisabledByLowPower) return false;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+  return true;
+}
+
+async function detectLowPowerMode(): Promise<void> {
+  // Battery API for low-power detection (not available in all browsers)
+  if ('getBattery' in navigator) {
+    try {
+      type BatteryManager = { charging: boolean; level: number; addEventListener(e: string, fn: () => void): void };
+      const battery = await (navigator as Navigator & { getBattery(): Promise<BatteryManager> }).getBattery();
+      const checkBattery = () => {
+        // Consider low power if: not charging AND battery < 20%
+        _shaderDisabledByLowPower = !battery.charging && battery.level < 0.2;
+        // If shader is running and we just entered low power mode, destroy it
+        if (_shaderDisabledByLowPower && _shaderRAF !== null && getShaderPref() === 'auto') {
+          destroyShaderBackground();
+        }
+      };
+      checkBattery();
+      battery.addEventListener('chargingchange', checkBattery);
+      battery.addEventListener('levelchange', checkBattery);
+    } catch { /* Battery API not supported or failed */ }
+  }
 }
 
 // ── WebGL shader background (glass skin) ───────────────
@@ -335,6 +391,7 @@ function destroyShaderBackground(): void {
 // ── Boot ───────────────────────────────────────────────
 async function initCalendarApp(): Promise<void> {
   applyCalendarTheme(localStorage.getItem('theme') === 'dark');
+  await detectLowPowerMode();
   activateSkin(getCurrentSkin());
   const raw = await calBridge.loadData();
   calData = migrateCalendarDataFormat(raw);
@@ -345,7 +402,7 @@ async function initCalendarApp(): Promise<void> {
 
 function applyCalendarTheme(isDarkMode: boolean): void {
   document.body.classList.toggle('dark', isDarkMode);
-  qId('btn-theme').textContent = isDarkMode ? '\u2600' : '\u263E';
+  localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
 }
 
 // ── Helpers ────────────────────────────────────────────
@@ -1082,13 +1139,7 @@ function bindCalendarUIEvents(): void {
   qId('btn-max').addEventListener('click', () => calBridge.winMaximize());
   qId('btn-close').addEventListener('click', () => calBridge.winClose());
 
-  qId('btn-theme').addEventListener('click', () => {
-    const isDark = document.body.classList.toggle('dark');
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    qId('btn-theme').textContent = isDark ? '\u2600' : '\u263E';
-  });
-
-  qId('btn-skin').addEventListener('click', openSkinPicker);
+  qId('btn-settings').addEventListener('click', openSettingsModal);
 
   qId('btn-ai').addEventListener('click', openAiSettingsModal);
   qId('ai-modal-close').addEventListener('click', closeAiSettingsModal);
@@ -1168,9 +1219,9 @@ function bindCalendarUIEvents(): void {
   });
   qId('ai-add-selected-btn').addEventListener('click', addSelectedAiEvents);
 
-  qId('skin-modal-close').addEventListener('click', closeSkinPicker);
-  qId('skin-overlay').addEventListener('click', (e: MouseEvent) => {
-    if (e.target === qId('skin-overlay')) closeSkinPicker();
+  qId('settings-modal-close').addEventListener('click', closeSettingsModal);
+  qId('settings-overlay').addEventListener('click', (e: MouseEvent) => {
+    if (e.target === qId('settings-overlay')) closeSettingsModal();
   });
 
   qId('prev-month').addEventListener('click', () => changeMonth(-1));
@@ -1229,7 +1280,7 @@ function bindCalendarUIEvents(): void {
     if (e.key === 'Escape') {
       if (!qId('ai-review-overlay').classList.contains('hidden')) { closeAiReviewModal(); return; }
       if (!qId('ai-overlay').classList.contains('hidden'))        { closeAiSettingsModal(); return; }
-      if (!qId('skin-overlay').classList.contains('hidden')) { closeSkinPicker(); return; }
+      if (!qId('settings-overlay').classList.contains('hidden')) { closeSettingsModal(); return; }
       if (!qId('lightbox-overlay').classList.contains('hidden')) closeLightbox();
       else if (modalDate) closeDayDetailModal();
       else if (rescheduleBlock) cancelReschedule();
@@ -1281,16 +1332,20 @@ function bindCalendarUIEvents(): void {
   });
 
   bindGlassButtonLightFollow();
+  bindThemeToggleEvents();
+  bindShaderToggleEvents();
 }
 
 // ── Skin picker ─────────────────────────────────────────
-function openSkinPicker(): void {
+function openSettingsModal(): void {
+  renderThemeToggle();
   renderSkinGrid();
-  qId('skin-overlay').classList.remove('hidden');
+  renderShaderToggle();
+  qId('settings-overlay').classList.remove('hidden');
 }
 
-function closeSkinPicker(): void {
-  qId('skin-overlay').classList.add('hidden');
+function closeSettingsModal(): void {
+  qId('settings-overlay').classList.add('hidden');
 }
 
 // ── AI Import: Settings Modal ─────────────────────────
@@ -1639,6 +1694,14 @@ function setAiStatus(msg: string, type: string): void {
   el.className   = 'ai-status' + (type ? ` ${type}` : '') + (msg ? '' : ' hidden');
 }
 
+function isLocalhostUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch { return false; }
+}
+
 async function saveAiSettings(): Promise<void> {
   const cfg = getAiConfig();
   if (cfg.provider === 'claude' && !cfg.apiKey) {
@@ -1649,6 +1712,12 @@ async function saveAiSettings(): Promise<void> {
   }
   if (cfg.provider === 'ollama' && !cfg.ollamaUrl) {
     setAiStatus('Please enter the Ollama endpoint URL.', 'error'); return;
+  }
+  // Warn if using unencrypted HTTP for non-localhost Ollama endpoint
+  if (cfg.provider === 'ollama' && cfg.ollamaUrl.startsWith('http://') && !isLocalhostUrl(cfg.ollamaUrl)) {
+    setAiStatus('Warning: Using unencrypted HTTP for a remote Ollama server. Consider using HTTPS.', 'warning');
+    await calBridge.aiSaveConfig(cfg);
+    return;
   }
   await calBridge.aiSaveConfig(cfg);
   setAiStatus('Settings saved.', '');
@@ -1772,6 +1841,13 @@ async function addSelectedAiEvents(): Promise<void> {
   closeAiReviewModal();
 }
 
+function renderThemeToggle(): void {
+  const isDark = document.body.classList.contains('dark');
+  (document.querySelectorAll('.theme-opt') as NodeListOf<HTMLButtonElement>).forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === (isDark ? 'dark' : 'light'));
+  });
+}
+
 function renderSkinGrid(): void {
   const grid    = qId('skin-grid');
   grid.innerHTML = '';
@@ -1792,10 +1868,65 @@ function renderSkinGrid(): void {
     card.addEventListener('click', () => {
       activateSkin(skin.id);
       renderSkinGrid();
+      renderShaderToggle();
       // Re-render grid so cell animation delays apply/remove correctly
       renderCalendarGrid();
     });
     grid.appendChild(card);
+  });
+}
+
+function renderShaderToggle(): void {
+  const section = qId('shader-toggle-section');
+  const current = getCurrentSkin();
+  const isGlassSkin = SKINS[current]?.glassVariant ?? false;
+
+  // Only show shader toggle for glass skins
+  section.style.display = isGlassSkin ? '' : 'none';
+  if (!isGlassSkin) return;
+
+  const pref = getShaderPref();
+  (document.querySelectorAll('.shader-opt') as NodeListOf<HTMLButtonElement>).forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.pref === pref);
+  });
+
+  // Update hint text based on current state
+  const hint = qId('shader-toggle-hint');
+  if (pref === 'auto') {
+    if (_shaderDisabledByLowPower) {
+      hint.textContent = 'Disabled (low battery detected)';
+    } else if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      hint.textContent = 'Disabled (reduced motion preference)';
+    } else {
+      hint.textContent = 'Adjusts based on battery and system preferences';
+    }
+  } else if (pref === 'off') {
+    hint.textContent = 'Static background for better performance';
+  } else {
+    hint.textContent = 'Animated shader always enabled';
+  }
+}
+
+function bindThemeToggleEvents(): void {
+  (document.querySelectorAll('.theme-opt') as NodeListOf<HTMLButtonElement>).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isDark = btn.dataset.theme === 'dark';
+      applyCalendarTheme(isDark);
+      renderThemeToggle();
+    });
+  });
+}
+
+function bindShaderToggleEvents(): void {
+  (document.querySelectorAll('.shader-opt') as NodeListOf<HTMLButtonElement>).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pref = btn.dataset.pref as ShaderPref;
+      setShaderPref(pref);
+      // Re-activate current skin to apply shader change
+      activateSkin(getCurrentSkin());
+      renderShaderToggle();
+      renderCalendarGrid();
+    });
   });
 }
 
@@ -1981,7 +2112,7 @@ function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
   blocks.forEach(block => {
     const blockAny = block as BlockOrPartial & { _amOverlay?: boolean; _recurring?: boolean; label?: string; id?: string; recurrence?: string; color?: string };
     const isRescheduling = rescheduleBlock?.id === blockAny.id;
-    const isPast         = isPastBlock(block as TimeBlock);
+    const isPast         = isPastBlock(block as TimeBlock, key);
 
     // Wrap arc + label in a group so opacity/pointer-events apply to both.
     // AM overlays on PM clock get their own class (readable dimmed opacity).
@@ -2449,7 +2580,7 @@ function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: bool
   });
 
   sorted.forEach(block => {
-    const past = isPastBlock(block) && !block.completed;
+    const past = isPastBlock(block, key) && !block.completed;
 
     const item = document.createElement('div');
     item.className = 'task-item' +
@@ -2550,7 +2681,10 @@ function inferBlockAmPm(startMin: number): AmPm {
   return clockAmPm;
 }
 
-function isPastBlock(block: TimeBlock | (BlockOrPartial & { ampm?: AmPm })): boolean {
+function isPastBlock(block: TimeBlock | (BlockOrPartial & { ampm?: AmPm }), key: string): boolean {
+  const todayKey = getTodayKey();
+  if (key < todayKey) return true;
+  if (key > todayKey) return false;
   const now    = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const ampm   = (block as BlockOrPartial & { ampm?: AmPm }).ampm;

@@ -58,7 +58,8 @@ function createCalderaWindow(): void {
 
   calderaWindow.once('ready-to-show', () => {
     calderaWindow!.show();
-    calderaWindow!.webContents.openDevTools();
+    // DevTools only in development — app.isPackaged is false when running via `npm start`
+    if (!app.isPackaged) calderaWindow!.webContents.openDevTools();
   });
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "caldera",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "A visual event calendar with drag and drop support and Ai assistant connectivity.",
   "main": "dist/main.js",
   "scripts": {

@@ -98,12 +98,18 @@
       <button id="block-label-confirm" title="Save block">&#10003;</button>
       <button id="block-label-del" title="Delete block">&#10005;</button>
     </div>
-    <select id="block-recurrence-select">
-      <option value="none">No repeat</option>
-      <option value="daily">Every day</option>
-      <option value="weekly">Every week</option>
-      <option value="monthly">Every month</option>
-    </select>
+    <div class="popup-meta-row">
+      <select id="block-ampm-select">
+        <option value="AM">AM block</option>
+        <option value="PM">PM block</option>
+      </select>
+      <select id="block-recurrence-select">
+        <option value="none">No repeat</option>
+        <option value="daily">Every day</option>
+        <option value="weekly">Every week</option>
+        <option value="monthly">Every month</option>
+      </select>
+    </div>
     <div id="block-scope-row" class="hidden">
       <label><input type="radio" name="block-scope" value="all" checked> All occurrences</label>
       <label><input type="radio" name="block-scope" value="today"> Just today</label>

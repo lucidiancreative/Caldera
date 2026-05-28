@@ -993,8 +993,19 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 .clock-center   { fill: var(--text-muted); }
 .clock-hand     { stroke: var(--today-ring); stroke-width: 1.5; stroke-linecap: round; }
 .clock-hand-dot { fill: var(--text-muted); }
-.clock-block-arc { opacity: 0.82; cursor: pointer; transition: opacity 0.1s; }
-.clock-block-arc:hover { opacity: 1; }
+.clock-block-arc {
+  opacity: 0.72;
+  cursor: pointer;
+  transition: opacity 0.12s, filter 0.12s;
+  stroke: rgba(255,255,255,0.48);
+  stroke-width: 0.75;
+  filter: saturate(0.92) drop-shadow(0 2px 8px rgba(0,0,0,0.14));
+}
+.clock-block-arc:hover {
+  opacity: 0.9;
+  filter: saturate(1) drop-shadow(0 3px 10px rgba(0,0,0,0.18));
+}
+.clock-block-arc.recurring-arc { stroke-width: 1.35; }
 .clock-block-label { font-size: 10px; font-weight: 700; fill: rgba(255,255,255,0.92); pointer-events: none; }
 .clock-preview  { opacity: 0.45; pointer-events: none; }
 .clock-ring-zone { fill: none; stroke: transparent; stroke-width: 52; cursor: crosshair; }
@@ -1012,13 +1023,16 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 .block-chip {
   padding: 4px 12px;
   border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.28);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 2px 8px rgba(0,0,0,0.12);
   font-size: 12px;
   font-weight: 600;
   color: #fff;
   cursor: pointer;
-  transition: opacity 0.12s, transform 0.1s;
+  transition: opacity 0.12s, transform 0.1s, filter 0.12s;
+  filter: saturate(0.95);
 }
-.block-chip:hover { opacity: 0.85; transform: scale(1.04); }
+.block-chip:hover { opacity: 0.9; transform: scale(1.04); filter: saturate(1); }
 
 /* ── Block label popup ────────────────────────────────── */
 #block-label-popup {
@@ -1037,6 +1051,12 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 #block-label-popup.hidden { display: none; }
 
 .popup-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.popup-meta-row {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -1096,6 +1116,7 @@ body.dark #block-label-confirm:hover { background: #1a3a28; }
 /* Stronger shadow in dark mode since the popup sits on a near-black surface */
 body.dark #block-label-popup { box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
 
+#block-ampm-select,
 #block-recurrence-select {
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1106,8 +1127,15 @@ body.dark #block-label-popup { box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
   color: var(--text);
   cursor: pointer;
   outline: none;
+}
+#block-ampm-select {
+  width: 82px;
+  flex-shrink: 0;
+}
+#block-recurrence-select {
   width: 100%;
 }
+#block-ampm-select:focus,
 #block-recurrence-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 #block-scope-row {
@@ -1469,12 +1497,19 @@ body.skin-glass #calendar-grid.is-entering {
   animation: glass-cell-enter 0.28s ease forwards;
 }
 
-@keyframes skin-fade {
+@keyframes skin-fade-in {
   from { opacity: 0; transform: scale(0.98); }
   to   { opacity: 1; transform: scale(1); }
 }
+@keyframes skin-fade-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.98); }
+}
 #calendar-grid.skin-fade-in {
-  animation: skin-fade 0.5s ease-out forwards;
+  animation: skin-fade-in 0.2s ease-out forwards;
+}
+#calendar-grid.skin-fade-out {
+  animation: skin-fade-out 0.4s ease-in forwards;
 }
 
 body.skin-glass #modal {
@@ -2824,73 +2859,34 @@ body.skin-frost:not(.dark) #ai-url-list { scrollbar-color: rgba(55,55,70,0.25) t
 body.skin-frost:not(.dark) #ai-url-list::-webkit-scrollbar-thumb { background: rgba(55,55,70,0.25); }
 body.skin-frost:not(.dark) #ai-url-list::-webkit-scrollbar-thumb:hover { background: rgba(55,55,70,0.40); }
 
-/* ── Glass skin: clock time blocks (frosted glass aesthetic) ─ */
-body.skin-glass .clock-block-arc {
-  opacity: 0.52;
-  stroke: rgba(255, 255, 255, 0.6);
-  stroke-width: 0.5;
-  filter:
-    saturate(0.82)
-    drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));
-}
-body.skin-glass .clock-block-arc:hover {
-  opacity: 0.7;
-  filter:
-    saturate(0.88)
-    drop-shadow(0 3px 10px rgba(0, 0, 0, 0.2));
-}
-body.skin-glass .clock-block-arc.recurring-arc {
-  stroke: rgba(255, 255, 255, 0.45);
-  stroke-width: 1.5;
-  stroke-dasharray: none;
-}
-
-/* ── Light-glass skins: softer palette for frosted backgrounds ─ */
+/* Unified schedule block styling across skins: skins only swap palette gradients. */
+body.skin-glass .clock-block-arc,
 body.skin-frost:not(.dark) .clock-block-arc {
-  opacity: 0.48;
-  stroke: rgba(255, 255, 255, 0.7);
-  stroke-width: 0.5;
-  filter:
-    saturate(0.75)
-    drop-shadow(0 2px 10px rgba(40, 80, 120, 0.12));
+  opacity: 0.72;
+  stroke: rgba(255,255,255,0.48);
+  stroke-width: 0.75;
+  filter: saturate(0.92) drop-shadow(0 2px 8px rgba(0,0,0,0.14));
 }
+body.skin-glass .clock-block-arc:hover,
 body.skin-frost:not(.dark) .clock-block-arc:hover {
-  opacity: 0.65;
-  filter:
-    saturate(0.82)
-    drop-shadow(0 3px 12px rgba(40, 80, 120, 0.18));
+  opacity: 0.9;
+  filter: saturate(1) drop-shadow(0 3px 10px rgba(0,0,0,0.18));
 }
+body.skin-glass .clock-block-arc.recurring-arc,
 body.skin-frost:not(.dark) .clock-block-arc.recurring-arc {
-  stroke: rgba(255, 255, 255, 0.55);
+  stroke: rgba(255,255,255,0.48);
+  stroke-width: 1.35;
   stroke-dasharray: none;
 }
-
-/* ── Glass skin: block legend chips ─────────────────── */
-body.skin-glass .block-chip {
-  opacity: 0.65;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 2px 8px rgba(0, 0, 0, 0.12),
-    0 0 12px rgba(255, 255, 255, 0.15);
-  filter: saturate(0.82);
-}
-body.skin-glass .block-chip:hover {
-  opacity: 0.8;
-  filter: saturate(0.9);
-}
-
-/* ── Light-glass skins: block legend chips ────────────── */
+body.skin-glass .block-chip,
 body.skin-frost:not(.dark) .block-chip {
-  opacity: 0.6;
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    0 2px 10px rgba(40, 80, 120, 0.1),
-    0 0 14px rgba(255, 255, 255, 0.35);
-  filter: saturate(0.75);
+  opacity: 1;
+  border: 1px solid rgba(255,255,255,0.28);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 2px 8px rgba(0,0,0,0.12);
+  filter: saturate(0.95);
 }
+body.skin-glass .block-chip:hover,
 body.skin-frost:not(.dark) .block-chip:hover {
-  opacity: 0.75;
-  filter: saturate(0.85);
+  opacity: 0.9;
+  filter: saturate(1);
 }

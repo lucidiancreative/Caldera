@@ -1,4 +1,4 @@
-Caldera End User License Agreement (EULA)
+Caldera Proprietary Freeware License Agreement
 
 Copyright (c) 2026 Lucidian Creative. All rights reserved.
 
@@ -9,49 +9,61 @@ AGREE TO THESE TERMS, DO NOT INSTALL OR USE THIS SOFTWARE.
 
 1. DEFINITIONS
 
-"Software" refers to the Caldera desktop application, including all
-source code, object code, images, documentation, and associated
-files distributed with it.
+"Software" means the Caldera desktop application, including its
+compiled binaries, source code, assets, documentation, updates,
+and any associated files provided by the Licensor.
 
-"Licensor" refers to Lucidian Creative.
+"Licensor" means Lucidian Creative.
 
-"You" or "User" refers to the individual or entity installing or
+"You" or "User" means the individual or legal entity installing or
 using the Software.
 
-2. GRANT OF LICENSE
+2. FREEWARE LICENSE GRANT
 
 Subject to the terms of this Agreement, the Licensor grants You a
 limited, non-exclusive, non-transferable, revocable license to:
 
-  (a) Install and use the Software for personal or commercial
-      purposes on any compatible Windows desktop environment;
-  (b) Make copies of the Software solely for backup purposes.
+  (a) Download, install, and use the Software at no monetary cost;
+  (b) Use the Software for personal or internal business purposes
+      on compatible devices;
+  (c) Make a reasonable number of backup copies solely for archival
+      or recovery purposes.
+
+This is a freeware license. No ownership rights are transferred to
+You. The Software remains proprietary and is licensed, not sold.
 
 3. RESTRICTIONS
 
-You may NOT:
+You may NOT, except with prior written permission from the Licensor:
 
   (a) Modify, adapt, translate, reverse engineer, decompile,
       disassemble, or create derivative works based on the Software;
-  (b) Distribute, sublicense, lease, rent, sell, or otherwise
-      transfer the Software or any rights therein to any third party;
-  (c) Remove, alter, or obscure any copyright notices, trademarks,
-      or other proprietary notices contained in the Software;
-  (d) Use the Software to develop a competing product or service;
-  (e) Republish, redistribute, or host the Software on any
-      repository, marketplace, or distribution platform without
-      prior written consent from the Licensor.
+  (b) Redistribute, sublicense, lease, rent, lend, host, mirror,
+      publish, or otherwise make the Software available to any
+      third party;
+  (c) Remove, alter, or obscure any copyright, trademark, or other
+      proprietary notices contained in the Software;
+  (d) Sell the Software, charge for access to it, or bundle it with
+      any paid product or service;
+  (e) Use the Software or any part of it to develop or train a
+      competing product or service;
+  (f) Misrepresent the Software as open source or claim ownership
+      of the Software or its components.
 
 4. INTELLECTUAL PROPERTY
 
-The Software and all copies thereof are proprietary to and the
-intellectual property of the Licensor. The Software is protected by
-copyright law and international treaty provisions. The structure,
-organization, and code of the Software are valuable trade secrets
-and confidential information of the Licensor. All rights not
-expressly granted herein are reserved by the Licensor.
+The Software and all copies of it are proprietary to the Licensor
+and are protected by copyright and other intellectual property
+laws. All rights not expressly granted in this Agreement are
+reserved by the Licensor.
 
-5. NO WARRANTY
+5. UPDATES AND SUPPORT
+
+The Licensor may, but is not obligated to, provide updates,
+patches, fixes, or support. The Licensor may change, suspend, or
+discontinue the Software at any time without liability.
+
+6. NO WARRANTY
 
 THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -59,50 +71,47 @@ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
 NONINFRINGEMENT. THE LICENSOR DOES NOT WARRANT THAT THE SOFTWARE
 WILL BE ERROR-FREE OR THAT ITS OPERATION WILL BE UNINTERRUPTED.
 
-6. LIMITATION OF LIABILITY
+7. LIMITATION OF LIABILITY
 
 IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY INDIRECT,
-INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY
-LOSS OF PROFITS, DATA, USE, OR GOODWILL, ARISING OUT OF OR IN
-CONNECTION WITH THE USE OR INABILITY TO USE THE SOFTWARE, EVEN IF
-THE LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE
+DAMAGES, OR ANY LOSS OF PROFITS, DATA, USE, OR GOODWILL, ARISING
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THIS AGREEMENT, EVEN
+IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
 
-THE LICENSOR'S TOTAL AGGREGATE LIABILITY ARISING OUT OF OR RELATED
-TO THIS AGREEMENT SHALL NOT EXCEED THE AMOUNT YOU PAID FOR THE
-SOFTWARE, IF ANY.
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR'S TOTAL
+AGGREGATE LIABILITY ARISING OUT OF OR RELATED TO THE SOFTWARE OR
+THIS AGREEMENT SHALL NOT EXCEED TEN U.S. DOLLARS (USD $10.00).
 
-7. DATA AND PRIVACY
+8. DATA AND PRIVACY
 
-The Software does not collect, transmit, or process any personal
-data, telemetry, usage statistics, or analytics. All user-created
-content — including event entries, images, and preferences — is
-stored exclusively on the local filesystem and is never sent to
-any external server. The Software makes no network connections.
+The Software is designed for local-only use. It does not collect,
+transmit, or process personal data, telemetry, usage statistics,
+or analytics. User-created content, including event entries,
+images, and preferences, is stored on the local filesystem and is
+not sent to external servers by the Software.
 
-8. TERMINATION
+9. TERMINATION
 
-This license is effective until terminated. It will terminate
-automatically without notice if You fail to comply with any term
-of this Agreement. Upon termination, You must destroy all copies
-of the Software in Your possession.
+This Agreement remains effective until terminated. It terminates
+automatically if You fail to comply with any of its terms. Upon
+termination, You must stop using the Software and destroy all
+copies in Your possession or control.
 
-The Licensor may also terminate this license at any time by
-providing written notice.
-
-9. GOVERNING LAW
+10. GOVERNING LAW
 
 This Agreement shall be governed by and construed in accordance
 with the laws of the jurisdiction in which the Licensor operates,
-without regard to its conflict of law provisions.
+without regard to conflict of law principles.
 
-10. ENTIRE AGREEMENT
+11. ENTIRE AGREEMENT
 
 This Agreement constitutes the entire agreement between You and
-the Licensor regarding the Software and supersedes all prior
-agreements, understandings, and communications, whether written
-or oral.
+the Licensor regarding the Software and supersedes all prior or
+contemporaneous understandings, communications, or agreements,
+whether written or oral, relating to the Software.
 
-11. CONTACT
+12. CONTACT
 
 For licensing inquiries, permissions, or questions regarding this
 Agreement, contact the Licensor at:

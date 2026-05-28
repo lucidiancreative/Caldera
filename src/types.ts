@@ -30,6 +30,8 @@ export interface TimeBlock {
   startMin: number;
   endMin: number;
   label: string;
+  /** Shared palette slot so blocks can re-theme consistently across skins */
+  paletteSlot?: number;
   /** Hex colour string */
   color: string;
   ampm: AmPm;
@@ -41,6 +43,8 @@ export interface RecurringBlock {
   startMin: number;
   endMin: number;
   label: string;
+  /** Shared palette slot so recurring blocks can re-theme consistently across skins */
+  paletteSlot?: number;
   color: string;
   ampm: AmPm;
   recurrence: RecurrenceType;

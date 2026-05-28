@@ -1,16 +1,16 @@
 {
   "name": "caldera",
-  "version": "1.4.0",
-  "description": "A visual event calendar with drag and drop support and Ai assistant connectivity.",
+  "version": "1.4.2",
+  "description": "A proprietary freeware visual event calendar with local-first event import functionality",
   "main": "dist/main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "node scripts/start-electron.js",
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win"
   },
   "keywords": [],
-  "author": "Lucidian Creative",
+  "author": "ZenFrog",
   "license": "SEE LICENSE IN LICENSE",
   "build": {
     "appId": "com.caldera.app",

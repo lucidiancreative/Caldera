@@ -42,7 +42,7 @@ interface TimeBlockPopupState {
 
 type BlockOrPartial =
   | (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean; recurrence?: string; dayOfWeek?: number; dayOfMonth?: number; completedDates?: string[]; excludedDates?: string[] })
-  | { startMin: number; endMin: number; id?: undefined; label?: undefined; color?: string; ampm?: AmPm };
+  | { startMin: number; endMin: number; id?: undefined; label?: undefined; color?: string; paletteSlot?: number; ampm?: AmPm };
 
 // ── DOM helpers ─────────────────────────────────────────
 
@@ -124,6 +124,20 @@ const BLOCK_COLOR_HIGHLIGHTS_TEAL: Record<string, string> = {
   '#b8a048': '#d8c078', '#9060b8': '#b890d8', '#b88858': '#d8b088',
 };
 
+const BLOCK_PALETTES: Record<SkinId, string[]> = {
+  default: BLOCK_COLORS,
+  arctic: BLOCK_COLORS_ARCTIC,
+  glacier: BLOCK_COLORS_GLACIER,
+  teal: BLOCK_COLORS_TEAL,
+};
+
+const BLOCK_HIGHLIGHT_MAPS: Record<SkinId, Record<string, string>> = {
+  default: BLOCK_COLOR_HIGHLIGHTS,
+  arctic: { ...BLOCK_COLOR_HIGHLIGHTS, ...BLOCK_COLOR_HIGHLIGHTS_ARCTIC },
+  glacier: { ...BLOCK_COLOR_HIGHLIGHTS, ...BLOCK_COLOR_HIGHLIGHTS_GLACIER },
+  teal: { ...BLOCK_COLOR_HIGHLIGHTS, ...BLOCK_COLOR_HIGHLIGHTS_TEAL },
+};
+
 // ── Shader palette presets ──────────────────────────────
 // Near-white with whispers of ice blue — closest to iOS frosted aesthetic
 const PALETTE_ARCTIC: ShaderPalette = {
@@ -165,24 +179,131 @@ function getCurrentSkin(): SkinId {
   return 'default';
 }
 
-function getBlockColors(): string[] {
-  const skin = getCurrentSkin();
-  switch (skin) {
-    case 'arctic':  return BLOCK_COLORS_ARCTIC;
-    case 'glacier': return BLOCK_COLORS_GLACIER;
-    case 'teal':    return BLOCK_COLORS_TEAL;
-    default:        return BLOCK_COLORS;
+function getBlockColors(skin: SkinId = getCurrentSkin()): string[] {
+  return BLOCK_PALETTES[skin];
+}
+
+function getBlockHighlights(skin: SkinId = getCurrentSkin()): Record<string, string> {
+  return BLOCK_HIGHLIGHT_MAPS[skin];
+}
+
+function getBlockPaletteSize(): number {
+  return BLOCK_PALETTES.default.length;
+}
+
+function isValidBlockPaletteSlot(slot: number | undefined): slot is number {
+  return slot != null && Number.isInteger(slot) && slot >= 0 && slot < getBlockPaletteSize();
+}
+
+function normalizeHexColor(color: string): string {
+  return color.trim().toLowerCase();
+}
+
+function hexToRgb(color: string): [number, number, number] | null {
+  const match = /^#?([0-9a-f]{6})$/i.exec(normalizeHexColor(color));
+  if (!match) return null;
+  const hex = match[1];
+  return [
+    parseInt(hex.slice(0, 2), 16),
+    parseInt(hex.slice(2, 4), 16),
+    parseInt(hex.slice(4, 6), 16),
+  ];
+}
+
+function inferBlockPaletteSlotFromColor(color?: string): number {
+  if (!color) return 0;
+  const normalized = normalizeHexColor(color);
+
+  for (let slot = 0; slot < getBlockPaletteSize(); slot++) {
+    if (Object.values(BLOCK_PALETTES).some(palette => normalizeHexColor(palette[slot]) === normalized)) {
+      return slot;
+    }
+  }
+
+  const rgb = hexToRgb(normalized);
+  if (!rgb) return 0;
+
+  let bestSlot = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let slot = 0; slot < getBlockPaletteSize(); slot++) {
+    for (const palette of Object.values(BLOCK_PALETTES)) {
+      const candidateRgb = hexToRgb(palette[slot]);
+      if (!candidateRgb) continue;
+      const distance =
+        (rgb[0] - candidateRgb[0]) ** 2 +
+        (rgb[1] - candidateRgb[1]) ** 2 +
+        (rgb[2] - candidateRgb[2]) ** 2;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestSlot = slot;
+      }
+    }
+  }
+
+  return bestSlot;
+}
+
+function getBlockPaletteSlot(block: { paletteSlot?: number; color?: string }): number {
+  return isValidBlockPaletteSlot(block.paletteSlot)
+    ? block.paletteSlot
+    : inferBlockPaletteSlotFromColor(block.color);
+}
+
+function getBlockColorBySlot(slot: number, skin: SkinId = getCurrentSkin()): string {
+  return getBlockColors(skin)[slot] || getBlockColors(skin)[0];
+}
+
+function getBlockHighlightBySlot(slot: number, skin: SkinId = getCurrentSkin()): string {
+  const color = getBlockColorBySlot(slot, skin);
+  return getBlockHighlights(skin)[color] || color;
+}
+
+function getBlockGradientCss(block: { paletteSlot?: number; color?: string }, angle = '135deg'): string {
+  const slot = getBlockPaletteSlot(block);
+  return `linear-gradient(${angle}, ${getBlockHighlightBySlot(slot)} 0%, ${getBlockColorBySlot(slot)} 100%)`;
+}
+
+function applyBlockGradientStyle(el: HTMLElement, block: { paletteSlot?: number; color?: string }, angle = '135deg'): void {
+  el.style.background = getBlockGradientCss(block, angle);
+}
+
+function getBlockStorageAppearance(block: { paletteSlot?: number; color?: string }): { paletteSlot: number; color: string } {
+  const paletteSlot = getBlockPaletteSlot(block);
+  return { paletteSlot, color: getBlockColorBySlot(paletteSlot) };
+}
+
+function getBlockGradientId(slot: number): string {
+  return `block-grad-slot-${slot}`;
+}
+
+function getClockBlockCornerRadius(): number {
+  return 6;
+}
+
+function forEachCalendarBlock(data: CalData, visit: (block: TimeBlock | RecurringBlock) => void): void {
+  (data._recurring || []).forEach(visit);
+  for (const [key, value] of Object.entries(data)) {
+    if (key.startsWith('_')) continue;
+    if (!value || typeof value !== 'object' || !('events' in value)) continue;
+    (value as DayData).timeBlocks?.forEach(visit);
   }
 }
 
-function getBlockHighlights(): Record<string, string> {
-  const skin = getCurrentSkin();
-  switch (skin) {
-    case 'arctic':  return { ...BLOCK_COLOR_HIGHLIGHTS, ...BLOCK_COLOR_HIGHLIGHTS_ARCTIC };
-    case 'glacier': return { ...BLOCK_COLOR_HIGHLIGHTS, ...BLOCK_COLOR_HIGHLIGHTS_GLACIER };
-    case 'teal':    return { ...BLOCK_COLOR_HIGHLIGHTS, ...BLOCK_COLOR_HIGHLIGHTS_TEAL };
-    default:        return BLOCK_COLOR_HIGHLIGHTS;
-  }
+function normalizeCalendarBlockAppearance(data: CalData): void {
+  forEachCalendarBlock(data, (block) => {
+    const paletteSlot = getBlockPaletteSlot(block);
+    block.paletteSlot = paletteSlot;
+    if (!block.color) block.color = getBlockColorBySlot(paletteSlot);
+  });
+}
+
+function syncCalendarBlockColorsToCurrentSkin(): void {
+  normalizeCalendarBlockAppearance(calData);
+  forEachCalendarBlock(calData, (block) => {
+    const paletteSlot = getBlockPaletteSlot(block);
+    block.paletteSlot = paletteSlot;
+    block.color = getBlockColorBySlot(paletteSlot);
+  });
 }
 
 function activateSkin(id: SkinId): void {
@@ -447,6 +568,12 @@ function formatTime12h(t: string): string {
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
+function setScheduleAmPm(ampm: AmPm): void {
+  clockAmPm = ampm;
+  (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>)
+    .forEach(btn => btn.classList.toggle('active', btn.dataset.ampm === clockAmPm));
+}
+
 // Returns today's date key — computed fresh each call so the app
 // stays correct if left open past midnight.
 function getTodayKey(): string {
@@ -455,6 +582,7 @@ function getTodayKey(): string {
 }
 
 async function saveCalendarData(): Promise<void> {
+  syncCalendarBlockColorsToCurrentSkin();
   await calBridge.saveData(calData);
 }
 
@@ -466,6 +594,7 @@ function pushCalendarSnapshot(): void {
 
 async function applyCalendarSnapshot(snapshot: string): Promise<void> {
   calData = JSON.parse(snapshot);
+  normalizeCalendarBlockAppearance(calData);
   await saveCalendarData();
   renderCalendarGrid();
   renderMonthStrip();
@@ -517,11 +646,14 @@ function migrateCalendarDataFormat(raw: Record<string, unknown>): CalData {
       out[key] = {
         events:     [{ id, image: (legacy.image as string | null) || null, notes: (legacy.notes as string) || '', time: (legacy.time as string) || '' }],
         featuredId: legacy.image ? id : null,
+        timeBlocks: [],
       };
     }
   }
   if (!out._recurring) out._recurring = [];
-  return out as CalData;
+  const migrated = out as CalData;
+  normalizeCalendarBlockAppearance(migrated);
+  return migrated;
 }
 
 // ── Day data helpers ────────────────────────────────────
@@ -578,6 +710,15 @@ async function renderCalendarGrid(): Promise<void> {
   hoveredGridCell = null;
 
   const grid = qId('calendar-grid');
+
+  // Fade out old grid before clearing when switching skins
+  if (_skinSwitchPending && grid.children.length > 0) {
+    grid.classList.remove('skin-fade-in');
+    grid.classList.add('skin-fade-out');
+    await new Promise(r => setTimeout(r, 400));
+    grid.classList.remove('skin-fade-out');
+  }
+
   grid.innerHTML = '';
 
   // Restart the glass-skin entrance animation on every grid render (month navigation, today
@@ -586,8 +727,6 @@ async function renderCalendarGrid(): Promise<void> {
   // a persisted animation state can be reset by Chromium when backdrop-filter overlays are
   // shown or hidden, leaving the grid invisible after the overlay closes.
   if (_skinSwitchPending) {
-    grid.classList.remove('skin-fade-in');
-    void grid.offsetHeight;
     grid.classList.add('skin-fade-in');
     _skinSwitchPending = false;
   } else if (document.body.classList.contains('skin-glass')) {
@@ -1147,7 +1286,7 @@ function bindCalendarUIEvents(): void {
   qId('calendar-grid').addEventListener('animationend', (e: AnimationEvent) => {
     const el = e.currentTarget as HTMLElement;
     if (e.animationName === 'glass-cell-enter') el.classList.remove('is-entering');
-    if (e.animationName === 'skin-fade') el.classList.remove('skin-fade-in');
+    if (e.animationName === 'skin-fade-in') el.classList.remove('skin-fade-in');
   });
 
   qId('btn-min').addEventListener('click', () => calBridge.winMinimize());
@@ -2081,13 +2220,10 @@ function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
   // Radial gradient centered at the clock origin so the lighter highlight falls at the
   // inner ring edge and the base color lands at the outer edge, following the arc's depth.
   const defs = svgEl('defs', {});
-  const blockHighlights = getBlockHighlights();
-  // Include default colors (for existing saved blocks) + current skin colors + gray
-  const allColors = [...new Set([...BLOCK_COLORS, ...getBlockColors(), '#888'])];
-  allColors.forEach(color => {
-    const highlight = blockHighlights[color] || BLOCK_COLOR_HIGHLIGHTS[color] || color;
+  getBlockColors().forEach((color, slot) => {
+    const highlight = getBlockHighlightBySlot(slot);
     const grad = svgEl('radialGradient', {
-      id: `block-grad-${color.replace('#', '')}`,
+      id: getBlockGradientId(slot),
       cx: String(cx), cy: String(cy), r: String(r2),
       gradientUnits: 'userSpaceOnUse',
     });
@@ -2128,6 +2264,7 @@ function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
     const blockAny = block as BlockOrPartial & { _amOverlay?: boolean; _recurring?: boolean; label?: string; id?: string; recurrence?: string; color?: string };
     const isRescheduling = rescheduleBlock?.id === blockAny.id;
     const isPast         = isPastBlock(block as TimeBlock, key);
+    const paletteSlot    = getBlockPaletteSlot(blockAny);
 
     // Wrap arc + label in a group so opacity/pointer-events apply to both.
     // AM overlays on PM clock get their own class (readable dimmed opacity).
@@ -2151,8 +2288,8 @@ function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
 
     const path = svgEl('path', {
       class: 'clock-block-arc' + (blockAny._recurring ? ' recurring-arc' : ''),
-      d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin, document.body.classList.contains('skin-glass') ? 6 : 0),
-      fill: `url(#block-grad-${(blockAny.color || '#888').replace('#', '')})`,
+      d:    arcPath(cx, cy, r1, r2, block.startMin, block.endMin, getClockBlockCornerRadius()),
+      fill: `url(#${getBlockGradientId(paletteSlot)})`,
     });
     g.appendChild(path);
 
@@ -2186,7 +2323,12 @@ function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
   });
 
   // Pre-created path updated during drag so we don't create/destroy SVG nodes on every mousemove
-  const preview = svgEl('path', { id: 'clock-preview-arc', class: 'clock-preview', fill: '#888', d: '' });
+  const preview = svgEl('path', {
+    id: 'clock-preview-arc',
+    class: 'clock-preview',
+    fill: `url(#${getBlockGradientId(0)})`,
+    d: '',
+  });
   svg.appendChild(preview);
 
   // Drawn above blocks so the hand is always visible regardless of how many arcs are stacked
@@ -2284,9 +2426,8 @@ function bindClockInteraction(svg: SVGSVGElement, cx: number, cy: number, r1: nu
 
     const startMin     = minutesFromPoint(cx, cy, pt.x, pt.y);
     const previewPath  = document.getElementById('clock-preview-arc') as SVGPathElement | null;
-    const colors = getBlockColors();
-    const previewColor = colors[(getDayData(key)?.timeBlocks?.length || 0) % colors.length];
-    previewPath?.setAttribute('fill', previewColor);
+    const previewSlot  = (getDayData(key)?.timeBlocks?.length || 0) % getBlockPaletteSize();
+    previewPath?.setAttribute('fill', `url(#${getBlockGradientId(previewSlot)})`);
 
     let lastMin = startMin;
 
@@ -2294,7 +2435,7 @@ function bindClockInteraction(svg: SVGSVGElement, cx: number, cy: number, r1: nu
       const pt2 = svgPoint(svg, ev);
       lastMin   = minutesFromPoint(cx, cy, pt2.x, pt2.y);
       const span = (lastMin - startMin + 720) % 720;
-      previewPath?.setAttribute('d', span >= 15 ? arcPath(cx, cy, r1, r2, startMin, lastMin) : '');
+      previewPath?.setAttribute('d', span >= 15 ? arcPath(cx, cy, r1, r2, startMin, lastMin, getClockBlockCornerRadius()) : '');
     }
 
     function onClockDragEnd(): void {
@@ -2322,14 +2463,16 @@ function showTimeBlockPopup(mode: 'new' | 'edit', blockOrData: BlockOrPartial, k
   const input          = qId<HTMLInputElement>('block-label-input');
   const confirmBtn     = qId('block-label-confirm');
   const delBtn         = qId('block-label-del');
+  const ampmSel        = qId<HTMLSelectElement>('block-ampm-select');
   const recurSel       = qId<HTMLSelectElement>('block-recurrence-select');
   const scopeRow       = qId('block-scope-row');
   const { startMin, endMin, id, label } = blockOrData as BlockOrPartial & { id?: string; label?: string };
-  const blockAny       = blockOrData as BlockOrPartial & { _recurring?: boolean; recurrence?: string };
+  const blockAny       = blockOrData as BlockOrPartial & { _recurring?: boolean; recurrence?: string; ampm?: AmPm };
   const isRecurring    = !!blockAny._recurring;
 
   timeBlockPopupState = { mode, key, startMin, endMin, id };
   input.value    = label || '';
+  ampmSel.value  = blockAny.ampm || clockAmPm;
   recurSel.value = isRecurring ? (blockAny.recurrence || 'daily') : 'none';
 
   // Scope row: visible only when editing an existing recurring block
@@ -2350,7 +2493,7 @@ function showTimeBlockPopup(mode: 'new' | 'edit', blockOrData: BlockOrPartial, k
   const sy      = rect.top  + (cy + r * Math.sin(ang)) * (rect.height / 400);
 
   popup.style.left = Math.min(sx - 10,  window.innerWidth  - 260) + 'px';
-  popup.style.top  = Math.min(sy - 20,  window.innerHeight - 180) + 'px';
+  popup.style.top  = Math.min(sy - 20,  window.innerHeight - 220) + 'px';
   delBtn.title = mode === 'new' ? 'Cancel' : 'Delete block';
 
   popup.classList.remove('hidden');
@@ -2362,6 +2505,7 @@ function showTimeBlockPopup(mode: 'new' | 'edit', blockOrData: BlockOrPartial, k
 
   function commitBlockEdit(): void {
     const lbl        = input.value.trim();
+    const ampm       = ampmSel.value as AmPm;
     const recurrence = recurSel.value;
     const scope      = getSelectedBlockScope();
     closeTimeBlockPopup();
@@ -2370,9 +2514,9 @@ function showTimeBlockPopup(mode: 'new' | 'edit', blockOrData: BlockOrPartial, k
       return;
     }
     if (mode === 'new') {
-      saveTimeBlock(key, { startMin, endMin, label: lbl }, recurrence);
+      saveTimeBlock(key, { startMin, endMin, label: lbl }, recurrence, ampm);
     } else if (mode === 'edit' && id) {
-      updateTimeBlock(key, id, lbl, recurrence, scope);
+      updateTimeBlock(key, id, lbl, recurrence, scope, ampm);
     }
   }
 
@@ -2422,21 +2566,27 @@ function closeTimeBlockPopup(): void {
 }
 
 // ── Time block data operations ──────────────────────────
-async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMin: number; endMin: number; label: string }, recurrence = 'none'): Promise<void> {
+async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMin: number; endMin: number; label: string }, recurrence = 'none', ampm: AmPm = clockAmPm): Promise<void> {
   pushCalendarSnapshot();
-  const ampm = inferBlockAmPm(startMin);
-  const blockColors = getBlockColors();
   if (recurrence === 'none') {
-    const day   = getOrInitDayData(key);
-    const color = blockColors[day.timeBlocks.length % blockColors.length];
-    day.timeBlocks.push({ id: generateCalendarEntryId(), startMin, endMin, label, color, ampm, completed: false });
+    const day = getOrInitDayData(key);
+    const paletteSlot = day.timeBlocks.length % getBlockPaletteSize();
+    day.timeBlocks.push({
+      id: generateCalendarEntryId(),
+      startMin,
+      endMin,
+      label,
+      ...getBlockStorageAppearance({ paletteSlot }),
+      ampm,
+      completed: false,
+    });
   } else {
     if (!calData._recurring) calData._recurring = [];
-    const color = blockColors[calData._recurring.length % blockColors.length];
+    const paletteSlot = calData._recurring.length % getBlockPaletteSize();
     const [y, m, d] = key.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     calData._recurring.push({
-      id: generateCalendarEntryId(), startMin, endMin, label, color, ampm,
+      id: generateCalendarEntryId(), startMin, endMin, label, ...getBlockStorageAppearance({ paletteSlot }), ampm,
       recurrence: recurrence as RecurringBlock['recurrence'],
       dayOfWeek:  date.getDay(),
       dayOfMonth: d,
@@ -2445,16 +2595,14 @@ async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMi
     });
   }
   await saveCalendarData();
-  // If the inferred period differs from the current clock view, switch to show the new block
+  // If the saved period differs from the current clock view, switch to show the saved block.
   if (ampm !== clockAmPm) {
-    clockAmPm = ampm;
-    (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>)
-      .forEach(b => b.classList.toggle('active', b.dataset.ampm === clockAmPm));
+    setScheduleAmPm(ampm);
   }
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
-async function updateTimeBlock(key: string, blockId: string, label: string, recurrence: string, scope: string): Promise<void> {
+async function updateTimeBlock(key: string, blockId: string, label: string, recurrence: string, scope: string, ampm: AmPm): Promise<void> {
   pushCalendarSnapshot();
   const recurring    = calData._recurring || [];
   const rIdx         = recurring.findIndex(b => b.id === blockId);
@@ -2462,6 +2610,7 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
 
   if (isRecurring) {
     const block = recurring[rIdx];
+    const appearance = getBlockStorageAppearance(block);
     if (scope === 'today') {
       // Exclude today from recurrence; create a one-off override on this date
       if (!block.excludedDates) block.excludedDates = [];
@@ -2469,11 +2618,12 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
       const day = getOrInitDayData(key);
       day.timeBlocks.push({
         id: generateCalendarEntryId(), startMin: block.startMin, endMin: block.endMin,
-        label, color: block.color, ampm: block.ampm, completed: false,
+        label, ...appearance, ampm, completed: false,
       });
     } else {
       // Update the template for all occurrences
       block.label = label;
+      block.ampm = ampm;
       if (recurrence === 'none') {
         // Convert to a one-off block on the current view date
         recurring.splice(rIdx, 1);
@@ -2481,7 +2631,7 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
         const completed = block.completedDates?.includes(key) || false;
         day.timeBlocks.push({
           id: block.id, startMin: block.startMin, endMin: block.endMin,
-          label, color: block.color, ampm: block.ampm, completed,
+          label, ...appearance, ampm, completed,
         });
       } else {
         block.recurrence = recurrence as RecurringBlock['recurrence'];
@@ -2495,7 +2645,9 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
     // Block lives on a single date in calData[key].timeBlocks, not in calData._recurring
     const block = getDayData(key)?.timeBlocks?.find(b => b.id === blockId);
     if (!block) return;
+    const appearance = getBlockStorageAppearance(block);
     block.label = label;
+    block.ampm = ampm;
     if (recurrence !== 'none') {
       // Move the block out of date-specific storage and into calData._recurring
       const day = getDayData(key)!;
@@ -2505,7 +2657,7 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
       const date = new Date(y, m - 1, d);
       calData._recurring.push({
         id: block.id, startMin: block.startMin, endMin: block.endMin,
-        label, color: block.color, ampm: block.ampm,
+        label, ...appearance, ampm,
         recurrence: recurrence as RecurringBlock['recurrence'],
         dayOfWeek:  date.getDay(),
         dayOfMonth: d,
@@ -2515,6 +2667,7 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
     }
   }
   await saveCalendarData();
+  if (ampm !== clockAmPm) setScheduleAmPm(ampm);
   if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
 }
 
@@ -2560,8 +2713,8 @@ function renderBlockLegend(key: string, blocks: (TimeBlock & { _recurring?: bool
     const chip = document.createElement('span');
     chip.className   = 'block-chip';
     chip.textContent = block._recurring ? block.label + ' \u21BB' : block.label;
-    chip.style.background = `linear-gradient(135deg, ${BLOCK_COLOR_HIGHLIGHTS[block.color] || block.color} 0%, ${block.color} 100%)`;
-    chip.title = `${formatClockMinutes(block.startMin)} – ${formatClockMinutes(block.endMin, block.ampm)}`;
+    applyBlockGradientStyle(chip, block);
+    chip.title = formatBlockTimeRange(block);
     chip.addEventListener('click', () => showTimeBlockPopup('edit', block, key, svg, 200, 200, 170));
     legend.appendChild(chip);
   });
@@ -2572,6 +2725,16 @@ function formatClockMinutes(min: number, ampm = ''): string {
   const m = min % 60;
   const base = `${h}:${String(m).padStart(2, '0')}`;
   return ampm ? `${base} ${ampm}` : base;
+}
+
+function getBlockEndAmPm(block: { startMin: number; endMin: number; ampm: AmPm }): AmPm {
+  return block.endMin < block.startMin
+    ? (block.ampm === 'AM' ? 'PM' : 'AM')
+    : block.ampm;
+}
+
+function formatBlockTimeRange(block: { startMin: number; endMin: number; ampm: AmPm }): string {
+  return `${formatClockMinutes(block.startMin, block.ampm)} – ${formatClockMinutes(block.endMin, getBlockEndAmPm(block))}`;
 }
 
 // ── Task list sidebar ───────────────────────────────────
@@ -2604,7 +2767,7 @@ function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: bool
 
     const swatch = document.createElement('div');
     swatch.className        = 'task-color-swatch';
-    swatch.style.background = `linear-gradient(135deg, ${BLOCK_COLOR_HIGHLIGHTS[block.color] || block.color} 0%, ${block.color} 100%)`;
+    applyBlockGradientStyle(swatch, block);
 
     const body = document.createElement('div');
     body.className = 'task-body';
@@ -2621,7 +2784,7 @@ function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: bool
 
     const timeEl = document.createElement('div');
     timeEl.className   = 'task-time';
-    timeEl.textContent = `${formatClockMinutes(block.startMin)} – ${formatClockMinutes(block.endMin, block.ampm)}`;
+    timeEl.textContent = formatBlockTimeRange(block);
 
     body.append(lbl, timeEl);
 
@@ -2682,20 +2845,6 @@ function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: bool
 }
 
 // ── Block state helpers ─────────────────────────────────
-// Infer whether a block drawn at `startMin` belongs to AM or PM.
-// Compares both 12-hr interpretations against the current wall-clock time:
-//   - one past, one future → pick the future one
-//   - both past or both future → fall back to the current clock mode
-function inferBlockAmPm(startMin: number): AmPm {
-  const now    = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const amStart = startMin;
-  const pmStart = startMin + 720;
-  if (amStart < nowMin && pmStart >= nowMin) return 'PM';
-  if (pmStart < nowMin && amStart >= nowMin) return 'AM';
-  return clockAmPm;
-}
-
 function isPastBlock(block: TimeBlock | (BlockOrPartial & { ampm?: AmPm }), key: string): boolean {
   const todayKey = getTodayKey();
   if (key < todayKey) return true;
@@ -2760,7 +2909,8 @@ async function confirmReschedule(): Promise<void> {
   const newKey  = input.value;
   if (!newKey || newKey === rescheduleBlock._key) { cancelReschedule(); return; }
 
-  const { id, startMin, endMin, label, color, ampm, completed, _key: oldKey } = rescheduleBlock;
+  const { id, startMin, endMin, label, ampm, completed, _key: oldKey } = rescheduleBlock;
+  const appearance = getBlockStorageAppearance(rescheduleBlock);
 
   // Remove from old day without full re-render yet
   const oldDay = getDayData(oldKey);
@@ -2771,7 +2921,7 @@ async function confirmReschedule(): Promise<void> {
 
   // Add to new day (keep same id so it's clearly the same block)
   const newDay = getOrInitDayData(newKey);
-  newDay.timeBlocks.push({ id, startMin, endMin, label, color, ampm, completed: completed || false });
+  newDay.timeBlocks.push({ id, startMin, endMin, label, ...appearance, ampm, completed: completed || false });
 
   rescheduleBlock = null;
   await saveCalendarData();

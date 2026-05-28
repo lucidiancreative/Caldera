@@ -33,6 +33,7 @@ interface TimeBlock {
   startMin: number;
   endMin: number;
   label: string;
+  paletteSlot?: number;
   color: string;
   ampm: AmPm;
   completed: boolean;
@@ -43,6 +44,7 @@ interface RecurringBlock {
   startMin: number;
   endMin: number;
   label: string;
+  paletteSlot?: number;
   color: string;
   ampm: AmPm;
   recurrence: RecurrenceType;

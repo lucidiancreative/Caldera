@@ -17,14 +17,14 @@ This replaces the earlier "forever JWT cached locally" model. The server remains
 - Sell a one-time lifetime license through Stripe Checkout
 - Allow offline use for legitimate customers
 - Make refunds and revocations take effect reliably
-- Limit active desktop installs to 2 per account
+- Enforce 2 desktop devices in v1, with the license policy reserving 1 future mobile slot
 - Keep all renderer network access disabled; licensing network calls stay in the main process
 
 ## Non-goals
 
 - Prevent all trial abuse by reinstalling the app
 - Bind a license to invasive hardware fingerprints
-- Support mobile licensing in v1
+- Ship mobile-client enforcement in v1
 - Add cloud sync for user calendar data
 
 ## Key Decisions
@@ -57,23 +57,30 @@ This replaces the earlier "forever JWT cached locally" model. The server remains
 - Stripe Checkout
   - Handles payment collection for the lifetime license
 
-### Recommended main-process modules
+### Recommended v1 module shape
 
 ```text
 src/
-  main/
-    auth-service.ts
-    protocol-handler.ts
-    secure-store.ts
-    license-service.ts
-    stripe-service.ts
-    supabase-service.ts
-  renderer/
-    licensing-ui.ts
+  main.ts
+  preload.ts
+  renderer.ts
+  auth-service.ts
+  protocol-handler.ts
+  secure-store.ts
+  license-service.ts
+  stripe-service.ts
+  supabase-service.ts
   types.ts
 ```
 
 Keep Stripe, Supabase, secure storage, and entitlement logic behind service boundaries. Do not spread license rules across IPC handlers.
+
+Important build note for this repo:
+
+- The current renderer is loaded as a plain `<script>` and intentionally stays import-free today.
+- The current packaged app only includes explicit `dist/*.js` entry files.
+- For v1, keep licensing UI changes inside the existing `renderer.ts`, or add a bundler first before splitting renderer code into imported modules.
+- If main-process helper files are added, update `electron-builder` file globs so emitted helper modules are packaged.
 
 ## End-to-end Flows
 
@@ -89,7 +96,7 @@ Keep Stripe, Supabase, secure storage, and entitlement logic behind service boun
 
 Notes:
 
-- This is a soft trial.
+- This is a soft trial, and that is accepted for v1.
 - If stronger trial abuse resistance is needed later, add an optional anonymous server-side trial claim flow. Do not complicate v1 with that requirement.
 
 ### 2. Sign-in flow
@@ -263,7 +270,8 @@ create table devices (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references profiles(id) on delete cascade,
   install_id text not null,
-  platform text not null check (platform in ('windows', 'macos', 'linux')),
+  device_class text not null check (device_class in ('desktop', 'mobile')),
+  platform text not null check (platform in ('windows', 'macos', 'linux', 'ios', 'android')),
   device_name text,
   active boolean not null default true,
   last_seen_at timestamptz not null default now(),
@@ -293,6 +301,11 @@ create policy "users read own devices" on devices
   for select using (auth.uid() = user_id);
 ```
 
+Profile provisioning requirement:
+
+- Add a database trigger on `auth.users` to create `profiles` rows automatically, or do an idempotent profile upsert on first successful login before any billing or device writes.
+- Preferred v1 path: create the profile in a Postgres trigger so Stripe fulfillment and device RPCs always have a foreign-key target.
+
 Do not allow direct client inserts or deletes on `devices`. Mutations should go through RPC or service-role code so device limits remain enforceable.
 
 ## Device Management
@@ -300,21 +313,23 @@ Do not allow direct client inserts or deletes on `devices`. Mutations should go 
 ### Strategy
 
 - Use a random local `install_id`, not a hardware fingerprint
-- Limit active desktop installs to 2
+- Enforce 2 active desktop devices in v1
+- Reserve 1 mobile device slot in the license model for the future mobile app
 - Enforce limits on the server in one transactional path
 - Let users deactivate a device from the settings UI
 
 ### Recommended RPCs
 
-- `claim_device_slot(p_install_id, p_platform, p_device_name)`
+- `claim_device_slot(p_install_id, p_device_class, p_platform, p_device_name)`
 - `deactivate_device(p_install_id)`
-- `replace_device(p_old_install_id, p_new_install_id, p_platform, p_device_name)`
+- `replace_device(p_old_install_id, p_new_install_id, p_device_class, p_platform, p_device_name)`
 
 Expected behavior of `claim_device_slot`:
 
 1. If the install already exists and is active, update `last_seen_at` and succeed.
-2. If active device count is below 2, insert and succeed.
-3. Otherwise return `device_limit` plus the current active device list.
+2. If `device_class = 'desktop'` and active desktop count is below 2, insert and succeed.
+3. If `device_class = 'mobile'` and active mobile count is below 1, insert and succeed.
+4. Otherwise return `device_limit` plus the current active device list.
 
 `issue-license-token` should call `claim_device_slot` before signing a new token.
 
@@ -331,7 +346,7 @@ Responsibilities:
 
 Notes:
 
-- Pin Stripe to the latest API version in use for this project. As of April 28, 2026, the curated Stripe guidance in this workspace references `2026-02-25.clover`.
+- Pin Stripe to the latest API version in use for this project. As of May 28, 2026, the curated Stripe guidance in this workspace references `2026-02-25.clover`.
 - Keep product and price IDs in environment variables, not in renderer code.
 
 ### `stripe-webhook`
@@ -401,6 +416,8 @@ Encrypt the following values before writing to disk:
 - `last_online_validation_at`
 
 If `safeStorage` is unavailable on a platform, fail closed for account tokens and show a clear unsupported-state message. Do not silently fall back to plaintext for auth data.
+
+Prefer Electron's async `safeStorage` APIs for new code. On Linux, if the selected backend resolves to an unprotected plaintext fallback, treat account-token storage as unsupported rather than silently storing refresh tokens with weak protection.
 
 ### IPC surface
 
@@ -497,10 +514,15 @@ Return sanitized DTOs only. Never return raw Supabase sessions or secrets to the
 
 ### Phase 1: Auth and secure local state
 
-1. Add protocol handler plumbing
-2. Implement PKCE login in the main process
-3. Encrypt session and local trial state
-4. Add settings account UI
+1. Update the build/package strategy for added helper modules:
+   - keep renderer licensing UI inside `renderer.ts` for v1, or
+   - add a bundler before introducing imported renderer modules
+2. Update `electron-builder` file globs so emitted helper modules are packaged
+3. Add protocol handler plumbing
+4. Implement PKCE login in the main process
+5. Add automatic `profiles` provisioning
+6. Encrypt session and local trial state
+7. Add settings account UI
 
 ### Phase 2: Stripe server path
 
@@ -529,7 +551,7 @@ These are not blockers for the architecture, but should be confirmed before buil
 
 1. Whether the hosted success page will live on the marketing site or a Supabase-hosted page
 2. Whether disputes should immediately suspend access or create a manual-review state
-3. Whether the soft trial is acceptable for v1 or if abuse resistance must be stronger
+3. Whether v1 should ship device replacement as an explicit UI flow or only a deactivate-and-retry flow
 
 ## Final Recommendation
 

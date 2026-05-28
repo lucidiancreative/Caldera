@@ -84,10 +84,13 @@ All data — event entries, images, preferences — is stored in the user's loca
 
 ## Installation
 
+Caldera is distributed as proprietary freeware: free to download and use, but not open source.
+
 Download and run `Caldera.exe` — no installation required. On first launch, Windows SmartScreen may prompt since the binary is unsigned; click **More info → Run anyway**.
 
 ---
 
 ## License
 
-Proprietary — see [LICENSE](LICENSE) for the full End User License Agreement.
+Caldera is proprietary freeware. You may use it at no monetary cost, but you may not modify, redistribute, resell, or relicense it without prior written permission. See [LICENSE](LICENSE) for the full license terms.
+

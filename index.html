@@ -74,19 +74,40 @@
     </div>
     <div id="schedule-content">
       <div id="task-list"></div>
-      <div id="clock-column">
+      <div id="schedule-main-column">
+        <div id="schedule-mode-toolbar">
+          <div id="schedule-mode-toggle">
+            <button id="schedule-mode-daily" class="schedule-mode-btn active" type="button" data-mode="daily">Daily</button>
+            <button id="schedule-mode-timeline" class="schedule-mode-btn" type="button" data-mode="schedule">Schedule</button>
+          </div>
+          <div id="schedule-scale-group" class="hidden">
+            <span id="schedule-scale-label">Day View</span>
+          </div>
+        </div>
         <div id="reschedule-banner" class="hidden">
           Move &#8220;<span id="reschedule-label"></span>&#8221; to:
           <input id="reschedule-date-input" type="date" />
           <button id="reschedule-confirm">Move</button>
           <button id="reschedule-cancel">&#10005;</button>
         </div>
-        <div id="ampm-toggle">
-          <button class="ampm-btn active" data-ampm="AM">AM</button>
-          <button class="ampm-btn" data-ampm="PM">PM</button>
+        <div id="daily-mode-panel">
+          <div id="ampm-toggle">
+            <button class="ampm-btn active" data-ampm="AM">AM</button>
+            <button class="ampm-btn" data-ampm="PM">PM</button>
+          </div>
+          <div id="clock-area"></div>
+          <div id="block-legend"></div>
         </div>
-        <div id="clock-area"></div>
-        <div id="block-legend"></div>
+        <div id="timeline-mode-panel" class="hidden">
+          <div id="timeline-empty" class="hidden">No scheduled blocks for this day yet.</div>
+          <div id="timeline-surface">
+            <div id="timeline-hour-header"></div>
+            <div id="timeline-body-scroll">
+              <div id="timeline-grid"></div>
+              <div id="timeline-bars"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

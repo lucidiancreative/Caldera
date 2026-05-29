@@ -812,6 +812,74 @@ body.dark .card-toolbar .card-action-btn:hover {
   gap: 14px;
 }
 
+#schedule-main-column {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#schedule-mode-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+#schedule-mode-toggle {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.schedule-mode-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.12s;
+}
+
+.schedule-mode-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.schedule-mode-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+#schedule-scale-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#schedule-scale-group.hidden,
+#daily-mode-panel.hidden,
+#timeline-mode-panel.hidden,
+#timeline-empty.hidden,
+#timeline-surface.hidden {
+  display: none;
+}
+
+#schedule-scale-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
 /* ── Task list sidebar ────────────────────────────────── */
 #task-list {
   width: 220px;
@@ -874,13 +942,14 @@ body.dark #task-list::-webkit-scrollbar-thumb { background: #48484a; }
 body.dark .task-btn-del:hover { background: #3a1a1a; }
 
 /* ── Clock column ─────────────────────────────────────── */
-#clock-column {
+#daily-mode-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  min-height: 0;
 }
 
 /* ── AM/PM toggle ─────────────────────────────────────── */
@@ -906,6 +975,227 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   background: transparent;
   color: var(--accent);
   border-color: var(--accent);
+}
+
+#timeline-mode-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#timeline-empty {
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  background: linear-gradient(180deg, rgba(255,255,255,0.56), rgba(255,255,255,0.34));
+}
+
+#timeline-surface {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.52), transparent 46%),
+    linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.58));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+}
+
+#timeline-hour-header {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.32);
+  flex-shrink: 0;
+}
+
+.timeline-hour-track {
+  display: flex;
+  will-change: transform;
+}
+
+.timeline-hour-cell {
+  flex: 0 0 auto;
+  padding: 12px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  border-right: 1px solid color-mix(in srgb, var(--border) 75%, white);
+}
+
+#timeline-body-scroll {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+#timeline-grid,
+#timeline-bars {
+  position: relative;
+}
+
+#timeline-bars {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+}
+
+.timeline-grid-column,
+.timeline-grid-row {
+  position: absolute;
+}
+
+.timeline-grid-column {
+  top: 0;
+  bottom: 0;
+  border-right: 1px solid color-mix(in srgb, var(--border) 72%, white);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+}
+
+.timeline-grid-row {
+  left: 0;
+  right: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, white);
+}
+
+.timeline-grid-row.is-recurring-row {
+  border-top-style: dashed;
+  opacity: 0.65;
+}
+
+.timeline-bar {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.32);
+  color: #fff;
+  text-align: left;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.12);
+  cursor: pointer;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.timeline-bar:hover {
+  filter: brightness(1.03);
+}
+
+.timeline-bar.is-compact .timeline-bar-time {
+  display: none;
+}
+
+.timeline-bar.is-mini {
+  padding-inline: 6px;
+}
+
+.timeline-bar.is-mini .timeline-bar-label,
+.timeline-bar.is-mini .timeline-bar-time {
+  display: none;
+}
+
+.timeline-boundary-handle {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 14px;
+  margin-left: -7px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: ew-resize;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.timeline-boundary-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.72);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.22),
+    0 8px 18px rgba(0,0,0,0.14);
+}
+
+.timeline-boundary-handle:hover::before,
+.timeline-boundary-handle:focus-visible::before {
+  background: rgba(255,255,255,0.9);
+}
+
+.timeline-boundary-handle.is-leading::before,
+.timeline-boundary-handle.is-trailing::before {
+  background: rgba(255,255,255,0.58);
+}
+
+.timeline-bar.is-complete {
+  opacity: 0.8;
+}
+
+.timeline-bar.is-past {
+  box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+}
+
+.timeline-bar.is-recurring {
+  border-style: dashed;
+}
+
+.timeline-bar.is-recurring-reference {
+  opacity: 0.78;
+  cursor: default;
+}
+
+.timeline-bar-label {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.timeline-bar-time {
+  font-size: 10px;
+  opacity: 0.88;
+  white-space: nowrap;
+}
+
+.timeline-now-marker {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  background: var(--today-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--today-ring) 18%, transparent);
+  pointer-events: none;
+}
+
+body.dark #timeline-empty,
+body.dark #timeline-surface,
+body.dark .schedule-mode-btn,
+body.dark #schedule-scale-label {
+  background: rgba(19, 25, 35, 0.72);
+}
+
+body.is-resizing-timeline,
+body.is-resizing-timeline * {
+  cursor: ew-resize !important;
 }
 
 /* ── Reschedule banner ────────────────────────────────── */

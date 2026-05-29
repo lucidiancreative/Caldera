@@ -13,6 +13,8 @@ type AmPm = 'AM' | 'PM';
 type RecurrenceType = 'daily' | 'weekly' | 'monthly';
 type SkinId = 'default' | 'arctic' | 'glacier' | 'teal';
 type ViewType = 'calendar' | 'schedule';
+type ScheduleViewMode = 'daily' | 'schedule';
+type ScheduleTimelineScale = 'day';
 
 interface CalendarEvent {
   id: string;

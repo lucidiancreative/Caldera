@@ -40,6 +40,22 @@ interface TimeBlockPopupState {
   _cleanup?: () => void;
 }
 
+interface TimelineResizeState {
+  key: string;
+  kind: 'leading' | 'between' | 'trailing';
+  leftBlockId?: string;
+  rightBlockId?: string;
+  hourWidth: number;
+}
+
+interface TimelineSegment {
+  block: TimeBlock | RecurringBlock;
+  recurring: boolean;
+  completed: boolean;
+  start: number;
+  end: number;
+}
+
 type BlockOrPartial =
   | (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean; recurrence?: string; dayOfWeek?: number; dayOfMonth?: number; completedDates?: string[]; excludedDates?: string[] })
   | { startMin: number; endMin: number; id?: undefined; label?: undefined; color?: string; paletteSlot?: number; ampm?: AmPm };
@@ -83,7 +99,11 @@ let renderedTodayKey:  string | null                                    = null;
 let hoveredGridCell:   Element | null                                   = null;
 let activeView:        ViewType                                         = 'calendar';
 let scheduleDate:      string | null                                    = null;
+let scheduleViewMode:  ScheduleViewMode                                 = 'daily';
+let scheduleTimelineScale: ScheduleTimelineScale                        = 'day';
 let clockDragState:    { startMin: number; svg: SVGSVGElement } | null = null;
+let timelineResizeState: TimelineResizeState | null                     = null;
+let suppressNextTimelineBarClick                                          = false;
 let aiPendingEvents:   AiEvent[]                                        = [];
 let timeBlockPopupState: TimeBlockPopupState | null                     = null;
 let clockAmPm:         AmPm                                             = new Date().getHours() >= 12 ? 'PM' : 'AM';
@@ -579,6 +599,173 @@ function setScheduleAmPm(ampm: AmPm): void {
 function getTodayKey(): string {
   const t = new Date();
   return dateKey(t.getFullYear(), t.getMonth(), t.getDate());
+}
+
+function getScheduleBlocksForDate(key: string): (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[] {
+  const allDateBlocks = getDayData(key)?.timeBlocks || [];
+  const recurBlocks   = getRecurringBlocksForDate(key).map(b => ({
+    ...b,
+    completed:  b.completedDates?.includes(key) || false,
+    _recurring: true,
+  }));
+  return [...allDateBlocks, ...recurBlocks];
+}
+
+function syncScheduleModeButtons(): void {
+  (document.querySelectorAll('.schedule-mode-btn') as NodeListOf<HTMLElement>).forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.mode === scheduleViewMode)
+  );
+  qId('daily-mode-panel').classList.toggle('hidden', scheduleViewMode !== 'daily');
+  qId('timeline-mode-panel').classList.toggle('hidden', scheduleViewMode !== 'schedule');
+  qId('schedule-scale-group').classList.toggle('hidden', scheduleViewMode !== 'schedule');
+}
+
+function setScheduleViewMode(mode: ScheduleViewMode): void {
+  scheduleViewMode = mode;
+  syncScheduleModeButtons();
+  if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
+}
+
+function getTimelineAbsoluteMinutes(block: { startMin: number; endMin: number; ampm: AmPm }): { start: number; end: number } {
+  const start = (block.ampm === 'PM' ? 12 * 60 : 0) + block.startMin;
+  let end = (getBlockEndAmPm(block) === 'PM' ? 12 * 60 : 0) + block.endMin;
+  if (end <= start) end += 24 * 60;
+  return { start, end };
+}
+
+function snapTimelineMinutes(value: number): number {
+  return Math.round(value / 15) * 15;
+}
+
+function clampTimelineMinutes(value: number): number {
+  return Math.max(0, Math.min(24 * 60, snapTimelineMinutes(value)));
+}
+
+function applyAbsoluteMinutesToTimeBlock(block: TimeBlock | RecurringBlock, start: number, end: number): void {
+  const clampedStart = Math.max(0, Math.min(start, 24 * 60));
+  const clampedEnd = Math.max(clampedStart + 15, Math.min(end, 24 * 60));
+  block.ampm = clampedStart >= 12 * 60 ? 'PM' : 'AM';
+  block.startMin = clampedStart % 720;
+  block.endMin = clampedEnd % 720;
+}
+
+function getTimelineSegmentsForDate(key: string): TimelineSegment[] {
+  const dayBlocks = getDayData(key)?.timeBlocks || [];
+  const recurringBlocks = getRecurringBlocksForDate(key);
+
+  return [...dayBlocks, ...recurringBlocks]
+    .map(block => {
+      const range = getTimelineAbsoluteMinutes(block);
+      const recurring = 'recurrence' in block;
+      return {
+        block,
+        recurring,
+        completed: recurring
+          ? block.completedDates?.includes(key) || false
+          : block.completed,
+        start: range.start,
+        end: range.end,
+      };
+    })
+    .sort((a, b) => {
+      if (a.start !== b.start) return a.start - b.start;
+      if (a.end !== b.end) return a.end - b.end;
+      return a.block.label.localeCompare(b.block.label);
+    });
+}
+
+function resizeScheduleTimelineBoundaryInMemory(
+  key: string,
+  state: Pick<TimelineResizeState, 'kind' | 'leftBlockId' | 'rightBlockId'>,
+  proposedAbsoluteMinutes: number
+): boolean {
+  const minDuration = 15;
+  const proposed = clampTimelineMinutes(proposedAbsoluteMinutes);
+  const segments = getTimelineSegmentsForDate(key);
+  if (!segments.length) return false;
+
+  if (state.kind === 'leading') {
+    const first = segments.find(segment => segment.block.id === state.rightBlockId);
+    if (!first) return false;
+    const desiredStart = Math.max(0, Math.min(proposed, first.end - minDuration));
+    if (desiredStart === first.start) return false;
+    applyAbsoluteMinutesToTimeBlock(first.block, desiredStart, first.end);
+    return true;
+  }
+
+  if (state.kind === 'trailing') {
+    const last = segments.find(segment => segment.block.id === state.leftBlockId);
+    if (!last) return false;
+    const desiredEnd = Math.min(24 * 60, Math.max(proposed, last.start + minDuration));
+    if (desiredEnd === last.end) return false;
+    applyAbsoluteMinutesToTimeBlock(last.block, last.start, desiredEnd);
+    return true;
+  }
+
+  const left = segments.find(segment => segment.block.id === state.leftBlockId);
+  const right = segments.find(segment => segment.block.id === state.rightBlockId);
+  if (!left || !right) return false;
+
+  const desiredBoundary = Math.max(left.start + minDuration, Math.min(proposed, right.end - minDuration));
+  if (desiredBoundary === left.end && desiredBoundary === right.start) return false;
+
+  applyAbsoluteMinutesToTimeBlock(left.block, left.start, desiredBoundary);
+  applyAbsoluteMinutesToTimeBlock(right.block, desiredBoundary, right.end);
+  return true;
+}
+
+function getTimelinePointerMinutes(event: MouseEvent, scroll: HTMLElement, hourWidth: number): number {
+  const rect = scroll.getBoundingClientRect();
+  const offsetX = event.clientX - rect.left + scroll.scrollLeft;
+  return clampTimelineMinutes((offsetX / hourWidth) * 60);
+}
+
+function endTimelineResize(commit = true): void {
+  if (!timelineResizeState) return;
+  const activeKey = timelineResizeState.key;
+  timelineResizeState = null;
+  suppressNextTimelineBarClick = true;
+  window.setTimeout(() => { suppressNextTimelineBarClick = false; }, 0);
+  document.body.classList.remove('is-resizing-timeline');
+  document.removeEventListener('mousemove', onTimelineResizeMove);
+  document.removeEventListener('mouseup', onTimelineResizeEnd);
+  if (!commit) return;
+  void saveCalendarData().then(() => {
+    if (activeView === 'schedule' && scheduleDate === activeKey) renderScheduleView(activeKey);
+  });
+}
+
+function onTimelineResizeMove(event: MouseEvent): void {
+  if (!timelineResizeState) return;
+  const scroll = qId('timeline-body-scroll');
+  const nextMinutes = getTimelinePointerMinutes(event, scroll, timelineResizeState.hourWidth);
+  const changed = resizeScheduleTimelineBoundaryInMemory(
+    timelineResizeState.key,
+    timelineResizeState,
+    nextMinutes
+  );
+  if (!changed) return;
+  if (activeView === 'schedule' && scheduleDate === timelineResizeState.key) renderScheduleView(timelineResizeState.key);
+}
+
+function onTimelineResizeEnd(): void {
+  endTimelineResize(true);
+}
+
+function beginTimelineResize(
+  event: MouseEvent,
+  key: string,
+  state: Pick<TimelineResizeState, 'kind' | 'leftBlockId' | 'rightBlockId'>,
+  hourWidth: number
+): void {
+  event.preventDefault();
+  event.stopPropagation();
+  if (timelineResizeState) return;
+  pushCalendarSnapshot();
+  timelineResizeState = { key, hourWidth, ...state };
+  document.body.classList.add('is-resizing-timeline');
+  document.addEventListener('mousemove', onTimelineResizeMove);
+  document.addEventListener('mouseup', onTimelineResizeEnd);
 }
 
 async function saveCalendarData(): Promise<void> {
@@ -1401,12 +1588,15 @@ function bindCalendarUIEvents(): void {
       if (btn.dataset.view === 'schedule') {
         scheduleDate = getTodayKey();
         clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
+        scheduleViewMode = 'daily';
       }
       switchCalendarView(btn.dataset.view as ViewType);
     });
   });
   qId('sched-prev-day').addEventListener('click', () => stepScheduleDay(-1));
   qId('sched-next-day').addEventListener('click', () => stepScheduleDay(1));
+  qId('schedule-mode-daily').addEventListener('click', () => setScheduleViewMode('daily'));
+  qId('schedule-mode-timeline').addEventListener('click', () => setScheduleViewMode('schedule'));
 
   (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>).forEach(btn => {
     btn.addEventListener('click', () => {
@@ -2182,31 +2372,199 @@ function renderScheduleView(key: string): void {
   if (rescheduleBlock && rescheduleBlock._key !== key) rescheduleBlock = null;
 
   qId('sched-date-label').textContent = formatDisplayDate(key);
-  const area = qId('clock-area');
-  area.innerHTML = '';
+  syncScheduleModeButtons();
+  const allBlocks = getScheduleBlocksForDate(key);
 
-  const allDateBlocks = getDayData(key)?.timeBlocks || [];
-  const recurBlocks   = getRecurringBlocksForDate(key).map(b => ({
-    ...b,
-    completed:  b.completedDates?.includes(key) || false,
-    _recurring: true,
-  }));
-  const allBlocks     = [...allDateBlocks, ...recurBlocks];
-  const visibleBlocks = allBlocks.filter(b => (b as BlockOrPartial & { ampm?: AmPm }).ampm === clockAmPm);
-  // PM clock also renders AM blocks as dimmed overlays — they're always in the past and
-  // occupy the same angular positions as their PM counterparts (startMin/endMin are shared
-  // 12-hr coordinates). Draw them first so PM blocks layer on top.
-  const clockBlocks = clockAmPm === 'PM'
-    ? [...allBlocks.filter(b => (b as BlockOrPartial & { ampm?: AmPm }).ampm === 'AM').map(b => ({ ...b, _amOverlay: true })),
-       ...visibleBlocks]
-    : visibleBlocks;
-  const svg           = buildClockSVG(key, clockBlocks as BlockOrPartial[]);
-  area.appendChild(svg);
-  updateClockHand();
+  if (scheduleViewMode === 'daily') {
+    const area = qId('clock-area');
+    area.innerHTML = '';
 
-  renderBlockLegend(key, visibleBlocks as (TimeBlock & { _recurring?: boolean })[],  svg);
-  renderTaskList(key, allBlocks as (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[],  svg);
+    const visibleBlocks = allBlocks.filter(b => (b as BlockOrPartial & { ampm?: AmPm }).ampm === clockAmPm);
+    // PM clock also renders AM blocks as dimmed overlays — they're always in the past and
+    // occupy the same angular positions as their PM counterparts (startMin/endMin are shared
+    // 12-hr coordinates). Draw them first so PM blocks layer on top.
+    const clockBlocks = clockAmPm === 'PM'
+      ? [...allBlocks.filter(b => (b as BlockOrPartial & { ampm?: AmPm }).ampm === 'AM').map(b => ({ ...b, _amOverlay: true })),
+         ...visibleBlocks]
+      : visibleBlocks;
+    const svg = buildClockSVG(key, clockBlocks as BlockOrPartial[]);
+    area.appendChild(svg);
+    updateClockHand();
+
+    renderBlockLegend(key, visibleBlocks as (TimeBlock & { _recurring?: boolean })[], svg);
+  } else {
+    renderScheduleTimeline(key, allBlocks as (TimeBlock & { _recurring?: boolean })[]);
+  }
+
+  renderTaskList(key, allBlocks as (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[]);
   updateRescheduleBanner();
+}
+
+function formatTimelineHourLabel(hour: number): string {
+  const normalized = hour % 24;
+  const suffix = normalized >= 12 ? 'PM' : 'AM';
+  const displayHour = normalized % 12 || 12;
+  return `${displayHour} ${suffix}`;
+}
+
+function renderScheduleTimeline(key: string, _blocks: (TimeBlock & { _recurring?: boolean })[]): void {
+  const header = qId('timeline-hour-header');
+  const grid = qId('timeline-grid');
+  const bars = qId('timeline-bars');
+  const scroll = qId('timeline-body-scroll');
+  const empty = qId('timeline-empty');
+  const previousScrollLeft = scroll.scrollLeft;
+  const hourWidth = scheduleTimelineScale === 'day' ? 96 : 96;
+  const totalHours = 24;
+  const timelineWidth = hourWidth * totalHours;
+  const laneHeight = 54;
+  const barHeight = 36;
+  const placements = getTimelineSegmentsForDate(key).map(segment => ({
+    ...segment,
+    start: Math.max(0, Math.min(segment.start, 24 * 60)),
+    end: Math.max(segment.start + 15, Math.min(segment.end, 24 * 60)),
+  }));
+  const bodyHeight = laneHeight;
+
+  header.innerHTML = '';
+  grid.innerHTML = '';
+  bars.innerHTML = '';
+  empty.classList.toggle('hidden', placements.length !== 0);
+  qId('timeline-surface').classList.toggle('hidden', placements.length === 0);
+  if (!placements.length) return;
+
+  const headerTrack = document.createElement('div');
+  headerTrack.className = 'timeline-hour-track';
+  headerTrack.style.width = `${timelineWidth}px`;
+
+  for (let hour = 0; hour < totalHours; hour++) {
+    const cell = document.createElement('div');
+    cell.className = 'timeline-hour-cell';
+    cell.style.width = `${hourWidth}px`;
+    cell.textContent = formatTimelineHourLabel(hour);
+    headerTrack.appendChild(cell);
+  }
+  header.appendChild(headerTrack);
+
+  grid.style.width = `${timelineWidth}px`;
+  bars.style.width = `${timelineWidth}px`;
+  grid.style.height = `${bodyHeight}px`;
+  bars.style.height = `${bodyHeight}px`;
+
+  for (let hour = 0; hour < totalHours; hour++) {
+    const column = document.createElement('div');
+    column.className = 'timeline-grid-column';
+    column.style.left = `${hour * hourWidth}px`;
+    column.style.width = `${hourWidth}px`;
+    grid.appendChild(column);
+  }
+
+  const row = document.createElement('div');
+  row.className = 'timeline-grid-row';
+  row.style.top = '0px';
+  row.style.height = `${laneHeight}px`;
+  grid.appendChild(row);
+
+  placements.forEach(({ block, recurring, completed, start, end }) => {
+    const bar = document.createElement('button');
+    const widthPx = ((end - start) / 60) * hourWidth;
+    const displayLabel = recurring ? `${block.label} (Recurring)` : block.label;
+    bar.type = 'button';
+    bar.className = 'timeline-bar' +
+      (completed ? ' is-complete' : '') +
+      (recurring ? ' is-recurring' : '') +
+      (isPastBlock(block, key) && !completed ? ' is-past' : '') +
+      (widthPx < 84 ? ' is-compact' : '') +
+      (widthPx < 44 ? ' is-mini' : '');
+    bar.style.left = `${(start / 60) * hourWidth}px`;
+    bar.style.top = `${(laneHeight - barHeight) / 2}px`;
+    bar.style.width = `${widthPx}px`;
+    applyBlockGradientStyle(bar, block);
+    bar.title = `${displayLabel} - ${formatBlockTimeRange(block)}`;
+
+    const label = document.createElement('span');
+    label.className = 'timeline-bar-label';
+    label.textContent = displayLabel;
+    bar.appendChild(label);
+
+    const time = document.createElement('span');
+    time.className = 'timeline-bar-time';
+    time.textContent = formatBlockTimeRange(block);
+    bar.appendChild(time);
+
+    bar.addEventListener('click', () => {
+      if (suppressNextTimelineBarClick) return;
+      clockAmPm = block.ampm;
+      scheduleViewMode = 'daily';
+      syncScheduleModeButtons();
+      renderScheduleView(key);
+    });
+
+    bars.appendChild(bar);
+  });
+
+  function appendBoundaryHandle(leftPx: number, label: string, state: Pick<TimelineResizeState, 'kind' | 'leftBlockId' | 'rightBlockId'>, extraClass = ''): void {
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = `timeline-boundary-handle ${extraClass}`.trim();
+    handle.style.left = `${leftPx}px`;
+    handle.title = label;
+    handle.addEventListener('click', (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    handle.addEventListener('mousedown', (event: MouseEvent) =>
+      beginTimelineResize(event, key, state, hourWidth)
+    );
+    bars.appendChild(handle);
+  }
+
+  if (placements.length) {
+    const first = placements[0];
+    appendBoundaryHandle(
+      (first.start / 60) * hourWidth,
+      'Drag to adjust the first block start time',
+      { kind: 'leading', rightBlockId: first.block.id },
+      'is-leading'
+    );
+
+    for (let index = 0; index < placements.length - 1; index++) {
+      const left = placements[index];
+      const right = placements[index + 1];
+      appendBoundaryHandle(
+        (left.end / 60) * hourWidth,
+        'Drag to adjust the shared boundary between adjacent blocks',
+        { kind: 'between', leftBlockId: left.block.id, rightBlockId: right.block.id }
+      );
+    }
+
+    const last = placements[placements.length - 1];
+    appendBoundaryHandle(
+      (last.end / 60) * hourWidth,
+      'Drag to adjust the last block end time',
+      { kind: 'trailing', leftBlockId: last.block.id },
+      'is-trailing'
+    );
+  }
+
+  const now = new Date();
+  const todayKey = getTodayKey();
+  if (key === todayKey) {
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const marker = document.createElement('div');
+    marker.className = 'timeline-now-marker';
+    marker.style.left = `${(currentMinutes / 60) * hourWidth}px`;
+    marker.style.height = `${bodyHeight}px`;
+    bars.appendChild(marker);
+  }
+
+  scroll.scrollLeft = timelineResizeState || previousScrollLeft > 0
+    ? previousScrollLeft
+    : clockAmPm === 'PM' ? hourWidth * 12 : 0;
+  headerTrack.style.transform = `translateX(${-scroll.scrollLeft}px)`;
+  scroll.onscroll = () => {
+    headerTrack.style.transform = `translateX(${-scroll.scrollLeft}px)`;
+  };
 }
 
 function buildClockSVG(key: string, blocks: BlockOrPartial[]): SVGSVGElement {
@@ -2738,14 +3096,16 @@ function formatBlockTimeRange(block: { startMin: number; endMin: number; ampm: A
 }
 
 // ── Task list sidebar ───────────────────────────────────
-function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[], svg: SVGSVGElement): void {
+function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[]): void {
   const list = qId('task-list');
   list.innerHTML = '';
 
   if (!allBlocks.length) {
     const empty = document.createElement('div');
     empty.className   = 'task-empty';
-    empty.textContent = 'No blocks scheduled.\nDrag the clock ring to add one.';
+    empty.textContent = scheduleViewMode === 'daily'
+      ? 'No blocks scheduled.\nDrag the clock ring to add one.'
+      : 'No blocks scheduled.\nUse Daily mode to add one.';
     list.appendChild(empty);
     return;
   }
@@ -2845,7 +3205,7 @@ function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: bool
 }
 
 // ── Block state helpers ─────────────────────────────────
-function isPastBlock(block: TimeBlock | (BlockOrPartial & { ampm?: AmPm }), key: string): boolean {
+function isPastBlock(block: TimeBlock | RecurringBlock | (BlockOrPartial & { ampm?: AmPm }), key: string): boolean {
   const todayKey = getTodayKey();
   if (key < todayKey) return true;
   if (key > todayKey) return false;

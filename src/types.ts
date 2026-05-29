@@ -7,6 +7,8 @@ export type AmPm = 'AM' | 'PM';
 export type RecurrenceType = 'daily' | 'weekly' | 'monthly';
 export type SkinId = 'default' | 'arctic' | 'glacier' | 'teal';
 export type ViewType = 'calendar' | 'schedule';
+export type ScheduleViewMode = 'daily' | 'schedule';
+export type ScheduleTimelineScale = 'day';
 
 // ── Calendar data shapes ─────────────────────────────────────────────────────
 

@@ -2,9 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+- Added a unified Schedule page mode toggle so the right-side schedule canvas can switch between `Daily` clock mode and a native day-scale `Schedule` timeline view while keeping one shared task list
+- Added draggable start/end handles for one-off blocks in the native Schedule timeline so users can resize blocks directly on the day view
+
 ### Changed
 - Reclassified Caldera as proprietary freeware in the project metadata and end-user documentation
 - Rewrote the bundled license text to clearly grant no-cost use while keeping redistribution, modification, resale, and relicensing restricted
+- Reworked the Schedule page shell to support a first-party timeline renderer instead of a separate standalone Gantt page
+- Timeline edge resizing now auto-shifts neighboring one-off blocks to preserve order and keep Daily mode in sync with Schedule mode
+- Reworked the Schedule timeline editor to use shared boundary handles between adjacent one-off blocks, rather than independent bar-edge resizing
 
 ### Fixed
 - Restored local startup by fixing the invalid `package.json` JSON syntax
@@ -13,6 +20,9 @@
 - Added palette-slot migration for time blocks so skins re-theme existing schedule blocks consistently instead of persisting mismatched per-skin hex colors
 - Unified rounded block geometry and cross-skin block styling so skins now differ by palette treatment rather than shape/opacity behavior
 - Fixed schedule block AM/PM assignment so new blocks inherit the active schedule toggle instead of the current real-world time, and added an explicit AM/PM selector in the block popup for correcting older mis-tagged blocks
+- Added skin-aware styling and native scrolling behavior for the first custom Schedule timeline surface
+- Removed artificial minimum-width stretching from timeline bars so displayed widths match real scheduled durations more accurately
+- Unified Schedule timeline resizing around one visible single-lane sequence, so one-off and recurring blocks now share the same draggable boundaries instead of splitting into separate lanes
 
 ---
 

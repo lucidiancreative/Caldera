@@ -108,6 +108,24 @@
             </div>
           </div>
         </div>
+        <div id="schedule-block-panel">
+          <div id="schedule-block-panel-empty">Select a time block to view the sub-tasks assigned to it.</div>
+          <div id="schedule-block-panel-content" class="hidden">
+            <div id="schedule-block-panel-header">
+              <div id="schedule-block-panel-heading">
+                <h3 id="schedule-block-panel-title"></h3>
+                <div id="schedule-block-panel-meta"></div>
+              </div>
+              <button id="schedule-block-edit-btn" type="button">Edit Block</button>
+            </div>
+            <form id="schedule-subtask-form">
+              <input id="schedule-subtask-input" type="text" placeholder="Add a sub-task for this block" autocomplete="off" />
+              <button id="schedule-subtask-add" type="submit">Add Sub-task</button>
+            </form>
+            <div id="schedule-subtask-empty" class="hidden">No sub-tasks assigned yet.</div>
+            <div id="schedule-subtask-list"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

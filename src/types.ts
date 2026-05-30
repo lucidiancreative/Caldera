@@ -26,6 +26,12 @@ export interface DayData {
   timeBlocks: TimeBlock[];
 }
 
+export interface BlockSubtask {
+  id: string;
+  label: string;
+  completed: boolean;
+}
+
 export interface TimeBlock {
   id: string;
   /** Minutes from midnight on a 12-hour face (0–719) */
@@ -38,6 +44,7 @@ export interface TimeBlock {
   color: string;
   ampm: AmPm;
   completed: boolean;
+  subtasks: BlockSubtask[];
 }
 
 export interface RecurringBlock {
@@ -57,6 +64,7 @@ export interface RecurringBlock {
   completedDates: DateKey[];
   /** Days where the recurring block is skipped or overridden */
   excludedDates: DateKey[];
+  subtasks: BlockSubtask[];
 }
 
 /**

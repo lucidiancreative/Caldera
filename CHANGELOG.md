@@ -5,6 +5,7 @@
 ### Added
 - Added a unified Schedule page mode toggle so the right-side schedule canvas can switch between `Daily` clock mode and a native day-scale `Schedule` timeline view while keeping one shared task list
 - Added draggable start/end handles for one-off blocks in the native Schedule timeline so users can resize blocks directly on the day view
+- Added a shared block details panel below the Schedule canvas, with per-block sub-task lists that can be viewed, added to, completed, and removed from either Daily or Schedule mode
 
 ### Changed
 - Reclassified Caldera as proprietary freeware in the project metadata and end-user documentation
@@ -12,6 +13,7 @@
 - Reworked the Schedule page shell to support a first-party timeline renderer instead of a separate standalone Gantt page
 - Timeline edge resizing now auto-shifts neighboring one-off blocks to preserve order and keep Daily mode in sync with Schedule mode
 - Reworked the Schedule timeline editor to use shared boundary handles between adjacent one-off blocks, rather than independent bar-edge resizing
+- Schedule blocks now open into a shared selection model, so the task list, clock arcs, legend chips, and timeline bars all target the same block detail surface instead of sending timeline clicks straight back to Daily mode
 
 ### Fixed
 - Restored local startup by fixing the invalid `package.json` JSON syntax
@@ -23,6 +25,7 @@
 - Added skin-aware styling and native scrolling behavior for the first custom Schedule timeline surface
 - Removed artificial minimum-width stretching from timeline bars so displayed widths match real scheduled durations more accurately
 - Unified Schedule timeline resizing around one visible single-lane sequence, so one-off and recurring blocks now share the same draggable boundaries instead of splitting into separate lanes
+- Removed implicit edit-on-double-click from schedule block surfaces so clicking a block consistently opens its sub-task details without unexpectedly bouncing the view back to Daily mode
 
 ---
 

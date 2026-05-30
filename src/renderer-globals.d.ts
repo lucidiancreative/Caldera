@@ -30,6 +30,12 @@ interface DayData {
   timeBlocks: TimeBlock[];
 }
 
+interface BlockSubtask {
+  id: string;
+  label: string;
+  completed: boolean;
+}
+
 interface TimeBlock {
   id: string;
   startMin: number;
@@ -39,6 +45,7 @@ interface TimeBlock {
   color: string;
   ampm: AmPm;
   completed: boolean;
+  subtasks: BlockSubtask[];
 }
 
 interface RecurringBlock {
@@ -54,6 +61,7 @@ interface RecurringBlock {
   dayOfMonth: number;
   completedDates: DateKey[];
   excludedDates: DateKey[];
+  subtasks: BlockSubtask[];
 }
 
 interface CalData {

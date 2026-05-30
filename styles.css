@@ -867,7 +867,10 @@ body.dark .card-toolbar .card-action-btn:hover {
 #daily-mode-panel.hidden,
 #timeline-mode-panel.hidden,
 #timeline-empty.hidden,
-#timeline-surface.hidden {
+#timeline-surface.hidden,
+#schedule-block-panel-content.hidden,
+#schedule-block-panel-empty.hidden,
+#schedule-subtask-empty.hidden {
   display: none;
 }
 
@@ -913,6 +916,10 @@ body.dark #task-list::-webkit-scrollbar-thumb { background: #48484a; }
   border: 1px solid var(--border);
   flex-shrink: 0;
   transition: opacity 0.15s, border-color 0.15s;
+}
+.task-item.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .task-item.past      { opacity: 0.4; }
 .task-item.completed { opacity: 0.45; }
@@ -1093,6 +1100,12 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   filter: brightness(1.03);
 }
 
+.timeline-bar.is-selected {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 62%, white),
+    0 10px 24px rgba(0,0,0,0.12);
+}
+
 .timeline-bar.is-compact .timeline-bar-time {
   display: none;
 }
@@ -1198,6 +1211,149 @@ body.is-resizing-timeline * {
   cursor: ew-resize !important;
 }
 
+#schedule-block-panel {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.44), transparent 48%),
+    linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.56));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.42);
+  padding: 16px;
+  min-height: 170px;
+}
+
+#schedule-block-panel.has-selection {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+}
+
+#schedule-block-panel-empty,
+#schedule-subtask-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+#schedule-block-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#schedule-block-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#schedule-block-panel-heading {
+  min-width: 0;
+}
+
+#schedule-block-panel-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+#schedule-block-panel-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+#schedule-block-edit-btn,
+#schedule-subtask-add {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#schedule-block-edit-btn:hover,
+#schedule-subtask-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#schedule-subtask-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#schedule-subtask-input {
+  flex: 1 1 260px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.52);
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+#schedule-subtask-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.schedule-subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.34);
+}
+
+.schedule-subtask-item.completed {
+  opacity: 0.62;
+}
+
+.schedule-subtask-item.completed .schedule-subtask-label {
+  text-decoration: line-through;
+}
+
+.schedule-subtask-toggle,
+.schedule-subtask-delete {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+}
+
+.schedule-subtask-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.schedule-subtask-delete:hover {
+  border-color: var(--today-ring);
+  color: var(--today-ring);
+}
+
+.schedule-subtask-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 /* ── Reschedule banner ────────────────────────────────── */
 #reschedule-banner {
   display: flex;
@@ -1295,6 +1451,12 @@ body.is-resizing-timeline * {
   opacity: 0.9;
   filter: saturate(1) drop-shadow(0 3px 10px rgba(0,0,0,0.18));
 }
+.clock-block-arc.is-selected {
+  opacity: 0.98;
+  stroke: color-mix(in srgb, var(--accent) 72%, white);
+  stroke-width: 1.8;
+  filter: saturate(1.08) drop-shadow(0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent)) drop-shadow(0 4px 12px rgba(0,0,0,0.18));
+}
 .clock-block-arc.recurring-arc { stroke-width: 1.35; }
 .clock-block-label { font-size: 10px; font-weight: 700; fill: rgba(255,255,255,0.92); pointer-events: none; }
 .clock-preview  { opacity: 0.45; pointer-events: none; }
@@ -1323,6 +1485,12 @@ body.is-resizing-timeline * {
   filter: saturate(0.95);
 }
 .block-chip:hover { opacity: 0.9; transform: scale(1.04); filter: saturate(1); }
+.block-chip.is-selected {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.28),
+    0 0 0 2px color-mix(in srgb, var(--accent) 48%, transparent),
+    0 2px 8px rgba(0,0,0,0.12);
+}
 
 /* ── Block label popup ────────────────────────────────── */
 #block-label-popup {

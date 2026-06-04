@@ -34,10 +34,6 @@ A tab toggle switches between the calendar grid and an SVG-rendered analog clock
 <img width="1616" height="1381" alt="image" src="https://github.com/user-attachments/assets/0fbac8d7-8c08-4a02-8504-4ad88841a72d" />
 
 
-### Dark Mode
-
-A dark theme is toggled from the titlebar and persisted to `localStorage` between sessions.
-
 ### Local-Only Storage
 
 All data — event entries, images, preferences — is stored in the user's local app data directory. Nothing is transmitted externally. No accounts, no cloud sync, no telemetry.

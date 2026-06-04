@@ -382,23 +382,39 @@ async function callClaude(
   };
   if (tools) body.tools = tools;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'web-search-2025-03-05',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60_000),
-  });
+  const headers = {
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+    'anthropic-beta': 'web-search-2025-03-05',
+    'content-type': 'application/json',
+  };
+  const data = await postJson<ClaudeResponse>('https://api.anthropic.com/v1/messages', body, headers, 60_000, true);
+  return data;
+}
 
+/**
+ * Helper: POST JSON with timeout + standardized error handling.
+ * If parseJson is true, returns the parsed JSON; otherwise returns the raw text.
+ */
+async function postJson<T = unknown>(
+  url: string,
+  body: unknown,
+  headers: Record<string, string> = { 'content-type': 'application/json' },
+  timeoutMs = 120_000,
+  parseJson = true,
+): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Claude API ${res.status}: ${text}`);
+    throw new Error(`${url} ${res.status}: ${text}`);
   }
-  return res.json() as Promise<ClaudeResponse>;
+  if (parseJson) return (await res.json()) as T;
+  return (await res.text()) as unknown as T;
 }
 
 // ── Ollama: Fetch mode ────────────────────────────────────────────────────────
@@ -425,22 +441,12 @@ async function callOllama(baseUrl: string, model: string, prompt: string): Promi
     throw new Error(`Invalid Ollama URL: ${e instanceof Error ? e.message : e}`);
   }
   const url = baseUrl.replace(/\/$/, '') + '/api/chat';
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      stream: false,
-    }),
-    signal: AbortSignal.timeout(300_000),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Ollama ${res.status}: ${text}`);
-  }
-  const data = await res.json() as OllamaResponse;
+  const body = {
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    stream: false,
+  };
+  const data = await postJson<OllamaResponse>(url, body, { 'content-type': 'application/json' }, 300_000, true);
   return data.message?.content ?? '';
 }
 
@@ -458,25 +464,16 @@ async function runOpenAIFetchImport(aiConfig: AiConfig): Promise<AiImportResult>
 // ── OpenAI API call ──────────────────────────────────────────────────────────
 
 async function callOpenAI(apiKey: string, prompt: string): Promise<string> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 8192,
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`OpenAI API ${res.status}: ${text}`);
-  }
-  const data = await res.json() as OpenAIResponse;
+  const body = {
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 8192,
+  };
+  const headers = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  };
+  const data = await postJson<OpenAIResponse>('https://api.openai.com/v1/chat/completions', body, headers, 120_000, true);
   return data.choices?.[0]?.message?.content ?? '';
 }
 

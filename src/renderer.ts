@@ -67,22 +67,9 @@ type BlockOrPartial =
 
 // ── DOM helpers ─────────────────────────────────────────
 
-function qId<T extends HTMLElement = HTMLElement>(id: string): T {
-  const el = document.getElementById(id) as T | null;
-  if (!el) throw new Error(`#${id} not found`);
-  return el;
-}
 
 // ── Typed SVG helper ─────────────────────────────────────
 
-function svgEl<K extends keyof SVGElementTagNameMap>(
-  tag: K,
-  attrs: Record<string, string | number>
-): SVGElementTagNameMap[K] {
-  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
-  return e;
-}
 
 // ── CalData accessor helper ──────────────────────────────
 
@@ -610,11 +597,6 @@ function formatTime12h(t: string): string {
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
-function setScheduleAmPm(ampm: AmPm): void {
-  clockAmPm = ampm;
-  (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>)
-    .forEach(btn => btn.classList.toggle('active', btn.dataset.ampm === clockAmPm));
-}
 
 // Returns today's date key — computed fresh each call so the app
 // stays correct if left open past midnight.
@@ -623,209 +605,50 @@ function getTodayKey(): string {
   return dateKey(t.getFullYear(), t.getMonth(), t.getDate());
 }
 
-function getScheduleBlocksForDate(key: string): (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[] {
-  const allDateBlocks = getDayData(key)?.timeBlocks || [];
-  const recurBlocks   = getRecurringBlocksForDate(key).map(b => ({
-    ...b,
-    completed:  b.completedDates?.includes(key) || false,
-    _recurring: true,
-  }));
-  return [...allDateBlocks, ...recurBlocks];
-}
+// Legacy in-file schedule implementations remain below as an intermediate
+// cleanup step while schedule.ts becomes the live source of behavior.
 
-function getScheduleBlockByIdForDate(key: string, blockId: string): (TimeBlock & { _recurring?: boolean; recurrence?: string }) | null {
-  return getScheduleBlocksForDate(key).find(block => block.id === blockId) as (TimeBlock & { _recurring?: boolean; recurrence?: string }) | undefined || null;
-}
 
-function getStoredBlockById(key: string, blockId: string): TimeBlock | RecurringBlock | null {
-  const dayBlock = getDayData(key)?.timeBlocks?.find(block => block.id === blockId);
-  if (dayBlock) return dayBlock;
-  return (calData._recurring || []).find(block => block.id === blockId) || null;
-}
 
-function isSelectedScheduleBlock(key: string, blockId: string): boolean {
-  return selectedScheduleBlock?.key === key && selectedScheduleBlock.blockId === blockId;
-}
 
-function selectScheduleBlock(key: string, blockId: string): void {
-  selectedScheduleBlock = { key, blockId };
-  if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
-}
 
-function openScheduleBlockEditor(key: string, blockId: string): void {
-  const block = getScheduleBlockByIdForDate(key, blockId);
-  if (!block) return;
-  selectedScheduleBlock = { key, blockId };
-  clockAmPm = block.ampm;
-  scheduleViewMode = 'daily';
-  syncScheduleModeButtons();
-  renderScheduleView(key);
-  const svg = qId('clock-area').querySelector('svg') as SVGSVGElement | null;
-  if (!svg) return;
-  showTimeBlockPopup('edit', block, key, svg, 200, 200, 170);
-}
 
-function syncScheduleModeButtons(): void {
-  (document.querySelectorAll('.schedule-mode-btn') as NodeListOf<HTMLElement>).forEach(btn =>
-    btn.classList.toggle('active', btn.dataset.mode === scheduleViewMode)
-  );
-  qId('daily-mode-panel').classList.toggle('hidden', scheduleViewMode !== 'daily');
-  qId('timeline-mode-panel').classList.toggle('hidden', scheduleViewMode !== 'schedule');
-  qId('schedule-scale-group').classList.toggle('hidden', scheduleViewMode !== 'schedule');
-}
 
-function setScheduleViewMode(mode: ScheduleViewMode): void {
-  scheduleViewMode = mode;
-  syncScheduleModeButtons();
-  if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
-}
 
-function getTimelineAbsoluteMinutes(block: { startMin: number; endMin: number; ampm: AmPm }): { start: number; end: number } {
-  const start = (block.ampm === 'PM' ? 12 * 60 : 0) + block.startMin;
-  let end = (getBlockEndAmPm(block) === 'PM' ? 12 * 60 : 0) + block.endMin;
-  if (end <= start) end += 24 * 60;
-  return { start, end };
-}
 
-function snapTimelineMinutes(value: number): number {
-  return Math.round(value / 15) * 15;
-}
 
-function clampTimelineMinutes(value: number): number {
-  return Math.max(0, Math.min(24 * 60, snapTimelineMinutes(value)));
-}
 
-function applyAbsoluteMinutesToTimeBlock(block: TimeBlock | RecurringBlock, start: number, end: number): void {
-  const clampedStart = Math.max(0, Math.min(start, 24 * 60));
-  const clampedEnd = Math.max(clampedStart + 15, Math.min(end, 24 * 60));
-  block.ampm = clampedStart >= 12 * 60 ? 'PM' : 'AM';
-  block.startMin = clampedStart % 720;
-  block.endMin = clampedEnd % 720;
-}
 
-function getTimelineSegmentsForDate(key: string): TimelineSegment[] {
-  const dayBlocks = getDayData(key)?.timeBlocks || [];
-  const recurringBlocks = getRecurringBlocksForDate(key);
 
-  return [...dayBlocks, ...recurringBlocks]
-    .map(block => {
-      const range = getTimelineAbsoluteMinutes(block);
-      const recurring = 'recurrence' in block;
-      return {
-        block,
-        recurring,
-        completed: recurring
-          ? block.completedDates?.includes(key) || false
-          : block.completed,
-        start: range.start,
-        end: range.end,
-      };
-    })
-    .sort((a, b) => {
-      if (a.start !== b.start) return a.start - b.start;
-      if (a.end !== b.end) return a.end - b.end;
-      return a.block.label.localeCompare(b.block.label);
-    });
-}
 
-function resizeScheduleTimelineBoundaryInMemory(
-  key: string,
-  state: Pick<TimelineResizeState, 'kind' | 'leftBlockId' | 'rightBlockId'>,
-  proposedAbsoluteMinutes: number
-): boolean {
-  const minDuration = 15;
-  const proposed = clampTimelineMinutes(proposedAbsoluteMinutes);
-  const segments = getTimelineSegmentsForDate(key);
-  if (!segments.length) return false;
 
-  if (state.kind === 'leading') {
-    const first = segments.find(segment => segment.block.id === state.rightBlockId);
-    if (!first) return false;
-    const desiredStart = Math.max(0, Math.min(proposed, first.end - minDuration));
-    if (desiredStart === first.start) return false;
-    applyAbsoluteMinutesToTimeBlock(first.block, desiredStart, first.end);
-    return true;
-  }
 
-  if (state.kind === 'trailing') {
-    const last = segments.find(segment => segment.block.id === state.leftBlockId);
-    if (!last) return false;
-    const desiredEnd = Math.min(24 * 60, Math.max(proposed, last.start + minDuration));
-    if (desiredEnd === last.end) return false;
-    applyAbsoluteMinutesToTimeBlock(last.block, last.start, desiredEnd);
-    return true;
-  }
 
-  const left = segments.find(segment => segment.block.id === state.leftBlockId);
-  const right = segments.find(segment => segment.block.id === state.rightBlockId);
-  if (!left || !right) return false;
 
-  const desiredBoundary = Math.max(left.start + minDuration, Math.min(proposed, right.end - minDuration));
-  if (desiredBoundary === left.end && desiredBoundary === right.start) return false;
 
-  applyAbsoluteMinutesToTimeBlock(left.block, left.start, desiredBoundary);
-  applyAbsoluteMinutesToTimeBlock(right.block, desiredBoundary, right.end);
-  return true;
-}
-
-function getTimelinePointerMinutes(event: MouseEvent, scroll: HTMLElement, hourWidth: number): number {
-  const rect = scroll.getBoundingClientRect();
-  const offsetX = event.clientX - rect.left + scroll.scrollLeft;
-  return clampTimelineMinutes((offsetX / hourWidth) * 60);
-}
-
-function endTimelineResize(commit = true): void {
-  if (!timelineResizeState) return;
-  const activeKey = timelineResizeState.key;
-  timelineResizeState = null;
-  suppressNextTimelineBarClick = true;
-  window.setTimeout(() => { suppressNextTimelineBarClick = false; }, 0);
-  document.body.classList.remove('is-resizing-timeline');
-  document.removeEventListener('mousemove', onTimelineResizeMove);
-  document.removeEventListener('mouseup', onTimelineResizeEnd);
-  if (!commit) return;
-  void saveCalendarData().then(() => {
-    if (activeView === 'schedule' && scheduleDate === activeKey) renderScheduleView(activeKey);
-  });
-}
-
-function onTimelineResizeMove(event: MouseEvent): void {
-  if (!timelineResizeState) return;
-  const scroll = qId('timeline-body-scroll');
-  const nextMinutes = getTimelinePointerMinutes(event, scroll, timelineResizeState.hourWidth);
-  const changed = resizeScheduleTimelineBoundaryInMemory(
-    timelineResizeState.key,
-    timelineResizeState,
-    nextMinutes
-  );
-  if (!changed) return;
-  if (activeView === 'schedule' && scheduleDate === timelineResizeState.key) renderScheduleView(timelineResizeState.key);
-}
-
-function onTimelineResizeEnd(): void {
-  endTimelineResize(true);
-}
-
-function beginTimelineResize(
-  event: MouseEvent,
-  key: string,
-  state: Pick<TimelineResizeState, 'kind' | 'leftBlockId' | 'rightBlockId'>,
-  hourWidth: number
-): void {
-  event.preventDefault();
-  event.stopPropagation();
-  if (timelineResizeState) return;
-  pushCalendarSnapshot();
-  timelineResizeState = { key, hourWidth, ...state };
-  document.body.classList.add('is-resizing-timeline');
-  document.addEventListener('mousemove', onTimelineResizeMove);
-  document.addEventListener('mouseup', onTimelineResizeEnd);
-}
 
 async function saveCalendarData(): Promise<void> {
   normalizeCalendarBlockSubtasks(calData);
   syncCalendarBlockColorsToCurrentSkin();
   await calBridge.saveData(calData);
+}
+
+async function saveCalendarDataAndRefresh(
+  key: string,
+  options: {
+    refreshCell?: boolean;
+    refreshEventCards?: boolean;
+    renderSchedule?: boolean;
+    renderMonth?: boolean;
+    renderCalendarGrid?: boolean;
+  } = {},
+): Promise<void> {
+  await saveCalendarData();
+  if (options.refreshCell) await refreshCalendarCell(key);
+  if (options.refreshEventCards && modalDate === key) renderEventCards(key);
+  if (options.renderCalendarGrid) renderCalendarGrid();
+  if (options.renderMonth) renderMonthStrip();
+  if (options.renderSchedule && activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
 function pushCalendarSnapshot(): void {
@@ -1242,9 +1065,7 @@ async function addEventWithImage(key: string, id: string, relPath: string): Prom
   day.events.push({ id, image: relPath, notes: '', time: '' });
   // Auto-feature the very first event on a day
   if (!day.featuredId) day.featuredId = id;
-  await saveCalendarData();
-  await refreshCalendarCell(key);
-  if (modalDate === key) renderEventCards(key);
+  await saveCalendarDataAndRefresh(key, { refreshCell: true, refreshEventCards: true });
 }
 
 async function addEmptyEvent(key: string): Promise<void> {
@@ -1253,8 +1074,7 @@ async function addEmptyEvent(key: string): Promise<void> {
   const id  = generateCalendarEntryId();
   day.events.push({ id, image: null, notes: '', time: '' });
   if (!day.featuredId) day.featuredId = id;
-  await saveCalendarData();
-  if (modalDate === key) renderEventCards(key);
+  await saveCalendarDataAndRefresh(key, { refreshEventCards: true });
 }
 
 async function removeEvent(key: string, eventId: string): Promise<void> {
@@ -1269,9 +1089,7 @@ async function removeEvent(key: string, eventId: string): Promise<void> {
   if (day.featuredId === eventId) day.featuredId = day.events[0]?.id || null;
 
   pruneEmptyDayEntry(key);
-  await saveCalendarData();
-  await refreshCalendarCell(key);
-  if (modalDate === key) renderEventCards(key);
+  await saveCalendarDataAndRefresh(key, { refreshCell: true, refreshEventCards: true });
 }
 
 async function setFeaturedCalendarEvent(key: string, eventId: string): Promise<void> {
@@ -1279,9 +1097,7 @@ async function setFeaturedCalendarEvent(key: string, eventId: string): Promise<v
   const day = getDayData(key);
   if (!day) return;
   day.featuredId = eventId;
-  await saveCalendarData();
-  await refreshCalendarCell(key);
-  if (modalDate === key) renderEventCards(key);
+  await saveCalendarDataAndRefresh(key, { refreshCell: true, refreshEventCards: true });
 }
 
 async function saveEventField(key: string, eventId: string, field: keyof CalendarEvent, value: string): Promise<void> {
@@ -1292,8 +1108,11 @@ async function saveEventField(key: string, eventId: string, field: keyof Calenda
   if (!ev) return;
   if (value) (ev as unknown as Record<string, unknown>)[field] = value;
   else delete (ev as unknown as Record<string, unknown>)[field];
-  if (field === 'time' && day.featuredId === eventId) await refreshCalendarCell(key);
-  await saveCalendarData();
+  if (field === 'time' && day.featuredId === eventId) {
+    await saveCalendarDataAndRefresh(key, { refreshCell: true });
+  } else {
+    await saveCalendarData();
+  }
 }
 
 async function assignEventImage(key: string, eventId: string, srcPath: string): Promise<void> {
@@ -1309,9 +1128,7 @@ async function assignEventImage(key: string, eventId: string, srcPath: string): 
   const hasFeaturedImg = day!.events.find(e => e.id === day!.featuredId)?.image;
   if (!hasFeaturedImg) day!.featuredId = eventId;
 
-  await saveCalendarData();
-  await refreshCalendarCell(key);
-  if (modalDate === key) renderEventCards(key);
+  await saveCalendarDataAndRefresh(key, { refreshCell: true, refreshEventCards: true });
 }
 
 async function removeEventImage(key: string, eventId: string): Promise<void> {
@@ -1328,9 +1145,7 @@ async function removeEventImage(key: string, eventId: string): Promise<void> {
     day!.featuredId = other?.id || day!.events.find(e => e.id !== eventId)?.id || null;
   }
 
-  await saveCalendarData();
-  await refreshCalendarCell(key);
-  if (modalDate === key) renderEventCards(key);
+  await saveCalendarDataAndRefresh(key, { refreshCell: true, refreshEventCards: true });
 }
 
 // ── Lightbox ───────────────────────────────────────────
@@ -2034,8 +1849,7 @@ function aiDatePickerClear(): void {
 
 function renderAiUrlList(sites: string[]): void {
   const list = qId('ai-url-list');
-  list.innerHTML = '';
-  sites.forEach((url, i) => {
+  renderList(list, sites, (url, i) => {
     const row  = document.createElement('div');
     row.className = 'ai-url-row';
     const span = document.createElement('span');
@@ -2050,7 +1864,7 @@ function renderAiUrlList(sites: string[]): void {
       renderAiUrlList(current);
     });
     row.append(span, btn);
-    list.appendChild(row);
+    return row;
   });
 }
 
@@ -2060,8 +1874,7 @@ function getAiSitesFromList(): string[] {
 
 function renderAiKeywordList(keywords: string[]): void {
   const list = qId('ai-keyword-list');
-  list.innerHTML = '';
-  keywords.forEach((kw, i) => {
+  renderList(list, keywords, (kw, i) => {
     const row  = document.createElement('div');
     row.className = 'ai-url-row';
     const span = document.createElement('span');
@@ -2076,7 +1889,7 @@ function renderAiKeywordList(keywords: string[]): void {
       renderAiKeywordList(current);
     });
     row.append(span, btn);
-    list.appendChild(row);
+    return row;
   });
 }
 
@@ -2178,8 +1991,7 @@ function closeAiReviewModal(): void {
 
 function renderAiEventList(events: AiEvent[]): void {
   const list = qId('ai-event-list');
-  list.innerHTML = '';
-  events.forEach((ev, i) => {
+  renderList(list, events, (ev, i) => {
     const row = document.createElement('div');
     row.className  = 'ai-event-row checked';
     row.dataset.idx = String(i);
@@ -2228,7 +2040,7 @@ function renderAiEventList(events: AiEvent[]): void {
 
     info.append(title, meta, notes);
     row.append(cb, info);
-    list.appendChild(row);
+    return row;
   });
 }
 
@@ -2433,7 +2245,7 @@ function stepScheduleDay(delta: number): void {
 }
 
 // ── Schedule / Clock rendering ──────────────────────────
-function renderScheduleView(key: string): void {
+function legacyRenderScheduleView(key: string): void {
   scheduleDate = key;
   if (rescheduleBlock && rescheduleBlock._key !== key) rescheduleBlock = null;
 
@@ -2467,7 +2279,7 @@ function renderScheduleView(key: string): void {
   updateRescheduleBanner();
 }
 
-function renderScheduleBlockDetailsPanel(key: string): void {
+function legacyRenderScheduleBlockDetailsPanel(key: string): void {
   const panel = qId('schedule-block-panel');
   const empty = qId('schedule-block-panel-empty');
   const content = qId('schedule-block-panel-content');
@@ -2528,14 +2340,14 @@ function renderScheduleBlockDetailsPanel(key: string): void {
   });
 }
 
-function formatTimelineHourLabel(hour: number): string {
+function legacyFormatTimelineHourLabel(hour: number): string {
   const normalized = hour % 24;
   const suffix = normalized >= 12 ? 'PM' : 'AM';
   const displayHour = normalized % 12 || 12;
   return `${displayHour} ${suffix}`;
 }
 
-function renderScheduleTimeline(key: string, _blocks: (TimeBlock & { _recurring?: boolean })[]): void {
+function legacyRenderScheduleTimeline(key: string, _blocks: (TimeBlock & { _recurring?: boolean })[]): void {
   const header = qId('timeline-hour-header');
   const grid = qId('timeline-grid');
   const bars = qId('timeline-bars');
@@ -3227,7 +3039,7 @@ function formatBlockTimeRange(block: { startMin: number; endMin: number; ampm: A
 }
 
 // ── Task list sidebar ───────────────────────────────────
-function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[]): void {
+function legacyRenderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean })[]): void {
   const list = qId('task-list');
   list.innerHTML = '';
 
@@ -3361,7 +3173,7 @@ function renderTaskList(key: string, allBlocks: (TimeBlock & { _recurring?: bool
 }
 
 // ── Block state helpers ─────────────────────────────────
-function isPastBlock(block: TimeBlock | RecurringBlock | (BlockOrPartial & { ampm?: AmPm }), key: string): boolean {
+function legacyIsPastBlock(block: TimeBlock | RecurringBlock | (BlockOrPartial & { ampm?: AmPm }), key: string): boolean {
   const todayKey = getTodayKey();
   if (key < todayKey) return true;
   if (key > todayKey) return false;
@@ -3376,7 +3188,7 @@ function isPastBlock(block: TimeBlock | RecurringBlock | (BlockOrPartial & { amp
   return nowMin >= endMin;
 }
 
-async function toggleBlockCompleted(key: string, blockId: string): Promise<void> {
+async function legacyToggleBlockCompleted(key: string, blockId: string): Promise<void> {
   pushCalendarSnapshot();
   const rBlock = (calData._recurring || []).find(b => b.id === blockId);
   if (rBlock) {
@@ -3396,7 +3208,7 @@ async function toggleBlockCompleted(key: string, blockId: string): Promise<void>
 }
 
 // ── Reschedule (move to another day) ───────────────────
-async function addBlockSubtask(key: string, blockId: string, label: string): Promise<void> {
+async function legacyAddBlockSubtask(key: string, blockId: string, label: string): Promise<void> {
   const trimmed = label.trim();
   if (!trimmed) return;
   const block = getStoredBlockById(key, blockId);
@@ -3412,7 +3224,7 @@ async function addBlockSubtask(key: string, blockId: string, label: string): Pro
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
-async function toggleBlockSubtaskCompleted(key: string, blockId: string, subtaskId: string): Promise<void> {
+async function legacyToggleBlockSubtaskCompleted(key: string, blockId: string, subtaskId: string): Promise<void> {
   const block = getStoredBlockById(key, blockId);
   const task = block?.subtasks?.find(entry => entry.id === subtaskId);
   if (!block || !task) return;
@@ -3422,7 +3234,7 @@ async function toggleBlockSubtaskCompleted(key: string, blockId: string, subtask
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
-async function deleteBlockSubtask(key: string, blockId: string, subtaskId: string): Promise<void> {
+async function legacyDeleteBlockSubtask(key: string, blockId: string, subtaskId: string): Promise<void> {
   const block = getStoredBlockById(key, blockId);
   if (!block?.subtasks?.some(entry => entry.id === subtaskId)) return;
   pushCalendarSnapshot();
@@ -3431,13 +3243,13 @@ async function deleteBlockSubtask(key: string, blockId: string, subtaskId: strin
   if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
 }
 
-function startReschedule(block: TimeBlock & { _recurring?: boolean }, key: string): void {
+function legacyStartReschedule(block: TimeBlock & { _recurring?: boolean }, key: string): void {
   rescheduleBlock = { ...block, _key: key };
   updateRescheduleBanner();
   renderScheduleView(key);
 }
 
-function updateRescheduleBanner(): void {
+function legacyUpdateRescheduleBanner(): void {
   const banner = qId('reschedule-banner');
   if (!rescheduleBlock) { banner.classList.add('hidden'); return; }
 
@@ -3453,7 +3265,7 @@ function updateRescheduleBanner(): void {
   }
 }
 
-async function confirmReschedule(): Promise<void> {
+async function legacyConfirmReschedule(): Promise<void> {
   if (!rescheduleBlock) return;
   pushCalendarSnapshot();
   const input   = qId<HTMLInputElement>('reschedule-date-input');
@@ -3479,7 +3291,7 @@ async function confirmReschedule(): Promise<void> {
   renderScheduleView(scheduleDate!); // stay on current day view; new day visible when navigated
 }
 
-function cancelReschedule(): void {
+function legacyCancelReschedule(): void {
   rescheduleBlock = null;
   const banner = document.getElementById('reschedule-banner');
   if (banner) banner.classList.add('hidden');

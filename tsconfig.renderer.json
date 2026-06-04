@@ -5,5 +5,10 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/renderer.ts", "src/renderer-globals.d.ts"]
+  "include": [
+    "src/renderer-ui.ts",
+    "src/schedule.ts",
+    "src/renderer.ts",
+    "src/renderer-globals.d.ts"
+  ]
 }

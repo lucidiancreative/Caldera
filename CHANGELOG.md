@@ -12,6 +12,11 @@
 - Rewrote the bundled license text to clearly grant no-cost use while keeping redistribution, modification, resale, and relicensing restricted
 - Reworked the Schedule page shell to support a first-party timeline renderer instead of a separate standalone Gantt page
 - Split shared renderer DOM helpers and schedule interactions into dedicated global scripts so `renderer.ts` can keep shrinking toward bootstrap-only wiring
+- Removed the temporary legacy schedule layer from `renderer.ts` now that the extracted schedule script owns the live behavior
+- Extracted the clock/time-block renderer and editor into `src/clock.ts`, and removed the duplicated legacy clock implementation from `renderer.ts`
+- Extracted calendar state/persistence helpers into `src/renderer-data.ts` and calendar grid/modal rendering into `src/calendar-grid.ts`, removing the old in-file calendar/data implementations from `renderer.ts`
+- Split AI import into dedicated `src/ai/model.ts`, `src/ai/renderer.ts`, and `src/ai/parse.ts` modules, leaving `src/ai-import.ts` as the IPC/config entrypoint
+- Extended the shared calendar persistence helper so schedule mutations can reuse one save-and-rerender path instead of repeating `saveCalendarData()` plus schedule refresh logic
 - Timeline edge resizing now auto-shifts neighboring one-off blocks to preserve order and keep Daily mode in sync with Schedule mode
 - Reworked the Schedule timeline editor to use shared boundary handles between adjacent one-off blocks, rather than independent bar-edge resizing
 - Schedule blocks now open into a shared selection model, so the task list, clock arcs, legend chips, and timeline bars all target the same block detail surface instead of sending timeline clicks straight back to Daily mode
@@ -27,6 +32,9 @@
 - Removed artificial minimum-width stretching from timeline bars so displayed widths match real scheduled durations more accurately
 - Unified Schedule timeline resizing around one visible single-lane sequence, so one-off and recurring blocks now share the same draggable boundaries instead of splitting into separate lanes
 - Removed implicit edit-on-double-click from schedule block surfaces so clicking a block consistently opens its sub-task details without unexpectedly bouncing the view back to Daily mode
+
+### Testing
+- Added Node-based unit tests for AI parsing/date-filter helpers and a CI workflow that runs `npm run build` and `npm test`
 
 ---
 

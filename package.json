@@ -1,11 +1,12 @@
 {
   "name": "caldera",
-  "version": "1.5.6",
+  "version": "1.6.0",
   "description": "A proprietary freeware visual event calendar with local-first event import functionality",
   "main": "dist/main.js",
   "scripts": {
     "start": "node scripts/start-electron.js",
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/test",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win"
   },
@@ -19,9 +20,13 @@
       "dist/main.js",
       "dist/preload.js",
       "dist/renderer-ui.js",
+      "dist/renderer-data.js",
+      "dist/clock.js",
       "dist/schedule.js",
+      "dist/calendar-grid.js",
       "dist/renderer.js",
       "dist/ai-import.js",
+      "dist/ai/**/*.js",
       "index.html",
       "styles.css",
       "build/icon.png"

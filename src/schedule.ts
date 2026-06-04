@@ -168,9 +168,7 @@ function endTimelineResize(commit = true): void {
   document.removeEventListener('mousemove', onTimelineResizeMove);
   document.removeEventListener('mouseup', onTimelineResizeEnd);
   if (!commit) return;
-  void saveCalendarData().then(() => {
-    if (activeView === 'schedule' && scheduleDate === activeKey) renderScheduleView(activeKey);
-  });
+  void saveCalendarDataAndRefresh(activeKey, { renderSchedule: true });
 }
 
 function onTimelineResizeMove(event: MouseEvent): void {
@@ -619,15 +617,13 @@ async function toggleBlockCompleted(key: string, blockId: string): Promise<void>
     const index = recurringBlock.completedDates.indexOf(key);
     if (index === -1) recurringBlock.completedDates.push(key);
     else recurringBlock.completedDates.splice(index, 1);
-    await saveCalendarData();
-    if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
+    await saveCalendarDataAndRefresh(key, { renderCurrentSchedule: true });
     return;
   }
   const block = getDayData(key)?.timeBlocks?.find(entry => entry.id === blockId);
   if (!block) return;
   block.completed = !block.completed;
-  await saveCalendarData();
-  if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
+  await saveCalendarDataAndRefresh(key, { renderSchedule: true });
 }
 
 async function addBlockSubtask(key: string, blockId: string, label: string): Promise<void> {
@@ -642,8 +638,7 @@ async function addBlockSubtask(key: string, blockId: string, label: string): Pro
     label: trimmed,
     completed: false,
   });
-  await saveCalendarData();
-  if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
+  await saveCalendarDataAndRefresh(key, { renderSchedule: true });
 }
 
 async function toggleBlockSubtaskCompleted(key: string, blockId: string, subtaskId: string): Promise<void> {
@@ -652,8 +647,7 @@ async function toggleBlockSubtaskCompleted(key: string, blockId: string, subtask
   if (!block || !task) return;
   pushCalendarSnapshot();
   task.completed = !task.completed;
-  await saveCalendarData();
-  if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
+  await saveCalendarDataAndRefresh(key, { renderSchedule: true });
 }
 
 async function deleteBlockSubtask(key: string, blockId: string, subtaskId: string): Promise<void> {
@@ -661,8 +655,7 @@ async function deleteBlockSubtask(key: string, blockId: string, subtaskId: strin
   if (!block?.subtasks?.some(entry => entry.id === subtaskId)) return;
   pushCalendarSnapshot();
   block.subtasks = block.subtasks.filter(entry => entry.id !== subtaskId);
-  await saveCalendarData();
-  if (activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
+  await saveCalendarDataAndRefresh(key, { renderSchedule: true });
 }
 
 function startReschedule(block: TimeBlock & { _recurring?: boolean }, key: string): void {
@@ -721,8 +714,7 @@ async function confirmReschedule(): Promise<void> {
   });
 
   rescheduleBlock = null;
-  await saveCalendarData();
-  renderScheduleView(scheduleDate!);
+  await saveCalendarDataAndRefresh(scheduleDate!, { renderSchedule: true });
 }
 
 function cancelReschedule(): void {

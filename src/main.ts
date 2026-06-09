@@ -32,7 +32,7 @@ function createCalderaWindow(): void {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self'; img-src 'self' file: data:; connect-src 'none';",
+          "default-src 'self'; img-src 'self' file: data:; font-src 'self' file:; connect-src 'none';",
         ],
         'X-Content-Type-Options': ['nosniff'],
         'Referrer-Policy': ['no-referrer'],

@@ -29,6 +29,7 @@
       "dist/ai/**/*.js",
       "index.html",
       "styles.css",
+      "fonts/**",
       "build/icon.png"
     ],
     "win": {

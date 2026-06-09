@@ -470,9 +470,13 @@ function renderScheduleTimeline(key: string, _blocks?: (TimeBlock & { _recurring
     bars.appendChild(marker);
   }
 
+  // On first render, land on the earliest block (with a half-hour lead-in) so the
+  // timeline never opens on empty pre-dawn hours when all blocks are later in the day.
+  // A prior scroll position (user scrolled, or mid-resize) is preserved instead.
+  const firstBarLeft = (placements[0].start / 60) * hourWidth;
   scroll.scrollLeft = timelineResizeState || previousScrollLeft > 0
     ? previousScrollLeft
-    : clockAmPm === 'PM' ? hourWidth * 12 : 0;
+    : Math.max(0, firstBarLeft - hourWidth / 2);
   headerTrack.style.transform = `translateX(${-scroll.scrollLeft}px)`;
   scroll.onscroll = () => {
     headerTrack.style.transform = `translateX(${-scroll.scrollLeft}px)`;

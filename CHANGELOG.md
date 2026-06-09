@@ -32,6 +32,8 @@
 - Removed artificial minimum-width stretching from timeline bars so displayed widths match real scheduled durations more accurately
 - Unified Schedule timeline resizing around one visible single-lane sequence, so one-off and recurring blocks now share the same draggable boundaries instead of splitting into separate lanes
 - Removed implicit edit-on-double-click from schedule block surfaces so clicking a block consistently opens its sub-task details without unexpectedly bouncing the view back to Daily mode
+- Vendored the DM Sans typeface locally (`fonts/`) so it renders offline within the strict CSP instead of being silently blocked from Google Fonts; dropped the unused Outfit web font
+- Schedule timeline now opens scrolled to the earliest block instead of midnight, so days with no early-morning blocks no longer appear empty on first view
 
 ### Testing
 - Added Node-based unit tests for AI parsing/date-filter helpers and a CI workflow that runs `npm run build` and `npm test`

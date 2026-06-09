@@ -72,16 +72,6 @@ All data — event entries, images, preferences — is stored in the user's loca
 
 ---
 
-## Tech Stack
-
-- **Runtime:** [Electron](https://www.electronjs.org/)
-- **UI:** Vanilla HTML, CSS, JavaScript (zero framework dependencies)
-- **Clock renderer:** Inline SVG with computed arc geometry and `<textPath>` labels
-- **Animations:** CSS keyframe-driven scroll strips with per-image segment sizing
-- **Data persistence:** JSON flat file + local image directory via Electron IPC
-
----
-
 ## Installation
 
 Download and run `Caldera.exe` — no installation required. On first launch, Windows SmartScreen may prompt since the binary is unsigned; click **More info → Run anyway**.

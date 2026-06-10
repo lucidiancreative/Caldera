@@ -123,6 +123,8 @@ interface CalderaBridge {
   save(): Promise<void>;
   subscribe(listener: () => void): () => void;
   notify(): void;
+  /** Snapshot calData onto the shared undo stack before a mutation (keeps undo/redo working across the React boundary). */
+  pushSnapshot(): void;
 }
 
 // Extend the global Window interface so renderer.ts can access window.calAPI with full type safety

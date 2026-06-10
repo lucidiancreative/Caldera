@@ -11,6 +11,7 @@ declare global {
       save(): Promise<void>;
       subscribe(listener: () => void): () => void;
       notify(): void;
+      pushSnapshot(): void;
     };
   }
 }

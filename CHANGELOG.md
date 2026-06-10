@@ -8,6 +8,7 @@
 - Added a shared block details panel below the Schedule canvas, with per-block sub-task lists that can be viewed, added to, completed, and removed from either Daily or Schedule mode
 - Scaffolded the renderer's React migration (Phase 0): added Vite, React 19, and Zustand, building the React island as a single IIFE bundle that mounts beside the existing vanilla renderer over `file://` without loosening the strict CSP
 - Wired the React migration's shared data layer (Phase 1): the vanilla renderer exposes a `window.calderaBridge` over the single `calData` source of truth, and a Zustand store mirrors it reactively so React reads live data without a second copy; added pure, unit-tested scheduling selectors
+- Built the React Schedule view foundation (Phase 2, part 1): a `SchedulePage` shell with shared date navigation and a task list that renders blocks (with inline sub-tasks per the chosen task model) from the shared store, reusing the existing task styling, with block and sub-task completion toggles persisting through the bridge — built and verified in isolation, not yet routed from the Schedule tab
 
 ### Changed
 - Reclassified Caldera as proprietary freeware in the project metadata and end-user documentation

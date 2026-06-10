@@ -1,5 +1,6 @@
-// Phase 0/1 placeholder: the React island mounts but renders nothing yet. The
-// shared store (Phase 1) is wired and verified; the Schedule view lands in Phase 2.
+// Placeholder: the React island mounts but renders nothing yet. The Schedule view
+// (SchedulePage) is built and verified in isolation; it gets routed in here once it
+// reaches parity with the vanilla view (timeline + daily modes + full actions).
 export function App() {
   return null;
 }

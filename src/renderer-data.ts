@@ -85,6 +85,7 @@ window.calderaBridge = {
     return () => { calderaDataListeners.delete(listener); };
   },
   notify: notifyCalendarDataChanged,
+  pushSnapshot: () => pushCalendarSnapshot(),
 };
 
 async function saveCalendarData(): Promise<void> {

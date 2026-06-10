@@ -78,31 +78,34 @@ If these three hold, React performs like a fine-grained reactive framework for o
 
 ## Architecture
 
-### 1. Store as the single source of truth (service layer)
+### 1. One source of truth, mirrored (strangler-fig) — implemented in Phase 1
 
-`calData` becomes owned by a Zustand store. The store is the **only** thing that talks to
-`window.calAPI` (load/save/image IPC), giving us the clean service layer the architecture
-standard asks for. UI never calls IPC directly.
-
-```
-src/store/calStore.ts      // calData state + actions (load, mutate, persist via calAPI)
-src/store/selectors.ts     // blocksFor(date), tasksFor(date), overdue/completion meta
-```
-
-Main and preload (`src/main.ts`, `src/preload.ts`) are untouched. The `window.calAPI`
-bridge contract stays identical.
-
-### 2. The hybrid bridge (a real toggle, not commented code)
-
-During migration, React (Schedule) and vanilla (Calendar grid) share `calData`. Keep them
-in sync with one explicit subscription:
+The vanilla renderer is a deeply-coupled, global-mutation codebase. Making a Zustand store
+the *sole* owner of `calData` on day one would mean rewriting every vanilla mutation at once
+— not incremental, high risk. Instead (a deliberate refinement of the original plan), during
+the hybrid phase the **vanilla renderer keeps the one `calData` object and the one
+persistence path**, and exposes a tiny bridge that the store mirrors. One object, one save
+path, two reactive consumers. This is the standard incremental-migration (strangler-fig)
+pattern. When the last vanilla view is gone, the store becomes the sole owner naturally.
 
 ```
-calStore.subscribe(renderCalendarGrid);   // legacy calendar repaints on store change
+src/renderer-data.ts            // vanilla: owns calData; installs window.calderaBridge
+src/react/store/calStore.ts     // React: Zustand store mirroring the bridge (revision counter)
+src/react/store/selectors.ts    // React: pure, unit-tested scheduling selectors
 ```
 
-This is a deliberate, documented transition seam. It is **deleted** the moment the calendar
-grid is ported to React. No long-lived dual-write system.
+`window.calderaBridge` = `{ getData(), save(), subscribe(listener), notify() }`. The vanilla
+side calls `notify()` after every save and the initial load; the store bumps a `revision`
+counter on notify so React re-reads the live data. Main and preload are untouched and the
+`window.calAPI` contract is unchanged.
+
+### 2. The reverse bridge (React writes → vanilla repaints)
+
+The vanilla calendar grid stays in sync during the hybrid window because every write — from
+either side — funnels through the one `saveCalendarData()` → `notify()` path. Once the React
+side starts writing (Phase 2), the still-vanilla calendar subscribes to `notify` to repaint.
+This seam is **deleted** the moment the calendar grid itself is ported to React. No
+long-lived dual-write system.
 
 ### 3. Component tree (target for the Schedule page)
 

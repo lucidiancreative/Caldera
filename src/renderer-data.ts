@@ -67,10 +67,31 @@ function getTodayKey(): string {
   return dateKey(today.getFullYear(), today.getMonth(), today.getDate());
 }
 
+const calderaDataListeners = new Set<() => void>();
+
+// Notify mirrors (currently the React island) that calData changed. Called after
+// every persist and after the initial load so the store never reads stale data.
+function notifyCalendarDataChanged(): void {
+  calderaDataListeners.forEach(listener => listener());
+}
+
+// Expose the live calData and its persistence as a bridge so the React island can
+// mirror one source of truth instead of loading a second, divergent copy.
+window.calderaBridge = {
+  getData: () => calData,
+  save: () => saveCalendarData(),
+  subscribe(listener) {
+    calderaDataListeners.add(listener);
+    return () => { calderaDataListeners.delete(listener); };
+  },
+  notify: notifyCalendarDataChanged,
+};
+
 async function saveCalendarData(): Promise<void> {
   normalizeCalendarBlockSubtasks(calData);
   syncCalendarBlockColorsToCurrentSkin();
   await calBridge.saveData(calData);
+  notifyCalendarDataChanged();
 }
 
 async function saveCalendarDataAndRefresh(

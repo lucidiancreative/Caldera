@@ -9,6 +9,7 @@
   "include": [
     "src/ai/**/*.ts",
     "src/types.ts",
+    "src/react/store/selectors.ts",
     "test/**/*.ts"
   ]
 }

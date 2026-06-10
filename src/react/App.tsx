@@ -1,6 +1,5 @@
-// Phase 0 placeholder: the React island mounts but renders nothing yet, proving
-// the Vite/React build and mount work beside the vanilla renderer without
-// disturbing it. The shared store (Phase 1) and Schedule view (Phase 2) land here.
+// Phase 0/1 placeholder: the React island mounts but renders nothing yet. The
+// shared store (Phase 1) is wired and verified; the Schedule view lands in Phase 2.
 export function App() {
   return null;
 }

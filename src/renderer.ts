@@ -513,6 +513,7 @@ async function initCalendarApp(): Promise<void> {
   activateSkin(getCurrentSkin());
   const raw = await calBridge.loadData();
   calData = migrateCalendarDataFormat(raw);
+  notifyCalendarDataChanged(); // let the React mirror pick up the freshly loaded data
   renderMonthStrip();
   renderCalendarGrid();
   bindCalendarUIEvents();

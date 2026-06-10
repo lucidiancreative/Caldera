@@ -115,7 +115,18 @@ interface CalAPI {
   openExternal(url: string): void;
 }
 
+// Minimal data bridge the vanilla renderer exposes on window so the React island
+// can mirror the single in-memory calData source of truth during the incremental
+// migration — one object, one persistence path, two reactive consumers.
+interface CalderaBridge {
+  getData(): CalData;
+  save(): Promise<void>;
+  subscribe(listener: () => void): () => void;
+  notify(): void;
+}
+
 // Extend the global Window interface so renderer.ts can access window.calAPI with full type safety
 interface Window {
   calAPI: CalAPI;
+  calderaBridge: CalderaBridge;
 }

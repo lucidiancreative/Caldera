@@ -5,7 +5,10 @@
   "main": "dist/main.js",
   "scripts": {
     "start": "node scripts/start-electron.js",
-    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && vite build",
+    "build:react": "vite build",
+    "watch:react": "vite build --watch",
+    "typecheck:react": "tsc -p tsconfig.react.json",
     "test": "tsc -p tsconfig.test.json && node --test dist-test/test",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win"
@@ -27,13 +30,17 @@
       "dist/renderer.js",
       "dist/ai-import.js",
       "dist/ai/**/*.js",
+      "dist/react/**",
       "index.html",
       "styles.css",
       "fonts/**",
       "build/icon.png"
     ],
     "win": {
-      "target": ["nsis", "dir"],
+      "target": [
+        "nsis",
+        "dir"
+      ],
       "icon": "build/icon.png"
     },
     "nsis": {
@@ -42,9 +49,18 @@
     }
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
     "electron": "^40.6.1",
     "electron-builder": "^25.1.8",
     "typescript": "^5.0.0",
-    "@types/node": "^22.0.0"
+    "vite": "^8.0.16"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zustand": "^5.0.14"
   }
 }

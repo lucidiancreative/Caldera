@@ -371,11 +371,16 @@
     </div>
   </div>
 
+  <!-- React island mount point (Phase 0: empty). Views migrate in here. -->
+  <div id="react-root"></div>
+
   <script src="dist/renderer-ui.js"></script>
   <script src="dist/renderer-data.js"></script>
   <script src="dist/clock.js"></script>
   <script src="dist/schedule.js"></script>
   <script src="dist/calendar-grid.js"></script>
   <script src="dist/renderer.js"></script>
+  <!-- React island bundle (IIFE, classic script for file:// + CSP compatibility) -->
+  <script src="dist/react/app.js"></script>
 </body>
 </html>

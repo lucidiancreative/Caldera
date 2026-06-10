@@ -11,6 +11,7 @@
     "src/types.ts",
     "src/react/store/selectors.ts",
     "src/react/schedule/timeline.ts",
+    "src/react/schedule/clock.ts",
     "test/**/*.ts"
   ]
 }

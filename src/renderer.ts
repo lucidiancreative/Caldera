@@ -253,6 +253,16 @@ function getClockBlockCornerRadius(): number {
   return 6;
 }
 
+// Expose block appearance so the React Schedule island paints clock arcs and chips
+// from the same skin/palette as the vanilla view. Read fresh each call so a skin
+// switch is reflected once activateSkin() notifies the mirror to re-render.
+window.calderaAppearance = {
+  palette: () => getBlockColors().map((base, slot) => ({ base, highlight: getBlockHighlightBySlot(slot) })),
+  slotForBlock: (block) => getBlockPaletteSlot(block),
+  gradientCss: (block) => getBlockGradientCss(block),
+  cornerRadius: () => getClockBlockCornerRadius(),
+};
+
 function forEachCalendarBlock(data: CalData, visit: (block: TimeBlock | RecurringBlock) => void): void {
   (data._recurring || []).forEach(visit);
   for (const [key, value] of Object.entries(data)) {
@@ -318,6 +328,7 @@ function activateSkin(id: SkinId): void {
   }
   _skinSwitchPending = true;
   localStorage.setItem('skin', id);
+  notifyCalendarDataChanged(); // repaint the React mirror with the new skin's palette
 }
 
 // -- Skin switch animation flag -------------------------

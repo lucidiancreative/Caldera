@@ -5,13 +5,14 @@
 import { useState } from 'react';
 import { TaskList } from './TaskList';
 import { TimelineMode } from './TimelineMode';
+import { DailyMode } from './DailyMode';
 import { formatDisplayDate, getTodayKey, stepDateKey } from '../util/format';
 
 type ScheduleMode = 'daily' | 'timeline';
 
-export function SchedulePage({ initialDate }: { initialDate?: string }) {
+export function SchedulePage({ initialDate, initialMode }: { initialDate?: string; initialMode?: ScheduleMode }) {
   const [date, setDate] = useState(initialDate ?? getTodayKey());
-  const [mode, setMode] = useState<ScheduleMode>('timeline');
+  const [mode, setMode] = useState<ScheduleMode>(initialMode ?? 'timeline');
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
   return (
@@ -41,7 +42,7 @@ export function SchedulePage({ initialDate }: { initialDate?: string }) {
             {mode === 'timeline' ? (
               <TimelineMode date={date} selectedBlockId={selectedBlockId} onSelect={setSelectedBlockId} />
             ) : (
-              <div className="react-schedule-placeholder">Daily clock view arrives in the next step.</div>
+              <DailyMode date={date} selectedBlockId={selectedBlockId} onSelect={setSelectedBlockId} />
             )}
           </div>
         </div>

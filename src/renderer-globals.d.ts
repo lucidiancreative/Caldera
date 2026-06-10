@@ -127,8 +127,19 @@ interface CalderaBridge {
   pushSnapshot(): void;
 }
 
+// Block appearance resolved from the current skin/palette, exposed so the React
+// island can paint clock arcs and chips with the exact same colors as the vanilla view.
+interface CalderaAppearance {
+  /** Current skin's per-slot block colors and their radial-gradient highlights. */
+  palette(): { base: string; highlight: string }[];
+  slotForBlock(block: { paletteSlot?: number; color?: string }): number;
+  gradientCss(block: { paletteSlot?: number; color?: string }): string;
+  cornerRadius(): number;
+}
+
 // Extend the global Window interface so renderer.ts can access window.calAPI with full type safety
 interface Window {
   calAPI: CalAPI;
   calderaBridge: CalderaBridge;
+  calderaAppearance: CalderaAppearance;
 }

@@ -13,6 +13,12 @@ declare global {
       notify(): void;
       pushSnapshot(): void;
     };
+    calderaAppearance?: {
+      palette(): { base: string; highlight: string }[];
+      slotForBlock(block: { paletteSlot?: number; color?: string }): number;
+      gradientCss(block: { paletteSlot?: number; color?: string }): string;
+      cornerRadius(): number;
+    };
   }
 }
 

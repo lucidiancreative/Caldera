@@ -10,6 +10,7 @@
 - Wired the React migration's shared data layer (Phase 1): the vanilla renderer exposes a `window.calderaBridge` over the single `calData` source of truth, and a Zustand store mirrors it reactively so React reads live data without a second copy; added pure, unit-tested scheduling selectors
 - Built the React Schedule view foundation (Phase 2, part 1): a `SchedulePage` shell with shared date navigation and a task list that renders blocks (with inline sub-tasks per the chosen task model) from the shared store, reusing the existing task styling, with block and sub-task completion toggles persisting through the bridge — built and verified in isolation, not yet routed from the Schedule tab
 - Built the React timeline mode (Phase 2, part 2): a day-scale timeline that stacks overlapping blocks into separate lanes (unit-tested greedy lane packing) instead of the vanilla single-lane collision, reuses the existing bar styling, and opens scrolled to the earliest block — verified in isolation
+- Built the React daily clock mode (Phase 2, part 3): a faithful SVG port of the analog clock with the AM/PM toggle, dimmed AM overlay in PM, a live hand, and arc/chip colors painted from a new appearance bridge so they match the active skin exactly; arc geometry is unit-tested — verified in isolation
 
 ### Changed
 - Reclassified Caldera as proprietary freeware in the project metadata and end-user documentation

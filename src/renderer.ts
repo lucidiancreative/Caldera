@@ -263,6 +263,18 @@ window.calderaAppearance = {
   cornerRadius: () => getClockBlockCornerRadius(),
 };
 
+// Expose the schedule write operations so the React view edits blocks through the same
+// domain logic as the vanilla view (palette slots, recurring conversion, scopes) instead
+// of re-implementing it. Each persists via saveCalendarData → notify, updating the mirror.
+window.calderaSchedule = {
+  createBlock: (key, block, recurrence, ampm) => saveTimeBlock(key, block, recurrence, ampm),
+  updateBlock: (key, id, label, recurrence, scope, ampm) => updateTimeBlock(key, id, label, recurrence, scope, ampm),
+  deleteBlock: (key, id, scope) => deleteTimeBlock(key, id, scope),
+  moveBlock: (key, id, newKey) => moveTimeBlockToDate(key, id, newKey),
+  addSubtask: (key, id, label) => addBlockSubtask(key, id, label),
+  deleteSubtask: (key, id, subtaskId) => deleteBlockSubtask(key, id, subtaskId),
+};
+
 function forEachCalendarBlock(data: CalData, visit: (block: TimeBlock | RecurringBlock) => void): void {
   (data._recurring || []).forEach(visit);
   for (const [key, value] of Object.entries(data)) {

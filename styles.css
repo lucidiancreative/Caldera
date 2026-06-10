@@ -1051,6 +1051,48 @@ body.dark .rtimeline-scroll::-webkit-scrollbar-thumb { background: #48484a; }
   gap: 4px;
   margin: 5px 0 2px 20px;
 }
+.task-reschedule {
+  display: flex; gap: 6px; align-items: center;
+  margin: 4px 0 2px; padding: 6px 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+}
+.task-reschedule input { flex: 1; min-width: 0; }
+.task-subtask-add { display: flex; gap: 6px; margin-top: 2px; }
+.task-subtask-add input { flex: 1; min-width: 0; }
+.task-reschedule input, .task-subtask-add input {
+  font: inherit; font-size: 11px; padding: 4px 7px;
+  border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit;
+}
+
+/* Block editor modal (create/edit) */
+.rblock-editor-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex; align-items: center; justify-content: center;
+}
+.rblock-editor {
+  width: 320px; max-width: calc(100vw - 40px);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 18px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.rblock-editor-head { display: flex; align-items: baseline; justify-content: space-between; }
+.rblock-editor-head h3 { margin: 0; font-size: 15px; }
+.rblock-editor-time { font-size: 12px; color: var(--text-muted); }
+.rblock-editor-input,
+.rblock-editor-row select {
+  font: inherit; border: 1px solid var(--border); border-radius: 8px;
+  background: transparent; color: inherit;
+}
+.rblock-editor-input { font-size: 13px; padding: 8px 10px; }
+.rblock-editor-row { display: flex; gap: 12px; }
+.rblock-editor-row label { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); }
+.rblock-editor-row select { font-size: 12px; padding: 6px 8px; }
+.rblock-editor-scope { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.rblock-editor-actions { display: flex; gap: 8px; margin-top: 4px; }
+.rblock-editor-save { flex: 1; padding: 8px; border: none; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.rblock-editor-del { padding: 8px 14px; border: 1px solid var(--today-ring); border-radius: 8px; background: transparent; color: var(--today-ring); font: inherit; cursor: pointer; }
+.rblock-editor-cancel { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .task-list::-webkit-scrollbar { width: 4px; }
 .task-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
 body.dark .task-list::-webkit-scrollbar-thumb { background: #48484a; }

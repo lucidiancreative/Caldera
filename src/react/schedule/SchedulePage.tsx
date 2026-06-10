@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { TaskList } from './TaskList';
 import { TimelineMode } from './TimelineMode';
 import { DailyMode } from './DailyMode';
+import { BlockEditor, type EditorTarget } from './BlockEditor';
 import { formatDisplayDate, getTodayKey, stepDateKey } from '../util/format';
 
 type ScheduleMode = 'daily' | 'timeline';
@@ -14,6 +15,7 @@ export function SchedulePage({ initialDate, initialMode }: { initialDate?: strin
   const [date, setDate] = useState(initialDate ?? getTodayKey());
   const [mode, setMode] = useState<ScheduleMode>(initialMode ?? 'timeline');
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [editor, setEditor] = useState<EditorTarget | null>(null);
 
   return (
     <div className="react-schedule">
@@ -25,7 +27,12 @@ export function SchedulePage({ initialDate, initialMode }: { initialDate?: strin
       </div>
 
       <div className="react-schedule-body">
-        <TaskList date={date} selectedBlockId={selectedBlockId} onSelect={setSelectedBlockId} />
+        <TaskList
+          date={date}
+          selectedBlockId={selectedBlockId}
+          onSelect={setSelectedBlockId}
+          onEdit={(block) => setEditor({ mode: 'edit', date, block })}
+        />
 
         <div className="react-schedule-main">
           <div className="react-schedule-modetoggle">
@@ -47,6 +54,8 @@ export function SchedulePage({ initialDate, initialMode }: { initialDate?: strin
           </div>
         </div>
       </div>
+
+      {editor && <BlockEditor target={editor} onClose={() => setEditor(null)} />}
     </div>
   );
 }

@@ -43,3 +43,35 @@ export async function toggleSubtaskCompleted(
   task.completed = !task.completed;
   await saveCalData();
 }
+
+// Thin wrappers over the schedule bridge, which runs the vanilla domain logic
+// (palette slots, recurring conversion, scope handling) and persists + notifies.
+const NOOP = Promise.resolve();
+
+export const createBlock = (
+  key: string,
+  block: { startMin: number; endMin: number; label: string },
+  recurrence: string,
+  ampm: 'AM' | 'PM',
+): Promise<void> => window.calderaSchedule?.createBlock(key, block, recurrence, ampm) ?? NOOP;
+
+export const updateBlock = (
+  key: string,
+  id: string,
+  label: string,
+  recurrence: string,
+  scope: string,
+  ampm: 'AM' | 'PM',
+): Promise<void> => window.calderaSchedule?.updateBlock(key, id, label, recurrence, scope, ampm) ?? NOOP;
+
+export const deleteBlock = (key: string, id: string, scope?: string): Promise<void> =>
+  window.calderaSchedule?.deleteBlock(key, id, scope) ?? NOOP;
+
+export const moveBlock = (key: string, id: string, newKey: string): Promise<void> =>
+  window.calderaSchedule?.moveBlock(key, id, newKey) ?? NOOP;
+
+export const addSubtask = (key: string, id: string, label: string): Promise<void> =>
+  window.calderaSchedule?.addSubtask(key, id, label) ?? NOOP;
+
+export const deleteSubtask = (key: string, id: string, subtaskId: string): Promise<void> =>
+  window.calderaSchedule?.deleteSubtask(key, id, subtaskId) ?? NOOP;

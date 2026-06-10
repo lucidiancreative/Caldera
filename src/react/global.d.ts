@@ -19,6 +19,14 @@ declare global {
       gradientCss(block: { paletteSlot?: number; color?: string }): string;
       cornerRadius(): number;
     };
+    calderaSchedule?: {
+      createBlock(key: string, block: { startMin: number; endMin: number; label: string }, recurrence: string, ampm: 'AM' | 'PM'): Promise<void>;
+      updateBlock(key: string, id: string, label: string, recurrence: string, scope: string, ampm: 'AM' | 'PM'): Promise<void>;
+      deleteBlock(key: string, id: string, scope?: string): Promise<void>;
+      moveBlock(key: string, id: string, newKey: string): Promise<void>;
+      addSubtask(key: string, id: string, label: string): Promise<void>;
+      deleteSubtask(key: string, id: string, subtaskId: string): Promise<void>;
+    };
   }
 }
 

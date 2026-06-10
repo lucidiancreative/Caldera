@@ -727,3 +727,18 @@ function cancelReschedule(): void {
   qId<HTMLInputElement>('reschedule-date-input').value = '';
   if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
 }
+
+// Move a one-off block to another day, preserving its stored appearance. Used by the
+// React Schedule view's reschedule action; persists via saveCalendarData (which notifies
+// the React mirror) rather than the banner-driven vanilla reschedule flow.
+async function moveTimeBlockToDate(key: string, blockId: string, newKey: string): Promise<void> {
+  if (!newKey || newKey === key) return;
+  const oldDay = getDayData(key);
+  const block = oldDay?.timeBlocks?.find(entry => entry.id === blockId);
+  if (!block) return;
+  pushCalendarSnapshot();
+  oldDay!.timeBlocks = oldDay!.timeBlocks.filter(entry => entry.id !== blockId);
+  if (!oldDay!.timeBlocks.length && !oldDay!.events?.length) delete calData[key];
+  getOrInitDayData(newKey).timeBlocks.push(block);
+  await saveCalendarData();
+}

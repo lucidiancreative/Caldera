@@ -137,9 +137,21 @@ interface CalderaAppearance {
   cornerRadius(): number;
 }
 
+// Schedule write operations, exposed so the React view edits blocks through the same
+// vanilla domain logic (palette slots, recurring conversion, scope handling).
+interface CalderaSchedule {
+  createBlock(key: string, block: { startMin: number; endMin: number; label: string }, recurrence: string, ampm: AmPm): Promise<void>;
+  updateBlock(key: string, id: string, label: string, recurrence: string, scope: string, ampm: AmPm): Promise<void>;
+  deleteBlock(key: string, id: string, scope?: string): Promise<void>;
+  moveBlock(key: string, id: string, newKey: string): Promise<void>;
+  addSubtask(key: string, id: string, label: string): Promise<void>;
+  deleteSubtask(key: string, id: string, subtaskId: string): Promise<void>;
+}
+
 // Extend the global Window interface so renderer.ts can access window.calAPI with full type safety
 interface Window {
   calAPI: CalAPI;
   calderaBridge: CalderaBridge;
   calderaAppearance: CalderaAppearance;
+  calderaSchedule: CalderaSchedule;
 }

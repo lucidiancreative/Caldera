@@ -980,7 +980,8 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 .react-schedule-body { display: flex; gap: 18px; flex: 1; min-height: 0; }
 .react-schedule-main { flex: 1; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .react-schedule-modetoggle { display: flex; gap: 6px; }
-.react-schedule-canvas {
+.react-schedule-canvas { flex: 1; display: flex; min-height: 0; }
+.react-schedule-placeholder {
   flex: 1;
   display: flex;
   align-items: center;
@@ -989,8 +990,53 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   border-radius: 12px;
   color: var(--text-muted);
   font-size: 13px;
-  min-height: 0;
 }
+
+/* Day-scale timeline — reuses .timeline-bar styling, adds its own scroll surface. */
+.rtimeline {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.rtimeline-scroll { overflow: auto; flex: 1; min-height: 0; }
+.rtimeline-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+.rtimeline-scroll::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+body.dark .rtimeline-scroll::-webkit-scrollbar-thumb { background: #48484a; }
+.rtimeline-header {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 30px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.rtimeline-hour {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 7px 0 0 7px;
+  border-left: 1px solid var(--border);
+  box-sizing: border-box;
+}
+.rtimeline-bars { position: relative; }
+.rtimeline-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); opacity: 0.45; }
+.rtimeline-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
 .task-subtasks {
   display: flex;
   flex-direction: column;

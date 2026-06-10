@@ -4,6 +4,7 @@
 // tab — built and verified in isolation until it reaches parity with the vanilla view.
 import { useState } from 'react';
 import { TaskList } from './TaskList';
+import { TimelineMode } from './TimelineMode';
 import { formatDisplayDate, getTodayKey, stepDateKey } from '../util/format';
 
 type ScheduleMode = 'daily' | 'timeline';
@@ -37,9 +38,11 @@ export function SchedulePage({ initialDate }: { initialDate?: string }) {
             >Schedule</button>
           </div>
           <div className="react-schedule-canvas">
-            <div className="react-schedule-placeholder">
-              {mode === 'timeline' ? 'Timeline view' : 'Daily clock view'} arrives in the next step.
-            </div>
+            {mode === 'timeline' ? (
+              <TimelineMode date={date} selectedBlockId={selectedBlockId} onSelect={setSelectedBlockId} />
+            ) : (
+              <div className="react-schedule-placeholder">Daily clock view arrives in the next step.</div>
+            )}
           </div>
         </div>
       </div>

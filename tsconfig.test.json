@@ -10,6 +10,7 @@
     "src/ai/**/*.ts",
     "src/types.ts",
     "src/react/store/selectors.ts",
+    "src/react/schedule/timeline.ts",
     "test/**/*.ts"
   ]
 }

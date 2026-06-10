@@ -12,6 +12,7 @@
 - Built the React timeline mode (Phase 2, part 2): a day-scale timeline that stacks overlapping blocks into separate lanes (unit-tested greedy lane packing) instead of the vanilla single-lane collision, reuses the existing bar styling, and opens scrolled to the earliest block — verified in isolation
 - Built the React daily clock mode (Phase 2, part 3): a faithful SVG port of the analog clock with the AM/PM toggle, dimmed AM overlay in PM, a live hand, and arc/chip colors painted from a new appearance bridge so they match the active skin exactly; arc geometry is unit-tested — verified in isolation
 - Wired the React editing actions (Phase 2, part 4): edit (a block-editor modal), delete (with recurring today/all scope), reschedule one-off blocks to another day, add/delete sub-tasks, and drag-on-the-clock-ring to create a block — all flowing through a new schedule bridge that reuses the vanilla domain logic and persists + notifies; verified that edits and drag-create round-trip into the React DOM
+- Routed the Schedule tab to the React view (Phase 2, part 5): a view bridge lets the React island take over the Schedule page (the vanilla clock/timeline view is now retired and stays hidden) while the vanilla calendar grid still owns the Calendar tab — verified live in the real app, tabbing in and out with no errors. This replaces the imperative full-rebuild-on-every-interaction schedule renderer that caused the jank
 
 ### Changed
 - Reclassified Caldera as proprietary freeware in the project metadata and end-user documentation

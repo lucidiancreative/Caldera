@@ -2,7 +2,7 @@
 // persistent task list and a mode canvas. Timeline and Daily modes fill the canvas
 // in later steps; for now it shows a placeholder. Not yet routed from the Schedule
 // tab — built and verified in isolation until it reaches parity with the vanilla view.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TaskList } from './TaskList';
 import { TimelineMode } from './TimelineMode';
 import { DailyMode } from './DailyMode';
@@ -16,6 +16,9 @@ export function SchedulePage({ initialDate, initialMode }: { initialDate?: strin
   const [mode, setMode] = useState<ScheduleMode>(initialMode ?? 'timeline');
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorTarget | null>(null);
+
+  // Keep the vanilla router's scheduleDate in sync so re-entering the page lands here.
+  useEffect(() => { window.calderaView?.setScheduleDate(date); }, [date]);
 
   return (
     <div className="react-schedule">

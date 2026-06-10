@@ -27,6 +27,13 @@ declare global {
       addSubtask(key: string, id: string, label: string): Promise<void>;
       deleteSubtask(key: string, id: string, subtaskId: string): Promise<void>;
     };
+    calderaView?: {
+      activeView(): 'calendar' | 'schedule';
+      scheduleDate(): string | null;
+      setScheduleDate(key: string): void;
+      subscribe(listener: () => void): () => void;
+      notify(): void;
+    };
   }
 }
 

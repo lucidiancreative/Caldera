@@ -148,10 +148,20 @@ interface CalderaSchedule {
   deleteSubtask(key: string, id: string, subtaskId: string): Promise<void>;
 }
 
+// View-routing bridge so the React island knows when the Schedule page is active.
+interface CalderaView {
+  activeView(): ViewType;
+  scheduleDate(): string | null;
+  setScheduleDate(key: string): void;
+  subscribe(listener: () => void): () => void;
+  notify(): void;
+}
+
 // Extend the global Window interface so renderer.ts can access window.calAPI with full type safety
 interface Window {
   calAPI: CalAPI;
   calderaBridge: CalderaBridge;
   calderaAppearance: CalderaAppearance;
   calderaSchedule: CalderaSchedule;
+  calderaView: CalderaView;
 }

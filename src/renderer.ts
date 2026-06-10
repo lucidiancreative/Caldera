@@ -275,6 +275,23 @@ window.calderaSchedule = {
   deleteSubtask: (key, id, subtaskId) => deleteBlockSubtask(key, id, subtaskId),
 };
 
+// View-routing bridge: lets the React island know when the Schedule page is active and
+// on which date, and lets React write the date back so vanilla stays in sync.
+const calderaViewListeners = new Set<() => void>();
+function notifyCalendarViewChanged(): void {
+  calderaViewListeners.forEach(listener => listener());
+}
+window.calderaView = {
+  activeView: () => activeView,
+  scheduleDate: () => scheduleDate,
+  setScheduleDate: (key) => { scheduleDate = key; },
+  subscribe(listener) {
+    calderaViewListeners.add(listener);
+    return () => { calderaViewListeners.delete(listener); };
+  },
+  notify: notifyCalendarViewChanged,
+};
+
 function forEachCalendarBlock(data: CalData, visit: (block: TimeBlock | RecurringBlock) => void): void {
   (data._recurring || []).forEach(visit);
   for (const [key, value] of Object.entries(data)) {
@@ -1434,17 +1451,15 @@ function startDayChangeWatcher(): void {
 function switchCalendarView(view: ViewType): void {
   activeView = view;
   qId('calendar-wrapper').classList.toggle('hidden', view !== 'calendar');
-  qId('schedule-view').classList.toggle('hidden', view !== 'schedule');
+  // The Schedule page is now owned by the React island; the vanilla #schedule-view stays
+  // hidden and #react-root takes its layout slot when schedule is active.
+  qId('schedule-view').classList.add('hidden');
+  qId('react-root').classList.toggle('is-active', view === 'schedule');
   (document.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).forEach(btn =>
     btn.classList.toggle('active', btn.dataset.view === view)
   );
-  if (view === 'schedule') {
-    if (!scheduleDate) scheduleDate = getTodayKey();
-    (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>).forEach(b =>
-      b.classList.toggle('active', b.dataset.ampm === clockAmPm)
-    );
-    renderScheduleView(scheduleDate);
-  }
+  if (view === 'schedule' && !scheduleDate) scheduleDate = getTodayKey();
+  notifyCalendarViewChanged();
 }
 
 function stepScheduleDay(delta: number): void {

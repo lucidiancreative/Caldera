@@ -952,6 +952,15 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 /* ── React Schedule view (migration island) ───────────────
    The page shell and inline sub-tasks are new; .task-item, .schedule-subtask-*,
    .schedule-mode-btn and .nav-arrow are reused from the vanilla view above. */
+
+/* When the router activates the schedule, the React mount takes the same fixed
+   content slot the vanilla #schedule-view used (below the titlebar + month strip). */
+#react-root.is-active {
+  position: fixed;
+  top: calc(var(--titlebar-h) + var(--strip-h));
+  left: 0; right: 0; bottom: 0;
+}
+
 .react-schedule {
   display: flex;
   flex-direction: column;

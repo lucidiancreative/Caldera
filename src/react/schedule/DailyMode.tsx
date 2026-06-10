@@ -2,10 +2,10 @@
 // with an AM/PM toggle; in PM the AM blocks show as a dimmed overlay. Arcs paint from
 // the shared appearance bridge so colors match the active skin exactly. Drag-to-create
 // is deferred to the editing step; selection works by clicking an arc or legend chip.
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useCalData } from '../store/calStore';
-import { getScheduleBlocksForDate, isBlockPast, type ScheduleBlock } from '../store/selectors';
-import { arcPath, labelArcPath, fitArcLabel, CLOCK } from './clock';
+import { getDayData, getScheduleBlocksForDate, isBlockPast, type ScheduleBlock } from '../store/selectors';
+import { arcPath, labelArcPath, fitArcLabel, minutesFromPoint, CLOCK } from './clock';
 import { formatBlockTimeRange, getTodayKey } from '../util/format';
 
 const gradId = (slot: number) => `react-block-grad-slot-${slot}`;
@@ -15,12 +15,16 @@ interface DailyModeProps {
   date: string;
   selectedBlockId: string | null;
   onSelect: (blockId: string) => void;
+  onCreate: (draft: { startMin: number; endMin: number; ampm: AmPm }) => void;
 }
 
-export function DailyMode({ date, selectedBlockId, onSelect }: DailyModeProps) {
+export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyModeProps) {
   const calData = useCalData();
   const [ampm, setAmpm] = useState<AmPm>(new Date().getHours() >= 12 ? 'PM' : 'AM');
   const [, setTick] = useState(0);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragRef = useRef<{ start: number; current: number } | null>(null);
+  const [dragView, setDragView] = useState<{ start: number; current: number } | null>(null);
 
   // Re-render every 30s so the live hand (and "past" dimming) stay current.
   useEffect(() => {
@@ -45,6 +49,51 @@ export function DailyMode({ date, selectedBlockId, onSelect }: DailyModeProps) {
 
   const handMin = (now.getHours() % 12) * 60 + now.getMinutes();
   const handAng = (handMin / 720) * 2 * Math.PI - Math.PI / 2;
+
+  function pointToMinutes(clientX: number, clientY: number): number | null {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    const x = (clientX - rect.left) * (CLOCK.vb / rect.width);
+    const y = (clientY - rect.top) * (CLOCK.vb / rect.height);
+    const dist = Math.hypot(x - cx, y - cy);
+    if (dist < r1 - 10 || dist > r2 + 10) return null; // outside the draggable ring
+    return minutesFromPoint(cx, cy, x, y);
+  }
+
+  // Drag across the ring to sketch a new block, then open the editor on release.
+  // Uses document listeners scoped to one drag (like the vanilla clock) so the same
+  // handler instances are added and removed, avoiding stale-listener bugs.
+  function onRingMouseDown(event: React.MouseEvent) {
+    const start = pointToMinutes(event.clientX, event.clientY);
+    if (start == null) return;
+    dragRef.current = { start, current: start };
+    setDragView(dragRef.current);
+
+    const onMove = (move: MouseEvent) => {
+      const current = pointToMinutes(move.clientX, move.clientY);
+      if (current == null || !dragRef.current) return;
+      dragRef.current = { start: dragRef.current.start, current };
+      setDragView(dragRef.current);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      const drag = dragRef.current;
+      dragRef.current = null;
+      setDragView(null);
+      if (!drag) return;
+      const span = (drag.current - drag.start + 720) % 720;
+      if (span >= 15) onCreate({ startMin: drag.start, endMin: drag.current, ampm });
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  const dragSpan = dragView ? (dragView.current - dragView.start + 720) % 720 : 0;
+  const previewSlot = palette.length
+    ? (getDayData(calData, date)?.timeBlocks?.length ?? 0) % palette.length
+    : 0;
 
   function renderArc(block: ScheduleBlock, overlay: boolean) {
     const spanMin = (block.endMin - block.startMin + 720) % 720;
@@ -87,7 +136,7 @@ export function DailyMode({ date, selectedBlockId, onSelect }: DailyModeProps) {
       </div>
 
       <div className="rdaily-clock">
-        <svg viewBox={`0 0 ${CLOCK.vb} ${CLOCK.vb}`}>
+        <svg ref={svgRef} viewBox={`0 0 ${CLOCK.vb} ${CLOCK.vb}`} onMouseDown={onRingMouseDown} style={{ cursor: 'crosshair' }}>
           <defs>
             {palette.map((slot, index) => (
               <radialGradient
@@ -131,6 +180,14 @@ export function DailyMode({ date, selectedBlockId, onSelect }: DailyModeProps) {
 
           {overlayBlocks.map((block) => renderArc(block, true))}
           {visibleBlocks.map((block) => renderArc(block, false))}
+
+          {dragView && dragSpan >= 15 && (
+            <path
+              className="clock-preview"
+              d={arcPath(cx, cy, r1, r2, dragView.start, dragView.current, rnd)}
+              fill={palette.length ? `url(#${gradId(previewSlot)})` : '#888'}
+            />
+          )}
 
           <line
             className="clock-hand"

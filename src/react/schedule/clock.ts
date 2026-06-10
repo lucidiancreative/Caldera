@@ -56,6 +56,13 @@ export function labelArcPath(cx: number, cy: number, rMid: number, startMin: num
   return `M ${lx1} ${ly1} A ${rMid} ${rMid} 0 ${large} 1 ${lx2} ${ly2}`;
 }
 
+/** Clock minute (snapped to 15) for a point, measured from the 12-o'clock top. */
+export function minutesFromPoint(cx: number, cy: number, px: number, py: number): number {
+  const ang = Math.atan2(py - cy, px - cx) + Math.PI / 2;
+  const raw = ((ang / (2 * Math.PI)) * 720 + 720) % 720;
+  return (Math.round(raw / 15) * 15) % 720;
+}
+
 /** Truncate a label to roughly fit the arc length it sits on. */
 export function fitArcLabel(label: string, spanMin: number, rMid: number): string {
   const arcLen = (spanMin / 720) * 2 * Math.PI * rMid;

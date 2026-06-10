@@ -49,7 +49,12 @@ export function SchedulePage({ initialDate, initialMode }: { initialDate?: strin
             {mode === 'timeline' ? (
               <TimelineMode date={date} selectedBlockId={selectedBlockId} onSelect={setSelectedBlockId} />
             ) : (
-              <DailyMode date={date} selectedBlockId={selectedBlockId} onSelect={setSelectedBlockId} />
+              <DailyMode
+                date={date}
+                selectedBlockId={selectedBlockId}
+                onSelect={setSelectedBlockId}
+                onCreate={(draft) => setEditor({ mode: 'create', date, ...draft })}
+              />
             )}
           </div>
         </div>

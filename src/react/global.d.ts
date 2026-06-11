@@ -2,10 +2,11 @@
 // Mirrors the CalderaBridge declared in src/renderer-globals.d.ts; the two type
 // worlds (global-script renderer vs. bundled React island) can't share a file,
 // so keep these in sync until the migration is complete.
-import type { CalData } from '../types';
+import type { CalAPI, CalData } from '../types';
 
 declare global {
   interface Window {
+    calAPI: CalAPI;
     calderaBridge?: {
       getData(): CalData;
       save(): Promise<void>;
@@ -23,14 +24,23 @@ declare global {
       createBlock(key: string, block: { startMin: number; endMin: number; label: string }, recurrence: string, ampm: 'AM' | 'PM'): Promise<void>;
       updateBlock(key: string, id: string, label: string, recurrence: string, scope: string, ampm: 'AM' | 'PM'): Promise<void>;
       deleteBlock(key: string, id: string, scope?: string): Promise<void>;
-      moveBlock(key: string, id: string, newKey: string): Promise<void>;
-      addSubtask(key: string, id: string, label: string): Promise<void>;
-      deleteSubtask(key: string, id: string, subtaskId: string): Promise<void>;
     };
     calderaView?: {
       activeView(): 'calendar' | 'schedule';
+      setActiveView(view: 'calendar' | 'schedule'): void;
       scheduleDate(): string | null;
       setScheduleDate(key: string): void;
+      subscribe(listener: () => void): () => void;
+      notify(): void;
+    };
+    calderaPrefs?: {
+      theme(): 'light' | 'dark';
+      setTheme(theme: 'light' | 'dark'): void;
+      skin(): 'default' | 'arctic' | 'glacier' | 'teal';
+      setSkin(skin: 'default' | 'arctic' | 'glacier' | 'teal'): void;
+      shaderPref(): 'auto' | 'on' | 'off';
+      setShaderPref(pref: 'auto' | 'on' | 'off'): void;
+      shaderHint(): { lowPower: boolean; reducedMotion: boolean };
       subscribe(listener: () => void): () => void;
       notify(): void;
     };

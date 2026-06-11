@@ -2,15 +2,15 @@
 // single source of truth owned by the vanilla renderer) and persist through the
 // bridge, which normalizes, saves, and notifies every mirror — so a React edit
 // repaints both React and the vanilla calendar. Snapshot first to keep undo/redo.
-import type { CalData, RecurringBlock, TimeBlock } from '../../types';
+import type { CalData } from '../../types';
 import { saveCalData } from './calStore';
 import { getDayData } from './selectors';
-
-function findStoredBlock(calData: CalData, key: string, blockId: string): TimeBlock | RecurringBlock | null {
-  const oneOff = getDayData(calData, key)?.timeBlocks?.find((block) => block.id === blockId);
-  if (oneOff) return oneOff;
-  return (calData._recurring || []).find((block) => block.id === blockId) || null;
-}
+import {
+  addSubtaskToBlock,
+  deleteSubtaskFromBlock,
+  findStoredBlock,
+  moveOneOffBlockToDate,
+} from './scheduleMutations';
 
 export async function toggleBlockCompleted(calData: CalData, key: string, blockId: string): Promise<void> {
   window.calderaBridge?.pushSnapshot();
@@ -44,6 +44,48 @@ export async function toggleSubtaskCompleted(
   await saveCalData();
 }
 
+export async function updateBlockTimes(
+  calData: CalData,
+  key: string,
+  blockId: string,
+  startMin: number,
+  endMin: number,
+  ampm: 'AM' | 'PM',
+): Promise<void> {
+  const block = findStoredBlock(calData, key, blockId);
+  if (!block) return;
+  window.calderaBridge?.pushSnapshot();
+  block.startMin = startMin;
+  block.endMin = endMin;
+  block.ampm = ampm;
+  await saveCalData();
+}
+
+export async function updateBlockTimesBatch(
+  calData: CalData,
+  key: string,
+  updates: Array<{
+    blockId: string;
+    startMin: number;
+    endMin: number;
+    ampm: 'AM' | 'PM';
+  }>,
+): Promise<void> {
+  if (updates.length === 0) return;
+  window.calderaBridge?.pushSnapshot();
+  let changed = false;
+  for (const update of updates) {
+    const block = findStoredBlock(calData, key, update.blockId);
+    if (!block) continue;
+    block.startMin = update.startMin;
+    block.endMin = update.endMin;
+    block.ampm = update.ampm;
+    changed = true;
+  }
+  if (!changed) return;
+  await saveCalData();
+}
+
 // Thin wrappers over the schedule bridge, which runs the vanilla domain logic
 // (palette slots, recurring conversion, scope handling) and persists + notifies.
 const NOOP = Promise.resolve();
@@ -67,11 +109,29 @@ export const updateBlock = (
 export const deleteBlock = (key: string, id: string, scope?: string): Promise<void> =>
   window.calderaSchedule?.deleteBlock(key, id, scope) ?? NOOP;
 
-export const moveBlock = (key: string, id: string, newKey: string): Promise<void> =>
-  window.calderaSchedule?.moveBlock(key, id, newKey) ?? NOOP;
+export async function moveBlock(key: string, id: string, newKey: string): Promise<void> {
+  if (!newKey || newKey === key) return;
+  const calData = window.calderaBridge?.getData();
+  if (!calData || !getDayData(calData, key)?.timeBlocks?.some((block) => block.id === id)) return;
+  window.calderaBridge?.pushSnapshot();
+  if (!moveOneOffBlockToDate(calData, key, id, newKey)) return;
+  await saveCalData();
+}
 
-export const addSubtask = (key: string, id: string, label: string): Promise<void> =>
-  window.calderaSchedule?.addSubtask(key, id, label) ?? NOOP;
+export async function addSubtask(key: string, id: string, label: string): Promise<void> {
+  if (!label.trim()) return;
+  const calData = window.calderaBridge?.getData();
+  if (!calData || !findStoredBlock(calData, key, id)) return;
+  window.calderaBridge?.pushSnapshot();
+  if (!addSubtaskToBlock(calData, key, id, label)) return;
+  await saveCalData();
+}
 
-export const deleteSubtask = (key: string, id: string, subtaskId: string): Promise<void> =>
-  window.calderaSchedule?.deleteSubtask(key, id, subtaskId) ?? NOOP;
+export async function deleteSubtask(key: string, id: string, subtaskId: string): Promise<void> {
+  const calData = window.calderaBridge?.getData();
+  const block = calData ? findStoredBlock(calData, key, id) : null;
+  if (!calData || !block?.subtasks?.some((entry) => entry.id === subtaskId)) return;
+  window.calderaBridge?.pushSnapshot();
+  if (!deleteSubtaskFromBlock(calData, key, id, subtaskId)) return;
+  await saveCalData();
+}

@@ -106,13 +106,9 @@ async function saveCalendarDataAndRefresh(
     renderCalendarGrid?: boolean;
   } = {},
 ): Promise<void> {
+  void key;
+  void options;
   await saveCalendarData();
-  if (options.refreshCell) await refreshCalendarCell(key);
-  if (options.refreshEventCards && modalDate === key) renderEventCards(key);
-  if (options.renderCalendarGrid) renderCalendarGrid();
-  if (options.renderMonth) renderMonthStrip();
-  if (options.renderSchedule && activeView === 'schedule' && scheduleDate === key) renderScheduleView(key);
-  if (options.renderCurrentSchedule && activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
 }
 
 function pushCalendarSnapshot(): void {
@@ -126,10 +122,6 @@ async function applyCalendarSnapshot(snapshot: string): Promise<void> {
   normalizeCalendarBlockSubtasks(calData);
   normalizeCalendarBlockAppearance(calData);
   await saveCalendarData();
-  renderCalendarGrid();
-  renderMonthStrip();
-  if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
-  if (modalDate && !qId('modal-overlay').classList.contains('hidden')) renderEventCards(modalDate);
 }
 
 function migrateCalendarDataFormat(raw: Record<string, unknown>): CalData {

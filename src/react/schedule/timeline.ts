@@ -5,12 +5,23 @@
 import type { ScheduleBlock } from '../store/selectors';
 
 const DAY_MINUTES = 24 * 60;
+const HALF_DAY_MINUTES = 12 * 60;
+const MIN_BLOCK_MINUTES = 15;
 
 export interface TimelineSegment {
   block: ScheduleBlock;
   start: number; // absolute minutes from midnight, clamped to the day
   end: number;
   lane: number;
+}
+
+export interface TimelineResizePlan {
+  blockId: string;
+  linkedBlockId?: string;
+  edge: 'start' | 'end';
+  boundary: number;
+  minBoundary: number;
+  maxBoundary: number;
 }
 
 function blockEndAmPm(block: ScheduleBlock): 'AM' | 'PM' {
@@ -23,6 +34,81 @@ export function getAbsoluteMinutes(block: ScheduleBlock): { start: number; end: 
   let end = (blockEndAmPm(block) === 'PM' ? 720 : 0) + block.endMin;
   if (end <= start) end += DAY_MINUTES;
   return { start, end };
+}
+
+/** Convert absolute day minutes back into the block storage shape used on disk. */
+export function absoluteMinutesToBlockTimes(startAbs: number, endAbs: number): {
+  ampm: 'AM' | 'PM';
+  startMin: number;
+  endMin: number;
+} {
+  let clampedStart = Math.max(0, Math.min(startAbs, DAY_MINUTES));
+  let clampedEnd = Math.max(0, Math.min(endAbs, DAY_MINUTES));
+  if (clampedEnd < clampedStart + MIN_BLOCK_MINUTES) {
+    if (clampedStart + MIN_BLOCK_MINUTES <= DAY_MINUTES) {
+      clampedEnd = clampedStart + MIN_BLOCK_MINUTES;
+    } else {
+      clampedStart = Math.max(0, DAY_MINUTES - MIN_BLOCK_MINUTES);
+      clampedEnd = DAY_MINUTES;
+    }
+  }
+  return {
+    ampm: clampedStart >= HALF_DAY_MINUTES ? 'PM' : 'AM',
+    startMin: clampedStart % HALF_DAY_MINUTES,
+    endMin: clampedEnd % HALF_DAY_MINUTES,
+  };
+}
+
+export function getTimelineResizePlan(
+  segments: TimelineSegment[],
+  blockId: string,
+  edge: 'start' | 'end',
+): TimelineResizePlan | null {
+  const target = segments.find((segment) => segment.block.id === blockId);
+  if (!target) return null;
+
+  const laneSegments = segments
+    .filter((segment) => segment.lane === target.lane)
+    .sort((a, b) => a.start - b.start || a.end - b.end || a.block.label.localeCompare(b.block.label));
+  const targetIndex = laneSegments.findIndex((segment) => segment.block.id === blockId);
+  if (targetIndex === -1) return null;
+
+  if (edge === 'start') {
+    const previous = laneSegments[targetIndex - 1];
+    const linked = previous && previous.end === target.start ? previous : null;
+    return {
+      blockId,
+      ...(linked ? { linkedBlockId: linked.block.id } : {}),
+      edge,
+      boundary: target.start,
+      minBoundary: linked ? linked.start + MIN_BLOCK_MINUTES : 0,
+      maxBoundary: target.end - MIN_BLOCK_MINUTES,
+    };
+  }
+
+  const next = laneSegments[targetIndex + 1];
+  const linked = next && next.start === target.end ? next : null;
+  return {
+    blockId,
+    ...(linked ? { linkedBlockId: linked.block.id } : {}),
+    edge,
+    boundary: target.end,
+    minBoundary: target.start + MIN_BLOCK_MINUTES,
+    maxBoundary: linked ? linked.end - MIN_BLOCK_MINUTES : DAY_MINUTES,
+  };
+}
+
+/** Move a whole timeline segment while preserving its duration and staying within the day. */
+export function moveTimelineRange(start: number, end: number, deltaMinutes: number): {
+  start: number;
+  end: number;
+} {
+  const duration = Math.max(MIN_BLOCK_MINUTES, end - start);
+  const nextStart = Math.max(0, Math.min(start + deltaMinutes, Math.max(0, DAY_MINUTES - duration)));
+  return {
+    start: nextStart,
+    end: nextStart + duration,
+  };
 }
 
 /**

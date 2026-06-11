@@ -11,14 +11,29 @@ import { formatDisplayDate, getTodayKey, stepDateKey } from '../util/format';
 
 type ScheduleMode = 'daily' | 'timeline';
 
-export function SchedulePage({ initialDate, initialMode }: { initialDate?: string; initialMode?: ScheduleMode }) {
-  const [date, setDate] = useState(initialDate ?? getTodayKey());
+export function SchedulePage({
+  externalDate,
+  initialDate,
+  initialMode,
+}: {
+  externalDate?: string;
+  initialDate?: string;
+  initialMode?: ScheduleMode;
+}) {
+  const [date, setDate] = useState(externalDate ?? initialDate ?? getTodayKey());
   const [mode, setMode] = useState<ScheduleMode>(initialMode ?? 'timeline');
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorTarget | null>(null);
 
-  // Keep the vanilla router's scheduleDate in sync so re-entering the page lands here.
+  useEffect(() => {
+    if (!externalDate || externalDate === date) return;
+    setDate(externalDate);
+    setSelectedBlockId(null);
+    setEditor(null);
+  }, [date, externalDate]);
+
   useEffect(() => { window.calderaView?.setScheduleDate(date); }, [date]);
+  useEffect(() => { setSelectedBlockId(null); }, [date]);
 
   return (
     <div className="react-schedule">
@@ -46,11 +61,16 @@ export function SchedulePage({ initialDate, initialMode }: { initialDate?: strin
             <button
               className={'schedule-mode-btn' + (mode === 'timeline' ? ' active' : '')}
               onClick={() => setMode('timeline')}
-            >Schedule</button>
+            >Timeline</button>
           </div>
           <div className="react-schedule-canvas">
             {mode === 'timeline' ? (
-              <TimelineMode date={date} selectedBlockId={selectedBlockId} onSelect={setSelectedBlockId} />
+              <TimelineMode
+                date={date}
+                selectedBlockId={selectedBlockId}
+                onSelect={setSelectedBlockId}
+                onCreate={(draft) => setEditor({ mode: 'create', date, ...draft })}
+              />
             ) : (
               <DailyMode
                 date={date}

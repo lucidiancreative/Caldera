@@ -270,9 +270,6 @@ window.calderaSchedule = {
   createBlock: (key, block, recurrence, ampm) => saveTimeBlock(key, block, recurrence, ampm),
   updateBlock: (key, id, label, recurrence, scope, ampm) => updateTimeBlock(key, id, label, recurrence, scope, ampm),
   deleteBlock: (key, id, scope) => deleteTimeBlock(key, id, scope),
-  moveBlock: (key, id, newKey) => moveTimeBlockToDate(key, id, newKey),
-  addSubtask: (key, id, label) => addBlockSubtask(key, id, label),
-  deleteSubtask: (key, id, subtaskId) => deleteBlockSubtask(key, id, subtaskId),
 };
 
 // View-routing bridge: lets the React island know when the Schedule page is active and
@@ -283,13 +280,42 @@ function notifyCalendarViewChanged(): void {
 }
 window.calderaView = {
   activeView: () => activeView,
+  setActiveView: (view) => {
+    activeView = view;
+    if (view === 'schedule' && !scheduleDate) scheduleDate = getTodayKey();
+    notifyCalendarViewChanged();
+  },
   scheduleDate: () => scheduleDate,
-  setScheduleDate: (key) => { scheduleDate = key; },
+  setScheduleDate: (key) => {
+    scheduleDate = key;
+    notifyCalendarViewChanged();
+  },
   subscribe(listener) {
     calderaViewListeners.add(listener);
     return () => { calderaViewListeners.delete(listener); };
   },
   notify: notifyCalendarViewChanged,
+};
+
+window.calderaPrefs = {
+  theme: () => document.body.classList.contains('dark') ? 'dark' : 'light',
+  setTheme: (theme) => applyCalendarTheme(theme === 'dark'),
+  skin: () => getCurrentSkin(),
+  setSkin: (skin) => activateSkin(skin),
+  shaderPref: () => getShaderPref(),
+  setShaderPref: (pref) => {
+    setShaderPref(pref);
+    activateSkin(getCurrentSkin());
+  },
+  shaderHint: () => ({
+    lowPower: _shaderDisabledByLowPower,
+    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  }),
+  subscribe(listener) {
+    calderaPrefListeners.add(listener);
+    return () => { calderaPrefListeners.delete(listener); };
+  },
+  notify: notifyCalendarPrefsChanged,
 };
 
 function forEachCalendarBlock(data: CalData, visit: (block: TimeBlock | RecurringBlock) => void): void {
@@ -358,6 +384,7 @@ function activateSkin(id: SkinId): void {
   _skinSwitchPending = true;
   localStorage.setItem('skin', id);
   notifyCalendarDataChanged(); // repaint the React mirror with the new skin's palette
+  notifyCalendarPrefsChanged();
 }
 
 // -- Skin switch animation flag -------------------------
@@ -366,6 +393,11 @@ let _skinSwitchPending = false;
 // -- Shader preference & low-power detection ------------
 type ShaderPref = 'on' | 'off' | 'auto';
 let _shaderDisabledByLowPower = false;
+const calderaPrefListeners = new Set<() => void>();
+
+function notifyCalendarPrefsChanged(): void {
+  calderaPrefListeners.forEach((listener) => listener());
+}
 
 function getShaderPref(): ShaderPref {
   const stored = localStorage.getItem('shaderPref');
@@ -375,6 +407,7 @@ function getShaderPref(): ShaderPref {
 
 function setShaderPref(pref: ShaderPref): void {
   localStorage.setItem('shaderPref', pref);
+  notifyCalendarPrefsChanged();
 }
 
 function shouldEnableShader(): boolean {
@@ -400,6 +433,7 @@ async function detectLowPowerMode(): Promise<void> {
         if (_shaderDisabledByLowPower && _shaderRAF !== null && getShaderPref() === 'auto') {
           destroyShaderBackground();
         }
+        notifyCalendarPrefsChanged();
       };
       checkBattery();
       battery.addEventListener('chargingchange', checkBattery);
@@ -553,239 +587,40 @@ async function initCalendarApp(): Promise<void> {
   activateSkin(getCurrentSkin());
   const raw = await calBridge.loadData();
   calData = migrateCalendarDataFormat(raw);
-  notifyCalendarDataChanged(); // let the React mirror pick up the freshly loaded data
-  renderMonthStrip();
-  renderCalendarGrid();
+  notifyCalendarDataChanged();
   bindCalendarUIEvents();
 }
 
 function applyCalendarTheme(isDarkMode: boolean): void {
   document.body.classList.toggle('dark', isDarkMode);
   localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+  notifyCalendarPrefsChanged();
 }
 
 // -- UI bindings ----------------------------------------
 function bindCalendarUIEvents(): void {
-  // Remove the glass-skin .is-entering class once the entrance animation completes so the
-  // animated opacity/transform don't persist on the compositor — see renderCalendarGrid
-  // for a full explanation of why this matters.
-  qId('calendar-grid').addEventListener('animationend', (e: AnimationEvent) => {
-    const el = e.currentTarget as HTMLElement;
-    if (e.animationName === 'glass-cell-enter') el.classList.remove('is-entering');
-    if (e.animationName === 'skin-fade-in') el.classList.remove('skin-fade-in');
-  });
-
-  qId('btn-min').addEventListener('click', () => calBridge.winMinimize());
-  qId('btn-max').addEventListener('click', () => calBridge.winMaximize());
-  qId('btn-close').addEventListener('click', () => calBridge.winClose());
-
-  qId('btn-settings').addEventListener('click', openSettingsModal);
-
-  qId('btn-ai').addEventListener('click', openAiSettingsModal);
-  qId('ai-modal-close').addEventListener('click', closeAiSettingsModal);
-  qId('ai-overlay').addEventListener('click', (e: MouseEvent) => {
-    if (e.target === qId('ai-overlay')) closeAiSettingsModal();
-  });
-  qId<HTMLInputElement>('ai-provider-claude').addEventListener('change', () => syncAiProviderPanel('claude'));
-  qId<HTMLInputElement>('ai-provider-openai').addEventListener('change', () => syncAiProviderPanel('openai'));
-  qId<HTMLInputElement>('ai-provider-ollama').addEventListener('change', () => { syncAiProviderPanel('ollama'); refreshOllamaModels(); });
-  qId('ai-refresh-models').addEventListener('click', refreshOllamaModels);
-  qId('ai-model-trigger').addEventListener('click', toggleModelDropdown);
-  document.addEventListener('click', (e: MouseEvent) => {
-    const dropdown = qId('ai-model-dropdown');
-    if (!dropdown.contains(e.target as Node)) closeModelDropdown();
-  });
-  qId<HTMLInputElement>('ai-mode-fetch').addEventListener('change', () => syncAiModePanel('fetch'));
-  qId<HTMLInputElement>('ai-mode-websearch').addEventListener('change', () => syncAiModePanel('websearch'));
-  qId('ai-url-add-btn').addEventListener('click', () => {
-    const input = qId<HTMLInputElement>('ai-url-input');
-    const url   = input.value.trim();
-    if (!url) return;
-    const current = getAiSitesFromList();
-    if (!current.includes(url)) renderAiUrlList([...current, url]);
-    input.value = '';
-  });
-  qId('ai-url-input').addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Enter') qId('ai-url-add-btn').click();
-  });
-  qId('ai-keyword-add-btn').addEventListener('click', () => {
-    const input = qId<HTMLInputElement>('ai-keyword-input');
-    const kw    = input.value.trim();
-    if (!kw) return;
-    const current = getAiKeywordsFromList();
-    if (!current.includes(kw)) renderAiKeywordList([...current, kw]);
-    input.value = '';
-  });
-  qId('ai-keyword-input').addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Enter') qId('ai-keyword-add-btn').click();
-  });
-  qId('ai-save-btn').addEventListener('click', saveAiSettings);
-  qId('ai-run-btn').addEventListener('click', runAiImport);
-
-  qId('ai-date-start-btn').addEventListener('click', (e: MouseEvent) => {
-    openAiDatePicker('ai-date-start', e.currentTarget as HTMLElement);
-  });
-  qId('ai-date-end-btn').addEventListener('click', (e: MouseEvent) => {
-    openAiDatePicker('ai-date-end', e.currentTarget as HTMLElement);
-  });
-  qId('ai-dp-prev').addEventListener('click', aiDatePickerPrev);
-  qId('ai-dp-next').addEventListener('click', aiDatePickerNext);
-  qId('ai-dp-today').addEventListener('click', aiDatePickerToday);
-  qId('ai-dp-clear').addEventListener('click', aiDatePickerClear);
-  document.addEventListener('click', (e: MouseEvent) => {
-    const picker = qId('ai-datepicker');
-    if (picker.classList.contains('hidden')) return;
-    const target = e.target as HTMLElement;
-    if (!picker.contains(target) && !target.closest('.ai-date-btn')) {
-      closeAiDatePicker();
-    }
-  });
-
-  qId('ai-review-close').addEventListener('click', closeAiReviewModal);
-  qId('ai-review-overlay').addEventListener('click', (e: MouseEvent) => {
-    if (e.target === qId('ai-review-overlay')) closeAiReviewModal();
-  });
-  qId('ai-select-all-btn').addEventListener('click', () => {
-    (document.querySelectorAll('#ai-event-list .ai-event-row') as NodeListOf<HTMLElement>).forEach(row => {
-      row.classList.add('checked');
-      (row.querySelector('input[type="checkbox"]') as HTMLInputElement).checked = true;
-    });
-  });
-  qId('ai-deselect-all-btn').addEventListener('click', () => {
-    (document.querySelectorAll('#ai-event-list .ai-event-row') as NodeListOf<HTMLElement>).forEach(row => {
-      row.classList.remove('checked');
-      (row.querySelector('input[type="checkbox"]') as HTMLInputElement).checked = false;
-    });
-  });
-  qId('ai-add-selected-btn').addEventListener('click', addSelectedAiEvents);
-
-  qId('settings-modal-close').addEventListener('click', closeSettingsModal);
-  qId('settings-overlay').addEventListener('click', (e: MouseEvent) => {
-    if (e.target === qId('settings-overlay')) closeSettingsModal();
-  });
-
-  qId('prev-month').addEventListener('click', () => changeMonth(-1));
-  qId('next-month').addEventListener('click', () => changeMonth(1));
-  qId('prev-year').addEventListener('click',  () => changeYear(-1));
-  qId('next-year').addEventListener('click',  () => changeYear(1));
-
-  (document.querySelectorAll('.month-tab') as NodeListOf<HTMLElement>).forEach(btn => {
-    btn.addEventListener('click', () => {
-      viewMonth = parseInt(btn.dataset.month!);
-      renderMonthStrip();
-      renderCalendarGrid();
-      if (activeView !== 'calendar') switchCalendarView('calendar');
-    });
-  });
-
-  (document.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).forEach(btn => {
-    btn.addEventListener('click', () => {
-      // #btn-ai shares the .view-tab class for styling but has no data-view —
-      // skip it here so clicking AI doesn't call switchCalendarView(undefined),
-      // which would hide #calendar-wrapper via its view !== 'calendar' toggle.
-      if (!btn.dataset.view) return;
-      if (btn.dataset.view === 'schedule') {
-        scheduleDate = getTodayKey();
-        clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
-        scheduleViewMode = 'daily';
-      }
-      switchCalendarView(btn.dataset.view as ViewType);
-    });
-  });
-  qId('sched-prev-day').addEventListener('click', () => stepScheduleDay(-1));
-  qId('sched-next-day').addEventListener('click', () => stepScheduleDay(1));
-  qId('schedule-mode-daily').addEventListener('click', () => setScheduleViewMode('daily'));
-  qId('schedule-mode-timeline').addEventListener('click', () => setScheduleViewMode('schedule'));
-  qId('schedule-subtask-form').addEventListener('submit', (event) => {
-    event.preventDefault();
-    if (!scheduleDate || !selectedScheduleBlock || selectedScheduleBlock.key !== scheduleDate) return;
-    const input = qId<HTMLInputElement>('schedule-subtask-input');
-    const value = input.value.trim();
-    if (!value) return;
-    input.value = '';
-    void addBlockSubtask(scheduleDate, selectedScheduleBlock.blockId, value);
-  });
-
-  (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>).forEach(btn => {
-    btn.addEventListener('click', () => {
-      clockAmPm = btn.dataset.ampm as AmPm;
-      (document.querySelectorAll('.ampm-btn') as NodeListOf<HTMLElement>).forEach(b =>
-        b.classList.toggle('active', b.dataset.ampm === clockAmPm)
-      );
-      if (activeView === 'schedule' && scheduleDate) renderScheduleView(scheduleDate);
-    });
-  });
-  qId('reschedule-confirm').addEventListener('click', confirmReschedule);
-  qId('reschedule-cancel').addEventListener('click', cancelReschedule);
-
-  qId('modal-close').addEventListener('click', closeDayDetailModal);
-  qId('modal-overlay').addEventListener('click', (e: MouseEvent) => {
-    if (e.target === qId('modal-overlay')) closeDayDetailModal();
-  });
-
-  qId('lightbox-close').addEventListener('click', closeLightbox);
-  qId('lightbox-overlay').addEventListener('click', (e: MouseEvent) => {
-    if (e.target === qId('lightbox-overlay')) closeLightbox();
-  });
-
   document.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      if (!qId('ai-review-overlay').classList.contains('hidden')) { closeAiReviewModal(); return; }
-      if (!qId('ai-overlay').classList.contains('hidden'))        { closeAiSettingsModal(); return; }
-      if (!qId('settings-overlay').classList.contains('hidden')) { closeSettingsModal(); return; }
-      if (!qId('lightbox-overlay').classList.contains('hidden')) closeLightbox();
-      else if (modalDate) closeDayDetailModal();
-      else if (rescheduleBlock) cancelReschedule();
-      return;
-    }
-
     const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement as HTMLElement)?.tagName);
-
-    // Backspace over a hovered clock block ? delete it
-    if (e.key === 'Backspace' && hoveredClockBlock && !inInput) {
-      e.preventDefault();
-      const { block, key } = hoveredClockBlock;
-      hoveredClockBlock = null;
-      deleteTimeBlock(key, block.id, (block as BlockOrPartial & { _recurring?: boolean })._recurring ? 'all' : undefined);
-      return;
-    }
-
-    // Ctrl+Z — matches the undo convention users expect from native desktop apps
     if (e.ctrlKey && e.key === 'z' && !e.shiftKey && !inInput) {
       e.preventDefault();
       if (undoStack.length) {
         redoStack.push(JSON.stringify(calData));
-        applyCalendarSnapshot(undoStack.pop()!);
+        void applyCalendarSnapshot(undoStack.pop()!);
       }
       return;
     }
 
-    // Ctrl+Shift+Z — matches the redo convention; Ctrl+Y intentionally not supported to keep it simple
     if (e.ctrlKey && e.shiftKey && e.key === 'Z' && !inInput) {
       e.preventDefault();
       if (redoStack.length) {
         undoStack.push(JSON.stringify(calData));
-        applyCalendarSnapshot(redoStack.pop()!);
+        void applyCalendarSnapshot(redoStack.pop()!);
       }
       return;
     }
   });
 
-  qId('btn-add-event').addEventListener('click', () => {
-    if (modalDate) addEmptyEvent(modalDate);
-  });
-
-  qId('btn-schedule-day').addEventListener('click', () => {
-    const targetDate = modalDate;
-    closeDayDetailModal();
-    scheduleDate = targetDate;
-    clockAmPm = new Date().getHours() < 12 ? 'AM' : 'PM';
-    switchCalendarView('schedule');
-  });
-
   bindGlassButtonLightFollow();
-  bindThemeToggleEvents();
-  bindShaderToggleEvents();
 }
 
 // -- Skin picker -----------------------------------------
@@ -1472,7 +1307,6 @@ function stepScheduleDay(delta: number): void {
 
 // -- Start ----------------------------------------------
 initCalendarApp();
-startDayChangeWatcher();
 
 
 

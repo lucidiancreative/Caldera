@@ -1,8 +1,70 @@
 # Changelog
 
-## [Unreleased]
+## [1.7.8] - 2026-06-10
+
+### Fixed
+- Restored React Schedule sub-task add/delete and one-off block reschedule actions by moving those mutations into the live React store instead of routing through an unloaded legacy schedule script
+
+### Testing
+- Added regression tests for React Schedule sub-task mutations and one-off day moves, including blank-label and no-op move cases
+
+---
+
+## [1.7.7] - 2026-06-10
+
+### Fixed
+- Reduced the remaining Settings modal transparency in frost and glass skins so its text matches the readability of the other modals
+
+---
+
+## [1.7.6] - 2026-06-10
+
+### Fixed
+- Prevented duplicate React schedule block creation by locking the block editor to a single in-flight save or delete action while it persists
+
+---
+
+## [1.7.5] - 2026-06-10
+
+### Changed
+- Moved the Settings button out of the titlebar to a discrete floating gear in the bottom-right corner, fading in on hover
+
+---
+
+## [1.7.4] - 2026-06-10
 
 ### Added
+- Added direct click-and-drag repositioning for React Timeline blocks, with live preview while dragging and preserved block duration on drop
+
+---
+
+## [1.7.3] - 2026-06-10
+
+### Added
+- Added direct drag-to-create block drawing in the React Timeline view, using the same shared block editor flow as Daily mode
+
+---
+
+## [1.7.2] - 2026-06-10
+
+### Fixed
+- Restored fully rounded Daily clock block geometry in the React scheduler and removed seam gaps when adjacent blocks touch on the clock face
+
+---
+
+## [1.7.1] - 2026-06-10
+
+### Fixed
+- Restored full-size rendering for the React Daily clock so the schedule canvas uses the available space again
+- Restored icon-only task and sub-task action buttons in the React Schedule task list
+- Timeline block resizing now previews live during drag, and shared boundaries between touching blocks now resize both adjacent blocks together
+
+---
+
+## [1.7.0] - 2026-06-10
+
+### Added
+- Completed the React renderer migration so the calendar grid, day modal, settings modal, and AI import/review flows now run from the React app instead of the legacy DOM shell
 - Added a unified Schedule page mode toggle so the right-side schedule canvas can switch between `Daily` clock mode and a native day-scale `Schedule` timeline view while keeping one shared task list
 - Added draggable start/end handles for one-off blocks in the native Schedule timeline so users can resize blocks directly on the day view
 - Added a shared block details panel below the Schedule canvas, with per-block sub-task lists that can be viewed, added to, completed, and removed from either Daily or Schedule mode
@@ -15,6 +77,8 @@
 - Routed the Schedule tab to the React view (Phase 2, part 5): a view bridge lets the React island take over the Schedule page (the vanilla clock/timeline view is now retired and stays hidden) while the vanilla calendar grid still owns the Calendar tab — verified live in the real app, tabbing in and out with no errors. This replaces the imperative full-rebuild-on-every-interaction schedule renderer that caused the jank
 
 ### Changed
+- Retired the legacy renderer-owned HTML shell from `index.html`; the shipped renderer now boots from the React root plus the remaining bridge/bootstrap scripts only
+- Renamed the Schedule page's second mode from `Schedule` to `Timeline` to remove the `Schedule`/`Schedule` label collision
 - Reclassified Caldera as proprietary freeware in the project metadata and end-user documentation
 - Rewrote the bundled license text to clearly grant no-cost use while keeping redistribution, modification, resale, and relicensing restricted
 - Reworked the Schedule page shell to support a first-party timeline renderer instead of a separate standalone Gantt page
@@ -29,6 +93,8 @@
 - Schedule blocks now open into a shared selection model, so the task list, clock arcs, legend chips, and timeline bars all target the same block detail surface instead of sending timeline clicks straight back to Daily mode
 
 ### Fixed
+- React calendar cells now refresh time-sensitive UI from the live bridge, including day rollover and schedule block colors after theme or skin changes
+- React Schedule now accepts external date changes from the calendar/day modal flow, keeping tab navigation and per-day scheduling aligned
 - Restored local startup by fixing the invalid `package.json` JSON syntax
 - `npm start` now launches Electron through a wrapper that clears `ELECTRON_RUN_AS_NODE`, preventing Node-mode startup failures in contaminated shells
 - Consolidated schedule block rendering so clock arcs, drag preview, legend chips, and task swatches share one gradient pipeline

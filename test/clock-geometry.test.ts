@@ -17,6 +17,12 @@ test('should draw a sharp wedge with arc commands when rounding is off', () => {
 test('should add rounded corners (quadratic curves) when a radius is given', () => {
   const d = arcPath(200, 200, 105, 145, 0, 180, 6);
   assert.ok(d.includes('Q'));
+  assert.equal((d.match(/Q/g) || []).length, 4);
+});
+
+test('should allow one touching boundary to stay flush while the opposite end stays rounded', () => {
+  const d = arcPath(200, 200, 105, 145, 0, 180, { radius: 6, roundStart: true, roundEnd: false });
+  assert.equal((d.match(/Q/g) || []).length, 2);
 });
 
 test('should map clock-face points to the nearest 15-minute mark from 12 o\'clock', () => {

@@ -9,6 +9,7 @@
   "include": [
     "src/ai/**/*.ts",
     "src/types.ts",
+    "src/react/store/scheduleMutations.ts",
     "src/react/store/selectors.ts",
     "src/react/schedule/timeline.ts",
     "src/react/schedule/clock.ts",

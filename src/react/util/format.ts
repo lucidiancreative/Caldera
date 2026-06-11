@@ -2,6 +2,12 @@
 // view displays times and dates identically. Kept tiny and dependency-free.
 import type { AmPm } from '../../types';
 
+export const MONTH_LABELS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+  'September', 'October', 'November', 'December'];
+export const MONTH_TAB_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 export function dateKey(y: number, m: number, d: number): string {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
@@ -22,6 +28,16 @@ export function formatDisplayDate(key: string): string {
   return new Date(year, month - 1, day).toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
+}
+
+export function formatMonthYear(year: number, month: number): string {
+  return `${MONTH_LABELS[month]} ${year}`;
+}
+
+export function formatTime12h(time: string): string {
+  if (!time) return '';
+  const [hours, minutes] = time.split(':').map(Number);
+  return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
 }
 
 function formatClockMinutes(min: number, ampm = ''): string {

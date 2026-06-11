@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { packTimelineLanes, getAbsoluteMinutes } from '../src/react/schedule/timeline';
+import {
+  packTimelineLanes,
+  getAbsoluteMinutes,
+  absoluteMinutesToBlockTimes,
+  getTimelineResizePlan,
+  moveTimelineRange,
+} from '../src/react/schedule/timeline';
 import type { ScheduleBlock } from '../src/react/store/selectors';
 
 function block(over: Partial<ScheduleBlock>): ScheduleBlock {
@@ -42,4 +48,78 @@ test('should unwrap a block whose end crosses midnight into absolute minutes', (
   const abs = getAbsoluteMinutes(block({ ampm: 'PM', startMin: 660, endMin: 60 })); // 11:00pm–1:00am
   assert.equal(abs.start, 1380);
   assert.equal(abs.end, 1500);
+});
+
+test('should convert absolute minutes back into block storage shape', () => {
+  assert.deepEqual(absoluteMinutesToBlockTimes(90, 180), {
+    ampm: 'AM',
+    startMin: 90,
+    endMin: 180,
+  });
+  assert.deepEqual(absoluteMinutesToBlockTimes(780, 855), {
+    ampm: 'PM',
+    startMin: 60,
+    endMin: 135,
+  });
+});
+
+test('should clamp absolute times to the day and enforce a 15-minute minimum', () => {
+  assert.deepEqual(absoluteMinutesToBlockTimes(-20, 5), {
+    ampm: 'AM',
+    startMin: 0,
+    endMin: 15,
+  });
+  assert.deepEqual(absoluteMinutesToBlockTimes(1435, 1500), {
+    ampm: 'PM',
+    startMin: 705,
+    endMin: 0,
+  });
+});
+
+test('should create a shared resize plan for touching blocks in the same lane', () => {
+  const { segments } = packTimelineLanes([
+    block({ id: 'a', ampm: 'AM', startMin: 540, endMin: 600 }),
+    block({ id: 'b', ampm: 'AM', startMin: 600, endMin: 690 }),
+  ]);
+
+  assert.deepEqual(getTimelineResizePlan(segments, 'a', 'end'), {
+    blockId: 'a',
+    linkedBlockId: 'b',
+    edge: 'end',
+    boundary: 600,
+    minBoundary: 555,
+    maxBoundary: 675,
+  });
+});
+
+test('should create a single-block resize plan when there is no touching neighbor', () => {
+  const { segments } = packTimelineLanes([
+    block({ id: 'solo', ampm: 'PM', startMin: 60, endMin: 120 }),
+  ]);
+
+  assert.deepEqual(getTimelineResizePlan(segments, 'solo', 'start'), {
+    blockId: 'solo',
+    edge: 'start',
+    boundary: 780,
+    minBoundary: 0,
+    maxBoundary: 825,
+  });
+});
+
+test('should move a block by the requested delta while preserving duration', () => {
+  assert.deepEqual(moveTimelineRange(540, 630, 45), {
+    start: 585,
+    end: 675,
+  });
+});
+
+test('should clamp moved blocks to the day bounds', () => {
+  assert.deepEqual(moveTimelineRange(30, 120, -90), {
+    start: 0,
+    end: 90,
+  });
+  assert.deepEqual(moveTimelineRange(1320, 1410, 90), {
+    start: 1350,
+    end: 1440,
+  });
 });

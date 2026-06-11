@@ -1,10 +1,21 @@
-// Pure clock geometry, ported verbatim from the vanilla renderer so the React clock
-// draws identical arcs. The clock face is a 12-hour dial: minutes are 0–719 and
-// 0 minutes points straight up (−90°).
 export const CLOCK = { vb: 400, cx: 200, cy: 200, R: 170, r1: Math.round(170 * 0.62), r2: Math.round(170 * 0.85) };
 
+interface ArcRoundingOptions {
+  radius?: number;
+  roundStart?: boolean;
+  roundEnd?: boolean;
+}
+
 /** Wedge path between inner radius r1 and outer r2, from startMin to endMin, with optional rounded corners. */
-export function arcPath(cx: number, cy: number, r1: number, r2: number, startMin: number, endMin: number, rnd = 0): string {
+export function arcPath(
+  cx: number,
+  cy: number,
+  r1: number,
+  r2: number,
+  startMin: number,
+  endMin: number,
+  rounding: number | ArcRoundingOptions = 0,
+): string {
   const spanMin = (endMin - startMin + 720) % 720;
   if (spanMin === 0) return '';
   const startAng = (startMin / 720) * 2 * Math.PI - Math.PI / 2;
@@ -13,37 +24,57 @@ export function arcPath(cx: number, cy: number, r1: number, r2: number, startMin
   const c1 = Math.cos(startAng), s1 = Math.sin(startAng);
   const c2 = Math.cos(endAng), s2 = Math.sin(endAng);
 
-  const ox1 = cx + r2 * c1, oy1 = cy + r2 * s1;
-  const ox2 = cx + r2 * c2, oy2 = cy + r2 * s2;
-  const ix1 = cx + r1 * c2, iy1 = cy + r1 * s2;
-  const ix2 = cx + r1 * c1, iy2 = cy + r1 * s1;
+  const ox1 = cx + r2 * c1;
+  const oy1 = cy + r2 * s1;
+  const ox2 = cx + r2 * c2;
+  const oy2 = cy + r2 * s2;
+  const ix1 = cx + r1 * c2;
+  const iy1 = cy + r1 * s2;
+  const ix2 = cx + r1 * c1;
+  const iy2 = cy + r1 * s1;
 
-  if (rnd <= 0) {
+  const radius = typeof rounding === 'number' ? rounding : (rounding.radius ?? 0);
+  const roundStart = typeof rounding === 'number' ? radius > 0 : (rounding.roundStart ?? radius > 0);
+  const roundEnd = typeof rounding === 'number' ? radius > 0 : (rounding.roundEnd ?? radius > 0);
+
+  if (radius <= 0) {
     return `M ${ox1} ${oy1} A ${r2} ${r2} 0 ${large} 1 ${ox2} ${oy2} ` +
       `L ${ix1} ${iy1} A ${r1} ${r1} 0 ${large} 0 ${ix2} ${iy2} Z`;
   }
 
-  const r = Math.min(rnd, (r2 - r1) * 0.45);
+  const r = Math.min(radius, (r2 - r1) * 0.45);
   const p = (x: number, y: number) => `${x.toFixed(2)} ${y.toFixed(2)}`;
 
-  const Aa: [number, number] = [ox1 - r * c1, oy1 - r * s1];
-  const Ad: [number, number] = [ox1 - r * s1, oy1 + r * c1];
-  const Ba: [number, number] = [ox2 + r * s2, oy2 - r * c2];
-  const Bd: [number, number] = [ox2 - r * c2, oy2 - r * s2];
-  const Ca: [number, number] = [ix1 + r * c2, iy1 + r * s2];
-  const Cd: [number, number] = [ix1 + r * s2, iy1 - r * c2];
-  const Da: [number, number] = [ix2 - r * s1, iy2 + r * c1];
-  const Dd: [number, number] = [ix2 + r * c1, iy2 + r * s1];
+  const outerStartAlongArc: [number, number] = [ox1 - r * c1, oy1 - r * s1];
+  const outerStartAlongRadial: [number, number] = [ox1 - r * s1, oy1 + r * c1];
+  const outerEndAlongArc: [number, number] = [ox2 + r * s2, oy2 - r * c2];
+  const outerEndAlongRadial: [number, number] = [ox2 - r * c2, oy2 - r * s2];
+  const innerEndAlongArc: [number, number] = [ix1 + r * c2, iy1 + r * s2];
+  const innerEndAlongRadial: [number, number] = [ix1 + r * s2, iy1 - r * c2];
+  const innerStartAlongArc: [number, number] = [ix2 - r * s1, iy2 + r * c1];
+  const innerStartAlongRadial: [number, number] = [ix2 + r * c1, iy2 + r * s1];
 
-  return (
-    `M ${p(...Ad)} ` +
-    `A ${r2} ${r2} 0 ${large} 1 ${p(...Ba)} ` +
-    `Q ${p(ox2, oy2)} ${p(...Bd)} ` +
-    `L ${p(...Ca)} ` +
-    `Q ${p(ix1, iy1)} ${p(...Cd)} ` +
-    `A ${r1} ${r1} 0 ${large} 0 ${p(...Da)} ` +
-    `Q ${p(ix2, iy2)} ${p(...Dd)} Z`
-  );
+  const startPoint = roundStart ? outerStartAlongRadial : [ox1, oy1] as [number, number];
+  const outerArcEnd = roundEnd ? outerEndAlongArc : [ox2, oy2] as [number, number];
+  const radialEndOuter = roundEnd ? outerEndAlongRadial : [ox2, oy2] as [number, number];
+  const radialEndInner = roundEnd ? innerEndAlongArc : [ix1, iy1] as [number, number];
+  const innerArcStart = roundEnd ? innerEndAlongRadial : [ix1, iy1] as [number, number];
+  const innerArcEnd = roundStart ? innerStartAlongArc : [ix2, iy2] as [number, number];
+  const radialStartInner = roundStart ? innerStartAlongRadial : [ix2, iy2] as [number, number];
+  const radialStartOuter = roundStart ? outerStartAlongArc : [ox1, oy1] as [number, number];
+
+  return [
+    `M ${p(...startPoint)}`,
+    `A ${r2} ${r2} 0 ${large} 1 ${p(...outerArcEnd)}`,
+    roundEnd ? `Q ${p(ox2, oy2)} ${p(...radialEndOuter)}` : '',
+    `L ${p(...radialEndInner)}`,
+    roundEnd ? `Q ${p(ix1, iy1)} ${p(...innerArcStart)}` : '',
+    `A ${r1} ${r1} 0 ${large} 0 ${p(...innerArcEnd)}`,
+    roundStart ? `Q ${p(ix2, iy2)} ${p(...radialStartInner)}` : '',
+    `L ${p(...radialStartOuter)}`,
+    roundStart ? `Q ${p(ox1, oy1)} ${p(...startPoint)}` : '',
+    'Z',
+  ].filter(Boolean).join(' ');
 }
 
 /** Mid-radius arc used as the baseline for a curved arc label. */
@@ -67,5 +98,5 @@ export function minutesFromPoint(cx: number, cy: number, px: number, py: number)
 export function fitArcLabel(label: string, spanMin: number, rMid: number): string {
   const arcLen = (spanMin / 720) * 2 * Math.PI * rMid;
   const maxChars = Math.max(1, Math.floor(arcLen / 7));
-  return label.length > maxChars ? label.slice(0, maxChars - 1) + '…' : label;
+  return label.length > maxChars ? label.slice(0, maxChars - 1) + '\u2026' : label;
 }

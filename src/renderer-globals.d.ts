@@ -143,16 +143,26 @@ interface CalderaSchedule {
   createBlock(key: string, block: { startMin: number; endMin: number; label: string }, recurrence: string, ampm: AmPm): Promise<void>;
   updateBlock(key: string, id: string, label: string, recurrence: string, scope: string, ampm: AmPm): Promise<void>;
   deleteBlock(key: string, id: string, scope?: string): Promise<void>;
-  moveBlock(key: string, id: string, newKey: string): Promise<void>;
-  addSubtask(key: string, id: string, label: string): Promise<void>;
-  deleteSubtask(key: string, id: string, subtaskId: string): Promise<void>;
 }
 
 // View-routing bridge so the React island knows when the Schedule page is active.
 interface CalderaView {
   activeView(): ViewType;
+  setActiveView(view: ViewType): void;
   scheduleDate(): string | null;
   setScheduleDate(key: string): void;
+  subscribe(listener: () => void): () => void;
+  notify(): void;
+}
+
+interface CalderaPrefs {
+  theme(): 'light' | 'dark';
+  setTheme(theme: 'light' | 'dark'): void;
+  skin(): SkinId;
+  setSkin(skin: SkinId): void;
+  shaderPref(): 'auto' | 'on' | 'off';
+  setShaderPref(pref: 'auto' | 'on' | 'off'): void;
+  shaderHint(): { lowPower: boolean; reducedMotion: boolean };
   subscribe(listener: () => void): () => void;
   notify(): void;
 }
@@ -164,4 +174,5 @@ interface Window {
   calderaAppearance: CalderaAppearance;
   calderaSchedule: CalderaSchedule;
   calderaView: CalderaView;
+  calderaPrefs: CalderaPrefs;
 }

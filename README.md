@@ -27,9 +27,14 @@ Three methods for attaching images to events:
 
 Images are copied into a local data directory on attachment. A lightbox viewer is available for full-resolution inspection.
 
-### Analog Clock Scheduler
+### Schedule Workspace
 
-A tab toggle switches between the calendar grid and an SVG-rendered analog clock face tied to the currently selected day. Time blocks are created by click-dragging arcs on a 12-hour ring. Each block supports a label, which renders as curved text along the arc midline using SVG `<textPath>` elements. Labels are auto-truncated when the arc span is too narrow. Blocks are color-coded and listed in a legend strip below the clock for quick editing and deletion.
+A tab toggle switches between the calendar grid and a dedicated Schedule workspace tied to the selected day. The Schedule page includes a shared task list plus two views:
+
+- **Daily**: an SVG-rendered analog clock where time blocks are created by click-dragging arcs on a 12-hour ring
+- **Timeline**: a horizontal day timeline with direct bar resizing for adjusting start and end times
+
+Blocks stay in one shared source of truth across both modes, so edits, completion state, sub-tasks, and recurrence changes stay in sync.
 
 <img width="1616" height="1381" alt="image" src="https://github.com/user-attachments/assets/0fbac8d7-8c08-4a02-8504-4ad88841a72d" />
 
@@ -52,8 +57,8 @@ All data — event entries, images, preferences — is stored in the user's loca
 | Set cover image | Click the ★ on an event card |
 | Navigate months | Click month tabs or `‹` / `›` arrows |
 | Navigate years | Click `«` / `»` arrows |
-| Toggle dark mode | Click the moon/sun icon in the titlebar |
-| Toggle clock view | Click the clock tab |
+| Toggle dark mode | Open Settings from the titlebar gear, then choose Light or Dark |
+| Open Schedule view | Click the Schedule tab |
 | Create time block | Click-drag an arc on the clock face |
 
 ---
@@ -71,7 +76,7 @@ All data — event entries, images, preferences — is stored in the user's loca
 ## Tech Stack
 
 - **Runtime:** [Electron](https://www.electronjs.org/)
-- **UI:** Vanilla HTML, CSS, JavaScript (zero framework dependencies)
+- **UI:** React 19 + TypeScript, with shared renderer bridges for local-first Electron data and preferences
 - **Clock renderer:** Inline SVG with computed arc geometry and `<textPath>` labels
 - **Animations:** CSS keyframe-driven scroll strips with per-image segment sizing
 - **Data persistence:** JSON flat file + local image directory via Electron IPC

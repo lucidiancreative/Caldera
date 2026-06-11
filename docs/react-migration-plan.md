@@ -2,7 +2,9 @@
 
 ## Status
 
-Active plan. Supersedes the framing in `docs/schedule-gantt-redesign-plan.md`.
+Completed on June 10, 2026. The renderer now boots into the React shell for calendar,
+schedule, settings, and AI flows, with the remaining vanilla scripts reduced to shared
+bridge/bootstrap responsibilities.
 
 That earlier doc assumed a vanilla, no-framework reimplementation and has been retired. Its
 **product/UX rules still hold** and are carried forward below as requirements. Only its

@@ -3,6 +3,7 @@
 // the shared appearance bridge so colors match the active skin exactly. Drag-to-create
 // is deferred to the editing step; selection works by clicking an arc or legend chip.
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { useMinuteTick } from '../hooks/useMinuteTick';
 import { useCalData } from '../store/calStore';
 import { getDayData, getScheduleBlocksForDate, isBlockPast, type ScheduleBlock } from '../store/selectors';
 import { arcPath, labelArcPath, fitArcLabel, minutesFromPoint, CLOCK } from './clock';
@@ -21,16 +22,13 @@ interface DailyModeProps {
 export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyModeProps) {
   const calData = useCalData();
   const [ampm, setAmpm] = useState<AmPm>(new Date().getHours() >= 12 ? 'PM' : 'AM');
-  const [, setTick] = useState(0);
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ start: number; current: number } | null>(null);
+  const dragControllerRef = useRef<AbortController | null>(null);
   const [dragView, setDragView] = useState<{ start: number; current: number } | null>(null);
+  useMinuteTick();
 
-  // Re-render every 30s so the live hand (and "past" dimming) stay current.
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 30_000);
-    return () => clearInterval(id);
-  }, []);
+  useEffect(() => () => dragControllerRef.current?.abort(), []);
 
   const appearance = window.calderaAppearance;
   const palette = appearance?.palette() ?? [];
@@ -69,6 +67,9 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
     if (start == null) return;
     dragRef.current = { start, current: start };
     setDragView(dragRef.current);
+    dragControllerRef.current?.abort();
+    const controller = new AbortController();
+    dragControllerRef.current = controller;
 
     const onMove = (move: MouseEvent) => {
       const current = pointToMinutes(move.clientX, move.clientY);
@@ -77,8 +78,8 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
       setDragView(dragRef.current);
     };
     const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      controller.abort();
+      dragControllerRef.current = null;
       const drag = dragRef.current;
       dragRef.current = null;
       setDragView(null);
@@ -86,14 +87,16 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
       const span = (drag.current - drag.start + 720) % 720;
       if (span >= 15) onCreate({ startMin: drag.start, endMin: drag.current, ampm });
     };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener('mousemove', onMove, { signal: controller.signal });
+    document.addEventListener('mouseup', onUp, { signal: controller.signal, once: true });
   }
 
   const dragSpan = dragView ? (dragView.current - dragView.start + 720) % 720 : 0;
   const previewSlot = palette.length
     ? (getDayData(calData, date)?.timeBlocks?.length ?? 0) % palette.length
     : 0;
+  const visibleBoundaryRounding = getBoundaryRoundingMap(visibleBlocks);
+  const overlayBoundaryRounding = getBoundaryRoundingMap(overlayBlocks);
 
   function renderArc(block: ScheduleBlock, overlay: boolean) {
     const spanMin = (block.endMin - block.startMin + 720) % 720;
@@ -104,6 +107,7 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
       (!overlay && block.id === selectedBlockId ? ' is-selected' : '');
     const dimClass = overlay ? 'am-overlay-arc' : past ? 'crossover-arc' : '';
     const labelId = `react-arc-label-${overlay ? 'ov-' : ''}${block.id}`;
+    const rounding = (overlay ? overlayBoundaryRounding : visibleBoundaryRounding).get(block.id) ?? { roundStart: true, roundEnd: true };
     return (
       <g
         key={(overlay ? 'ov-' : '') + block.id}
@@ -111,7 +115,15 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
         onClick={overlay ? undefined : () => onSelect(block.id)}
         style={overlay ? undefined : { cursor: 'pointer' }}
       >
-        <path className={arcClass} d={arcPath(cx, cy, r1, r2, block.startMin, block.endMin, rnd)} fill={fillOf(block)} />
+        <path
+          className={arcClass}
+          d={arcPath(cx, cy, r1, r2, block.startMin, block.endMin, {
+            radius: rnd,
+            roundStart: rounding.roundStart,
+            roundEnd: rounding.roundEnd,
+          })}
+          fill={fillOf(block)}
+        />
         {spanMin >= 30 && block.label && (
           <>
             <defs>
@@ -200,7 +212,7 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
 
       <div className="rdaily-legend">
         {visibleBlocks.length === 0 ? (
-          <span className="rdaily-hint">No {ampm} blocks. Drag-to-create arrives with editing.</span>
+          <span className="rdaily-hint">No {ampm} blocks. Drag on the ring to add one.</span>
         ) : (
           visibleBlocks.map((block) => (
             <span
@@ -210,11 +222,30 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
               title={formatBlockTimeRange(block)}
               onClick={() => onSelect(block.id)}
             >
-              {block.recurring ? `${block.label} ↻` : block.label}
+              {block.recurring ? `${block.label} (Recurring)` : block.label}
             </span>
           ))
         )}
       </div>
     </div>
   );
+}
+
+function getBoundaryRoundingMap(blocks: ScheduleBlock[]): Map<string, { roundStart: boolean; roundEnd: boolean }> {
+  const sorted = [...blocks].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin || a.label.localeCompare(b.label));
+  const map = new Map<string, { roundStart: boolean; roundEnd: boolean }>();
+
+  sorted.forEach((block) => {
+    map.set(block.id, { roundStart: true, roundEnd: true });
+  });
+
+  for (let index = 0; index < sorted.length - 1; index += 1) {
+    const current = sorted[index];
+    const next = sorted[index + 1];
+    if (current.endMin !== next.startMin) continue;
+    map.set(current.id, { ...(map.get(current.id) ?? { roundStart: true, roundEnd: true }), roundEnd: false });
+    map.set(next.id, { ...(map.get(next.id) ?? { roundStart: true, roundEnd: true }), roundStart: false });
+  }
+
+  return map;
 }

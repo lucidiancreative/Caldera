@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 
 import {
   packTimelineLanes,
+  packTimelineDay,
   getAbsoluteMinutes,
   absoluteMinutesToBlockTimes,
   getTimelineResizePlan,
+  makeTimelineOccurrenceKey,
   moveTimelineRange,
 } from '../src/react/schedule/timeline';
 import type { ScheduleBlock } from '../src/react/store/selectors';
@@ -111,6 +113,33 @@ test('should move a block by the requested delta while preserving duration', () 
     start: 585,
     end: 675,
   });
+});
+
+test('should create unique occurrence keys for repeated recurring ids across different days', () => {
+  assert.equal(makeTimelineOccurrenceKey('2026-06-07', 'recur-1'), '2026-06-07::recur-1');
+  assert.notEqual(
+    makeTimelineOccurrenceKey('2026-06-07', 'recur-1'),
+    makeTimelineOccurrenceKey('2026-06-08', 'recur-1'),
+  );
+});
+
+test('should stamp packed day segments with their source date and occurrence key', () => {
+  const { segments, laneCount } = packTimelineDay('2026-06-11', [
+    block({ id: 'standup', ampm: 'AM', startMin: 540, endMin: 600 }),
+  ]);
+
+  assert.equal(laneCount, 1);
+  assert.deepEqual(segments.map((segment) => ({
+    date: segment.date,
+    occurrenceKey: segment.occurrenceKey,
+    lane: segment.lane,
+  })), [
+    {
+      date: '2026-06-11',
+      occurrenceKey: '2026-06-11::standup',
+      lane: 0,
+    },
+  ]);
 });
 
 test('should clamp moved blocks to the day bounds', () => {

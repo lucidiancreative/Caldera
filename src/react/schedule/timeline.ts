@@ -15,6 +15,11 @@ export interface TimelineSegment {
   lane: number;
 }
 
+export interface TimelineDaySegment extends TimelineSegment {
+  date: string;
+  occurrenceKey: string;
+}
+
 export interface TimelineResizePlan {
   blockId: string;
   linkedBlockId?: string;
@@ -22,6 +27,10 @@ export interface TimelineResizePlan {
   boundary: number;
   minBoundary: number;
   maxBoundary: number;
+}
+
+export function makeTimelineOccurrenceKey(date: string, blockId: string): string {
+  return `${date}::${blockId}`;
 }
 
 function blockEndAmPm(block: ScheduleBlock): 'AM' | 'PM' {
@@ -111,21 +120,7 @@ export function moveTimelineRange(start: number, end: number, deltaMinutes: numb
   };
 }
 
-/**
- * Greedy interval partitioning: blocks sorted by start time each take the lowest
- * lane whose previous block has already ended at/before this one starts. Overlapping
- * blocks therefore land in distinct lanes; sequential blocks reuse lane 0.
- */
-export function packTimelineLanes(blocks: ScheduleBlock[]): { segments: TimelineSegment[]; laneCount: number } {
-  const segments: TimelineSegment[] = blocks
-    .map((block) => {
-      const abs = getAbsoluteMinutes(block);
-      const start = Math.max(0, Math.min(abs.start, DAY_MINUTES));
-      const end = Math.max(start + 15, Math.min(abs.end, DAY_MINUTES));
-      return { block, start, end, lane: 0 };
-    })
-    .sort((a, b) => a.start - b.start || a.end - b.end || a.block.label.localeCompare(b.block.label));
-
+function assignTimelineLanes<T extends TimelineSegment>(segments: T[]): { segments: T[]; laneCount: number } {
   const laneEnds: number[] = []; // last occupied end-minute per lane
   for (const segment of segments) {
     let lane = laneEnds.findIndex((end) => end <= segment.start);
@@ -139,4 +134,36 @@ export function packTimelineLanes(blocks: ScheduleBlock[]): { segments: Timeline
   }
 
   return { segments, laneCount: Math.max(1, laneEnds.length) };
+}
+
+function toTimelineSegment<T extends { block: ScheduleBlock }>(entry: T): T & Pick<TimelineSegment, 'start' | 'end' | 'lane'> {
+  const abs = getAbsoluteMinutes(entry.block);
+  const start = Math.max(0, Math.min(abs.start, DAY_MINUTES));
+  const end = Math.max(start + MIN_BLOCK_MINUTES, Math.min(abs.end, DAY_MINUTES));
+  return { ...entry, start, end, lane: 0 };
+}
+
+/**
+ * Greedy interval partitioning: blocks sorted by start time each take the lowest
+ * lane whose previous block has already ended at/before this one starts. Overlapping
+ * blocks therefore land in distinct lanes; sequential blocks reuse lane 0.
+ */
+export function packTimelineLanes(blocks: ScheduleBlock[]): { segments: TimelineSegment[]; laneCount: number } {
+  const segments: TimelineSegment[] = blocks
+    .map((block) => toTimelineSegment({ block }))
+    .sort((a, b) => a.start - b.start || a.end - b.end || a.block.label.localeCompare(b.block.label));
+
+  return assignTimelineLanes(segments);
+}
+
+export function packTimelineDay(date: string, blocks: ScheduleBlock[]): { segments: TimelineDaySegment[]; laneCount: number } {
+  const segments: TimelineDaySegment[] = blocks
+    .map((block) => toTimelineSegment({
+      block,
+      date,
+      occurrenceKey: makeTimelineOccurrenceKey(date, block.id),
+    }))
+    .sort((a, b) => a.start - b.start || a.end - b.end || a.block.label.localeCompare(b.block.label));
+
+  return assignTimelineLanes(segments);
 }

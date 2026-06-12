@@ -32,7 +32,7 @@ Images are copied into a local data directory on attachment. A lightbox viewer i
 A tab toggle switches between the calendar grid and a dedicated Schedule workspace tied to the selected day. The Schedule page includes a shared task list plus two views:
 
 - **Daily**: an SVG-rendered analog clock where time blocks are created by click-dragging arcs on a 12-hour ring
-- **Timeline**: a horizontal day timeline with direct bar resizing for adjusting start and end times
+- **Timeline**: a horizontal week timeline with one stacked row per day, plus direct drag-create, drag-move, and resize controls for each day's blocks
 
 Blocks stay in one shared source of truth across both modes, so edits, completion state, sub-tasks, and recurrence changes stay in sync.
 
@@ -57,7 +57,7 @@ All data — event entries, images, preferences — is stored in the user's loca
 | Set cover image | Click the ★ on an event card |
 | Navigate months | Click month tabs or `‹` / `›` arrows |
 | Navigate years | Click `«` / `»` arrows |
-| Toggle dark mode | Open Settings from the titlebar gear, then choose Light or Dark |
+| Toggle dark mode | Click the moon/sun icon in the titlebar |
 | Open Schedule view | Click the Schedule tab |
 | Create time block | Click-drag an arc on the clock face |
 

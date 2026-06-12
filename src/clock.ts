@@ -356,9 +356,10 @@ async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMi
       subtasks: [],
     });
   }
-  if (ampm !== clockAmPm) {
-    setScheduleAmPm(ampm);
-  }
+  // Remember the saved block's meridian as the clock's current AM/PM. (This used to
+  // call schedule.ts's setScheduleAmPm, which also synced the vanilla .ampm-btn row;
+  // that row was retired with the React schedule, so only the state memory remains.)
+  if (ampm !== clockAmPm) clockAmPm = ampm;
   await saveCalendarDataAndRefresh(key, { renderSchedule: true });
 }
 
@@ -422,7 +423,9 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
       });
     }
   }
-  if (ampm !== clockAmPm) setScheduleAmPm(ampm);
+  // See saveTimeBlock: remember the edited block's meridian without touching the
+  // retired vanilla .ampm-btn row.
+  if (ampm !== clockAmPm) clockAmPm = ampm;
   await saveCalendarDataAndRefresh(key, { renderCurrentSchedule: true });
 }
 

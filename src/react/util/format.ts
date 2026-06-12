@@ -12,22 +12,58 @@ export function dateKey(y: number, m: number, d: number): string {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+function parseDateKey(key: string): Date {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function getTodayKey(): string {
   const today = new Date();
   return dateKey(today.getFullYear(), today.getMonth(), today.getDate());
 }
 
 export function stepDateKey(key: string, delta: number): string {
-  const [year, month, day] = key.split('-').map(Number);
-  const dt = new Date(year, month - 1, day + delta);
+  const dt = parseDateKey(key);
+  dt.setDate(dt.getDate() + delta);
   return dateKey(dt.getFullYear(), dt.getMonth(), dt.getDate());
 }
 
+export function getWeekStartKey(key: string): string {
+  const dt = parseDateKey(key);
+  dt.setDate(dt.getDate() - dt.getDay());
+  return dateKey(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
+export function getWeekDateKeys(key: string): string[] {
+  const start = getWeekStartKey(key);
+  return Array.from({ length: 7 }, (_, index) => stepDateKey(start, index));
+}
+
 export function formatDisplayDate(key: string): string {
-  const [year, month, day] = key.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+  return parseDateKey(key).toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
+}
+
+export function formatWeekdayLabel(key: string): string {
+  return parseDateKey(key).toLocaleDateString('en-US', { weekday: 'short' });
+}
+
+export function formatMonthDayLabel(key: string): string {
+  return parseDateKey(key).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+export function formatWeekRange(key: string): string {
+  const start = parseDateKey(getWeekStartKey(key));
+  const end = parseDateKey(stepDateKey(getWeekStartKey(key), 6));
+  const startLabel = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const endLabel = end.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: start.getFullYear() === end.getFullYear() ? undefined : 'numeric',
+  });
+  const yearSuffix = start.getFullYear() === end.getFullYear() ? `, ${end.getFullYear()}` : '';
+  return `${startLabel} - ${endLabel}${yearSuffix}`;
 }
 
 export function formatMonthYear(year: number, month: number): string {

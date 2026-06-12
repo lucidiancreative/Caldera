@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import type { CalData } from '../../types';
 
+type RendererWindow = typeof globalThis & {
+  calderaBridge?: {
+    getData(): CalData;
+    save(): Promise<void>;
+    subscribe(listener: () => void): () => void;
+  };
+};
+
+declare const window: RendererWindow;
+
 const EMPTY_CAL_DATA: CalData = { _recurring: [] };
 
 interface CalStoreState {

@@ -36,7 +36,7 @@ export function TaskList({ date, selectedBlockId, onSelect, onEdit }: TaskListPr
   if (!blocks.length) {
     return (
       <div className="task-list">
-        <div className="task-empty">No blocks scheduled.{'\n'}Use Daily mode to add one.</div>
+        <div className="task-empty">No blocks scheduled for this day.{'\n'}Use Daily mode or drag on the Timeline to add one.</div>
       </div>
     );
   }

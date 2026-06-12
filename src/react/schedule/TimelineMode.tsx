@@ -7,15 +7,23 @@ import {
   absoluteMinutesToBlockTimes,
   getTimelineResizePlan,
   moveTimelineRange,
-  packTimelineLanes,
-  type TimelineSegment,
+  packTimelineDay,
+  type TimelineDaySegment,
 } from './timeline';
-import { formatBlockTimeRange, getTodayKey } from '../util/format';
+import {
+  formatBlockTimeRange,
+  formatMonthDayLabel,
+  formatWeekdayLabel,
+  getTodayKey,
+  getWeekDateKeys,
+  getWeekStartKey,
+} from '../util/format';
 
 const HOUR_WIDTH = 96;
 const TOTAL_HOURS = 24;
 const LANE_HEIGHT = 48;
 const BAR_HEIGHT = 38;
+const DAY_LABEL_WIDTH = 104;
 
 function hourLabel(hour: number): string {
   const n = hour % 24;
@@ -32,9 +40,10 @@ function clampTimelineMinutes(value: number): number {
 
 interface TimelineModeProps {
   date: string;
-  selectedBlockId: string | null;
-  onSelect: (blockId: string) => void;
-  onCreate: (draft: { startMin: number; endMin: number; ampm: 'AM' | 'PM' }) => void;
+  selection: { date: string; blockId: string } | null;
+  onFocusDate: (date: string, options?: { preserveSelection?: boolean }) => void;
+  onSelect: (selection: { date: string; blockId: string }) => void;
+  onCreate: (draft: { date: string; startMin: number; endMin: number; ampm: 'AM' | 'PM' }) => void;
 }
 
 interface SegmentOverride {
@@ -42,53 +51,66 @@ interface SegmentOverride {
   end: number;
 }
 
-export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: TimelineModeProps) {
+interface CreatePreview {
+  date: string;
+  start: number;
+  end: number;
+  lane: number;
+}
+
+export function TimelineMode({ date, selection, onFocusDate, onSelect, onCreate }: TimelineModeProps) {
   const calData = useCalData();
   useMinuteTick();
   const appearance = window.calderaAppearance;
-  const { segments, laneCount } = packTimelineLanes(getScheduleBlocksForDate(calData, date));
   const scrollRef = useRef<HTMLDivElement>(null);
-  const previousDateRef = useRef(date);
+  const previousWeekRef = useRef(getWeekStartKey(date));
   const interactionControllerRef = useRef<AbortController | null>(null);
-  const [previewById, setPreviewById] = useState<Record<string, SegmentOverride>>({});
-  const [createPreview, setCreatePreview] = useState<{ start: number; end: number; lane: number } | null>(null);
+  const [previewByOccurrenceKey, setPreviewByOccurrenceKey] = useState<Record<string, SegmentOverride>>({});
+  const [createPreview, setCreatePreview] = useState<CreatePreview | null>(null);
   const totalWidth = HOUR_WIDTH * TOTAL_HOURS;
   const now = new Date();
   const todayKey = getTodayKey();
-  const firstStart = segments.length ? segments[0].start : 0;
+  const weekDates = getWeekDateKeys(date);
+  const week = weekDates.map((dayKey) => {
+    const { segments, laneCount } = packTimelineDay(dayKey, getScheduleBlocksForDate(calData, dayKey));
+    return {
+      date: dayKey,
+      segments,
+      laneCount,
+      height: Math.max(LANE_HEIGHT, laneCount * LANE_HEIGHT),
+    };
+  });
+  const dayByDate = new Map(week.map((day) => [day.date, day]));
+  const baseSegments = week.flatMap((day) => day.segments);
+  const totalSegments = baseSegments.length;
+  const firstStart = baseSegments.length
+    ? Math.min(...baseSegments.map((segment) => segment.start))
+    : 0;
 
   useEffect(() => () => interactionControllerRef.current?.abort(), []);
 
   useEffect(() => {
-    if (date === previousDateRef.current) return;
-    previousDateRef.current = date;
-    setPreviewById({});
+    const currentWeek = getWeekStartKey(date);
+    if (currentWeek === previousWeekRef.current) return;
+    previousWeekRef.current = currentWeek;
+    setPreviewByOccurrenceKey({});
     setCreatePreview(null);
     if (scrollRef.current) {
       scrollRef.current.scrollLeft = Math.max(0, (firstStart / 60) * HOUR_WIDTH - HOUR_WIDTH / 2);
+      scrollRef.current.scrollTop = 0;
     }
   }, [date, firstStart]);
 
-  const displaySegments = segments.map((segment) => ({
-    ...segment,
-    ...(previewById[segment.block.id] ?? {}),
-  }));
-  const segmentById = new Map<string, TimelineSegment>(segments.map((segment) => [segment.block.id, segment]));
-  const bodyHeight = laneCount * LANE_HEIGHT;
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-  function pointerToMinutes(clientX: number): number {
+  function pointerToMinutes(clientX: number, track: HTMLElement): number {
     const scroll = scrollRef.current;
     if (!scroll) return 0;
-    const rect = scroll.getBoundingClientRect();
+    const rect = track.getBoundingClientRect();
     const offsetX = clientX - rect.left + scroll.scrollLeft;
     return clampTimelineMinutes((offsetX / HOUR_WIDTH) * 60);
   }
 
-  function pointerToLane(clientY: number): number {
-    const scroll = scrollRef.current;
-    if (!scroll) return 0;
-    const rect = scroll.getBoundingClientRect();
+  function pointerToLane(clientY: number, track: HTMLElement, laneCount: number): number {
+    const rect = track.getBoundingClientRect();
     const offsetY = clientY - rect.top;
     const lane = Math.floor(offsetY / LANE_HEIGHT);
     return Math.max(0, Math.min(lane, Math.max(0, laneCount - 1)));
@@ -96,18 +118,22 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
 
   function beginResize(
     pointerEvent: React.PointerEvent<HTMLButtonElement>,
-    blockId: string,
+    segment: TimelineDaySegment,
     edge: 'start' | 'end',
   ) {
     pointerEvent.preventDefault();
     pointerEvent.stopPropagation();
 
-    const plan = getTimelineResizePlan(segments, blockId, edge);
+    const day = dayByDate.get(segment.date);
+    if (!day) return;
+
+    const plan = getTimelineResizePlan(day.segments, segment.block.id, edge);
     if (!plan) return;
 
-    const targetSegment = segmentById.get(plan.blockId);
-    const linkedSegment = plan.linkedBlockId ? segmentById.get(plan.linkedBlockId) : null;
-    if (!targetSegment) return;
+    const targetSegment = day.segments.find((entry) => entry.block.id === plan.blockId);
+    const linkedSegment = plan.linkedBlockId ? day.segments.find((entry) => entry.block.id === plan.linkedBlockId) : null;
+    const track = pointerEvent.currentTarget.closest('.rtimeline-daytrack');
+    if (!targetSegment || !track || !(track instanceof HTMLElement)) return;
 
     interactionControllerRef.current?.abort();
     const controller = new AbortController();
@@ -117,17 +143,17 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
     document.body.classList.add('is-resizing-timeline');
 
     const onMove = (moveEvent: PointerEvent) => {
-      const boundary = Math.max(plan.minBoundary, Math.min(pointerToMinutes(moveEvent.clientX), plan.maxBoundary));
+      const boundary = Math.max(plan.minBoundary, Math.min(pointerToMinutes(moveEvent.clientX, track), plan.maxBoundary));
       latestPreview = plan.edge === 'start'
         ? {
-            [plan.blockId]: { start: boundary, end: targetSegment.end },
-            ...(linkedSegment ? { [linkedSegment.block.id]: { start: linkedSegment.start, end: boundary } } : {}),
+            [targetSegment.occurrenceKey]: { start: boundary, end: targetSegment.end },
+            ...(linkedSegment ? { [linkedSegment.occurrenceKey]: { start: linkedSegment.start, end: boundary } } : {}),
           }
         : {
-            [plan.blockId]: { start: targetSegment.start, end: boundary },
-            ...(linkedSegment ? { [linkedSegment.block.id]: { start: boundary, end: linkedSegment.end } } : {}),
+            [targetSegment.occurrenceKey]: { start: targetSegment.start, end: boundary },
+            ...(linkedSegment ? { [linkedSegment.occurrenceKey]: { start: boundary, end: linkedSegment.end } } : {}),
           };
-      setPreviewById(latestPreview);
+      setPreviewByOccurrenceKey(latestPreview);
     };
 
     const onUp = () => {
@@ -135,19 +161,27 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
       interactionControllerRef.current = null;
       document.body.classList.remove('is-resizing-timeline');
 
-      const updates = Object.entries(latestPreview).map(([currentBlockId, preview]) => {
+      const updates = Object.entries(latestPreview).map(([occurrenceKey, preview]) => {
+        const currentSegment = day.segments.find((entry) => entry.occurrenceKey === occurrenceKey);
+        if (!currentSegment) return null;
         const nextTimes = absoluteMinutesToBlockTimes(preview.start, preview.end);
         return {
-          blockId: currentBlockId,
+          blockId: currentSegment.block.id,
           startMin: nextTimes.startMin,
           endMin: nextTimes.endMin,
           ampm: nextTimes.ampm,
         };
-      });
+      }).filter((entry): entry is {
+        blockId: string;
+        startMin: number;
+        endMin: number;
+        ampm: 'AM' | 'PM';
+      } => !!entry);
 
-      setPreviewById({});
+      setPreviewByOccurrenceKey({});
+      onSelect({ date: targetSegment.date, blockId: targetSegment.block.id });
       if (updates.length > 0) {
-        void updateBlockTimesBatch(calData, date, updates);
+        void updateBlockTimesBatch(calData, targetSegment.date, updates);
       }
     };
 
@@ -155,13 +189,14 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
     document.addEventListener('pointerup', onUp, { signal: controller.signal, once: true });
   }
 
-  function beginCreate(pointerEvent: React.PointerEvent<HTMLDivElement>) {
+  function beginCreate(pointerEvent: React.PointerEvent<HTMLDivElement>, dayDate: string, laneCount: number) {
     const target = pointerEvent.target as HTMLElement;
     if (target.closest('.timeline-bar')) return;
 
+    const track = pointerEvent.currentTarget;
     pointerEvent.preventDefault();
-    const start = pointerToMinutes(pointerEvent.clientX);
-    const lane = pointerToLane(pointerEvent.clientY);
+    const start = pointerToMinutes(pointerEvent.clientX, track);
+    const lane = pointerToLane(pointerEvent.clientY, track, laneCount);
 
     interactionControllerRef.current?.abort();
     const controller = new AbortController();
@@ -169,12 +204,13 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
     let latestStart = start;
     let latestEnd = start;
     let latestLane = lane;
-    setCreatePreview({ start, end: start, lane });
+    setCreatePreview({ date: dayDate, start, end: start, lane });
 
     const onMove = (moveEvent: PointerEvent) => {
-      latestEnd = pointerToMinutes(moveEvent.clientX);
-      latestLane = pointerToLane(moveEvent.clientY);
+      latestEnd = pointerToMinutes(moveEvent.clientX, track);
+      latestLane = pointerToLane(moveEvent.clientY, track, laneCount);
       setCreatePreview({
+        date: dayDate,
         start: Math.min(latestStart, latestEnd),
         end: Math.max(latestStart, latestEnd),
         lane: latestLane,
@@ -191,6 +227,7 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
       if (endAbs - startAbs < 15) return;
       const nextTimes = absoluteMinutesToBlockTimes(startAbs, endAbs);
       onCreate({
+        date: dayDate,
         startMin: nextTimes.startMin,
         endMin: nextTimes.endMin,
         ampm: nextTimes.ampm,
@@ -201,12 +238,12 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
     document.addEventListener('pointerup', onUp, { signal: controller.signal, once: true });
   }
 
-  function beginMove(pointerEvent: React.PointerEvent<HTMLDivElement>, blockId: string) {
+  function beginMove(pointerEvent: React.PointerEvent<HTMLDivElement>, segment: TimelineDaySegment) {
     const target = pointerEvent.target as HTMLElement;
     if (target.closest('.timeline-boundary-handle')) return;
 
-    const targetSegment = segmentById.get(blockId);
-    if (!targetSegment) return;
+    const track = pointerEvent.currentTarget.parentElement;
+    if (!track) return;
 
     pointerEvent.preventDefault();
     pointerEvent.stopPropagation();
@@ -214,7 +251,7 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
     interactionControllerRef.current?.abort();
     const controller = new AbortController();
     interactionControllerRef.current = controller;
-    const anchorMinutes = pointerToMinutes(pointerEvent.clientX);
+    const anchorMinutes = pointerToMinutes(pointerEvent.clientX, track);
     const anchorClientX = pointerEvent.clientX;
     let didDrag = false;
     let latestPreview: SegmentOverride | null = null;
@@ -222,38 +259,35 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
     document.body.classList.add('is-dragging-timeline-block');
 
     const onMove = (moveEvent: PointerEvent) => {
-      const dragDelta = pointerToMinutes(moveEvent.clientX) - anchorMinutes;
-      const nextRange = moveTimelineRange(targetSegment.start, targetSegment.end, dragDelta);
+      const dragDelta = pointerToMinutes(moveEvent.clientX, track) - anchorMinutes;
+      const nextRange = moveTimelineRange(segment.start, segment.end, dragDelta);
       if (
         !didDrag &&
         Math.abs(moveEvent.clientX - anchorClientX) < 3 &&
-        nextRange.start === targetSegment.start &&
-        nextRange.end === targetSegment.end
+        nextRange.start === segment.start &&
+        nextRange.end === segment.end
       ) {
         return;
       }
 
       didDrag = true;
       latestPreview = nextRange;
-      setPreviewById({ [blockId]: nextRange });
+      setPreviewByOccurrenceKey({ [segment.occurrenceKey]: nextRange });
     };
 
     const onUp = () => {
       controller.abort();
       interactionControllerRef.current = null;
       document.body.classList.remove('is-dragging-timeline-block');
-      setPreviewById({});
+      setPreviewByOccurrenceKey({});
 
-      if (!didDrag || !latestPreview) {
-        onSelect(blockId);
-        return;
-      }
+      onSelect({ date: segment.date, blockId: segment.block.id });
+      if (!didDrag || !latestPreview) return;
 
       const nextTimes = absoluteMinutesToBlockTimes(latestPreview.start, latestPreview.end);
-      onSelect(blockId);
-      void updateBlockTimesBatch(calData, date, [
+      void updateBlockTimesBatch(calData, segment.date, [
         {
-          blockId,
+          blockId: segment.block.id,
           startMin: nextTimes.startMin,
           endMin: nextTimes.endMin,
           ampm: nextTimes.ampm,
@@ -268,95 +302,136 @@ export function TimelineMode({ date, selectedBlockId, onSelect, onCreate }: Time
   return (
     <div className="rtimeline">
       <div className="rtimeline-scroll" ref={scrollRef}>
-        <div style={{ width: totalWidth }}>
+        <div className="rtimeline-sheet" style={{ minWidth: totalWidth + DAY_LABEL_WIDTH }}>
           <div className="rtimeline-header">
-            {Array.from({ length: TOTAL_HOURS }, (_, hour) => (
-              <div key={hour} className="rtimeline-hour" style={{ width: HOUR_WIDTH }}>{hourLabel(hour)}</div>
-            ))}
+            <div className="rtimeline-dayhead" />
+            <div className="rtimeline-hours" style={{ width: totalWidth }}>
+              {Array.from({ length: TOTAL_HOURS }, (_, hour) => (
+                <div key={hour} className="rtimeline-hour" style={{ width: HOUR_WIDTH }}>{hourLabel(hour)}</div>
+              ))}
+            </div>
           </div>
 
-          <div className="rtimeline-bars" style={{ height: bodyHeight }} onPointerDown={beginCreate}>
-            {Array.from({ length: TOTAL_HOURS }, (_, hour) => (
-              <div key={hour} className="rtimeline-gridline" style={{ left: hour * HOUR_WIDTH }} />
-            ))}
-
-            {displaySegments.map(({ block, start, end, lane }) => {
-              const widthPx = ((end - start) / 60) * HOUR_WIDTH;
-              const past = isBlockPast(block, date, now, todayKey) && !block.completed;
-              const label = block.recurring ? `${block.label} (Recurring)` : block.label;
-              return (
-                <div
-                  key={block.id}
-                  className={
-                    'timeline-bar' +
-                    (block.id === selectedBlockId ? ' is-selected' : '') +
-                    (block.completed ? ' is-complete' : '') +
-                    (block.recurring ? ' is-recurring' : '') +
-                    (past ? ' is-past' : '') +
-                    (widthPx < 84 ? ' is-compact' : '') +
-                    (widthPx < 44 ? ' is-mini' : '')
-                  }
-                  style={{
-                    left: (start / 60) * HOUR_WIDTH,
-                    top: lane * LANE_HEIGHT + (LANE_HEIGHT - BAR_HEIGHT) / 2,
-                    width: widthPx,
-                    height: BAR_HEIGHT,
-                    background: appearance?.gradientCss(block) ?? block.color,
-                  }}
-                  title={`${label} - ${formatBlockTimeRange(block)}`}
-                  role="button"
-                  tabIndex={0}
-                  onPointerDown={(event) => beginMove(event, block.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      onSelect(block.id);
-                    }
-                  }}
+          <div className="rtimeline-week">
+            {week.map((day) => (
+              <div
+                key={day.date}
+                className={
+                  'rtimeline-dayrow' +
+                  (day.date === date ? ' is-active' : '') +
+                  (day.date === todayKey ? ' is-today' : '')
+                }
+              >
+                <button
+                  type="button"
+                  className="rtimeline-daylabel"
+                  onClick={() => onFocusDate(day.date)}
+                  title={day.date === date ? 'Focused day' : 'Focus this day'}
                 >
-                  <span className="timeline-bar-label">{label}</span>
-                  <span className="timeline-bar-time">{formatBlockTimeRange(block)}</span>
-                  <button
-                    type="button"
-                    className="timeline-boundary-handle is-leading"
-                    style={{ left: 0 }}
-                    title="Drag to adjust the block start time"
-                    onPointerDown={(event) => beginResize(event, block.id, 'start')}
-                  />
-                  <button
-                    type="button"
-                    className="timeline-boundary-handle is-trailing"
-                    style={{ left: widthPx }}
-                    title="Drag to adjust the block end time"
-                    onPointerDown={(event) => beginResize(event, block.id, 'end')}
-                  />
+                  <span className="rtimeline-dayname">{formatWeekdayLabel(day.date)}</span>
+                  <span className="rtimeline-daydate">{formatMonthDayLabel(day.date)}</span>
+                </button>
+
+                <div
+                  className="rtimeline-daytrack"
+                  style={{ width: totalWidth, height: day.height }}
+                  onPointerDown={(event) => beginCreate(event, day.date, day.laneCount)}
+                >
+                  {Array.from({ length: TOTAL_HOURS }, (_, hour) => (
+                    <div key={hour} className="rtimeline-gridline" style={{ left: hour * HOUR_WIDTH }} />
+                  ))}
+
+                  {!day.segments.length && totalSegments > 0 && (
+                    <div className="rtimeline-dayempty">No scheduled blocks</div>
+                  )}
+
+                  {day.segments.map((segment) => {
+                    const preview = previewByOccurrenceKey[segment.occurrenceKey];
+                    const start = preview?.start ?? segment.start;
+                    const end = preview?.end ?? segment.end;
+                    const widthPx = ((end - start) / 60) * HOUR_WIDTH;
+                    const past = isBlockPast(segment.block, day.date, now, todayKey) && !segment.block.completed;
+                    const label = segment.block.recurring ? `${segment.block.label} (Recurring)` : segment.block.label;
+                    const selected = selection?.date === day.date && selection.blockId === segment.block.id;
+
+                    return (
+                      <div
+                        key={segment.occurrenceKey}
+                        className={
+                          'timeline-bar' +
+                          (selected ? ' is-selected' : '') +
+                          (segment.block.completed ? ' is-complete' : '') +
+                          (segment.block.recurring ? ' is-recurring' : '') +
+                          (past ? ' is-past' : '') +
+                          (widthPx < 84 ? ' is-compact' : '') +
+                          (widthPx < 44 ? ' is-mini' : '')
+                        }
+                        style={{
+                          left: (start / 60) * HOUR_WIDTH,
+                          top: segment.lane * LANE_HEIGHT + (LANE_HEIGHT - BAR_HEIGHT) / 2,
+                          width: widthPx,
+                          height: BAR_HEIGHT,
+                          background: appearance?.gradientCss(segment.block) ?? segment.block.color,
+                        }}
+                        title={`${label} - ${formatBlockTimeRange(segment.block)}`}
+                        role="button"
+                        tabIndex={0}
+                        onPointerDown={(event) => beginMove(event, segment)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onSelect({ date: day.date, blockId: segment.block.id });
+                          }
+                        }}
+                      >
+                        <span className="timeline-bar-label">{label}</span>
+                        <span className="timeline-bar-time">{formatBlockTimeRange(segment.block)}</span>
+                        <button
+                          type="button"
+                          className="timeline-boundary-handle is-leading"
+                          style={{ left: 0 }}
+                          title="Drag to adjust the block start time"
+                          onPointerDown={(event) => beginResize(event, segment, 'start')}
+                        />
+                        <button
+                          type="button"
+                          className="timeline-boundary-handle is-trailing"
+                          style={{ left: widthPx }}
+                          title="Drag to adjust the block end time"
+                          onPointerDown={(event) => beginResize(event, segment, 'end')}
+                        />
+                      </div>
+                    );
+                  })}
+
+                  {createPreview?.date === day.date && createPreview.end - createPreview.start >= 15 && (
+                    <div
+                      className="timeline-bar is-preview"
+                      style={{
+                        left: (createPreview.start / 60) * HOUR_WIDTH,
+                        top: createPreview.lane * LANE_HEIGHT + (LANE_HEIGHT - BAR_HEIGHT) / 2,
+                        width: ((createPreview.end - createPreview.start) / 60) * HOUR_WIDTH,
+                        height: BAR_HEIGHT,
+                      }}
+                    />
+                  )}
+
+                  {day.date === todayKey && (
+                    <div
+                      className="timeline-now-marker"
+                      style={{ left: (now.getHours() * 60 + now.getMinutes()) / 60 * HOUR_WIDTH, height: day.height }}
+                    />
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            ))}
 
-            {createPreview && createPreview.end - createPreview.start >= 15 && (
-              <div
-                className="timeline-bar is-preview"
-                style={{
-                  left: (createPreview.start / 60) * HOUR_WIDTH,
-                  top: createPreview.lane * LANE_HEIGHT + (LANE_HEIGHT - BAR_HEIGHT) / 2,
-                  width: ((createPreview.end - createPreview.start) / 60) * HOUR_WIDTH,
-                  height: BAR_HEIGHT,
-                }}
-              />
-            )}
-
-            {date === todayKey && (
-              <div
-                className="timeline-now-marker"
-                style={{ left: (currentMinutes / 60) * HOUR_WIDTH, height: bodyHeight }}
-              />
+            {!totalSegments && !createPreview && (
+              <div className="rtimeline-empty">
+                No scheduled blocks this week. Drag across any day row to add one.
+              </div>
             )}
           </div>
-
-          {!segments.length && !createPreview && (
-            <div className="rtimeline-empty">No scheduled blocks yet. Drag across the timeline to add one.</div>
-          )}
         </div>
       </div>
     </div>

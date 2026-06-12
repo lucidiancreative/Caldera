@@ -12,6 +12,52 @@ import {
   moveOneOffBlockToDate,
 } from './scheduleMutations';
 
+type RendererWindow = typeof globalThis & {
+  calderaBridge?: {
+    getData(): CalData;
+    notify?(): void;
+    pushSnapshot(): void;
+  };
+  calderaSchedule?: {
+    createBlock(
+      key: string,
+      block: { startMin: number; endMin: number; label: string },
+      recurrence: string,
+      ampm: 'AM' | 'PM',
+    ): Promise<void>;
+    updateBlock(
+      key: string,
+      id: string,
+      label: string,
+      recurrence: string,
+      scope: string,
+      ampm: 'AM' | 'PM',
+    ): Promise<void>;
+    deleteBlock(key: string, id: string, scope?: string): Promise<void>;
+  };
+};
+
+declare const window: RendererWindow;
+
+const pendingCreateBlocks = new Map<string, Promise<void>>();
+
+function snapshotCalendarData(): string | null {
+  const data = window.calderaBridge?.getData();
+  return data ? JSON.stringify(data) : null;
+}
+
+function restoreCalendarData(snapshot: string | null): void {
+  if (!snapshot) return;
+  const current = window.calderaBridge?.getData();
+  if (!current) return;
+  const restored = JSON.parse(snapshot) as CalData;
+  for (const key of Object.keys(current)) {
+    delete (current as Record<string, unknown>)[key];
+  }
+  Object.assign(current, restored);
+  window.calderaBridge?.notify?.();
+}
+
 export async function toggleBlockCompleted(calData: CalData, key: string, blockId: string): Promise<void> {
   window.calderaBridge?.pushSnapshot();
   const recurring = (calData._recurring || []).find((block) => block.id === blockId);
@@ -90,12 +136,40 @@ export async function updateBlockTimesBatch(
 // (palette slots, recurring conversion, scope handling) and persists + notifies.
 const NOOP = Promise.resolve();
 
-export const createBlock = (
+function getCreateBlockRequestKey(
   key: string,
   block: { startMin: number; endMin: number; label: string },
   recurrence: string,
   ampm: 'AM' | 'PM',
-): Promise<void> => window.calderaSchedule?.createBlock(key, block, recurrence, ampm) ?? NOOP;
+): string {
+  return JSON.stringify([key, block.startMin, block.endMin, block.label.trim(), recurrence, ampm]);
+}
+
+export function createBlock(
+  key: string,
+  block: { startMin: number; endMin: number; label: string },
+  recurrence: string,
+  ampm: 'AM' | 'PM',
+): Promise<void> {
+  const requestKey = getCreateBlockRequestKey(key, block, recurrence, ampm);
+  const existing = pendingCreateBlocks.get(requestKey);
+  if (existing) return existing;
+  const snapshot = snapshotCalendarData();
+
+  const request = (window.calderaSchedule?.createBlock(key, block, recurrence, ampm) ?? NOOP)
+    .catch((error) => {
+      restoreCalendarData(snapshot);
+      throw error;
+    })
+    .finally(() => {
+      if (pendingCreateBlocks.get(requestKey) === request) {
+        pendingCreateBlocks.delete(requestKey);
+      }
+    });
+
+  pendingCreateBlocks.set(requestKey, request);
+  return request;
+}
 
 export const updateBlock = (
   key: string,

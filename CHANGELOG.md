@@ -1,5 +1,75 @@
 # Changelog
 
+## [1.7.15] - 2026-06-11
+
+### Fixed
+- Fixed React Schedule time-block creation and editing throwing "Could not save the block" whenever the block's AM/PM differed from the app's current half-day — `saveTimeBlock`/`updateTimeBlock` still called `setScheduleAmPm`, which was left behind in the retired (no-longer-loaded) vanilla `schedule.ts` and threw `ReferenceError: setScheduleAmPm is not defined` at runtime; they now update the shared `clockAmPm` meridian directly
+
+### Testing
+- Added a regression guard asserting the live schedule-bridge functions (`saveTimeBlock`/`updateTimeBlock`/`deleteTimeBlock`) never call symbols that exist only in the compiled-but-unloaded vanilla views
+
+---
+
+## [1.7.14] - 2026-06-11
+
+### Fixed
+- Rolled back React Schedule block-creation mutations when the underlying bridge save fails, so failed saves no longer leave phantom time blocks behind or stack duplicates on retry
+
+### Testing
+- Added regression coverage for failed React `createBlock` bridge calls to ensure calendar data is restored after a rejected save
+
+---
+
+## [1.7.13] - 2026-06-11
+
+### Fixed
+- Made the React add-block modal behave explicitly for new blocks by requiring a non-empty label before Save can run, instead of silently treating an empty-label save as a cancel
+- Added inline save-error feedback in the React block editor so failed create/update attempts no longer look like a dead Save button
+
+### Testing
+- Added regression coverage for the new-block save validation rule used by the React block editor
+
+---
+
+## [1.7.12] - 2026-06-11
+
+### Fixed
+- Prevented duplicate one-off block creation from identical in-flight React Schedule saves in the weekly Timeline flow
+- Fixed the React Schedule focused-day sync so creating or selecting a block on a different week row no longer snaps the header back to a stale day
+
+### Testing
+- Added a regression test covering concurrent identical React `createBlock` requests so one modal save cannot fan out into multiple stored blocks
+
+---
+
+## [1.7.11] - 2026-06-11
+
+### Added
+- Expanded the React Timeline scheduler into a full Sunday-through-Saturday week view with one horizontal timeline row per day
+
+### Changed
+- Kept the Schedule task list focused on the selected day while allowing Timeline selection, drag-create, drag-move, and resize interactions from any visible week row
+- Updated the Schedule header and timeline styling to show the active week range, focused day, and stacked weekday labels more clearly
+
+### Testing
+- Added regression coverage for week-range date helpers and per-day timeline occurrence keys used by recurring blocks in the weekly timeline
+
+---
+
+## [1.7.10] - 2026-06-11
+
+### Changed
+- Kept the current-day number indicator red across every theme and skin by separating its calendar styling from skin-specific `today` accent tokens
+
+---
+
+## [1.7.9] - 2026-06-11
+
+### Added
+- Added a thin red outline for the current day on the calendar grid that stays consistent across all themes and skins
+
+---
+
 ## [1.7.8] - 2026-06-10
 
 ### Fixed

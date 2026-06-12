@@ -1,6 +1,6 @@
 {
   "name": "caldera",
-  "version": "1.7.8",
+  "version": "1.7.15",
   "description": "A proprietary freeware visual event calendar with local-first event import functionality",
   "main": "dist/main.js",
   "scripts": {

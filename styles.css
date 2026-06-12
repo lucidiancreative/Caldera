@@ -10,6 +10,9 @@ button:focus, [role="button"]:focus { outline: none; }
   --text-muted:  #888;
   --accent:      #6c6e7e;
   --accent-soft: #e8ecff;
+  --calendar-today-outline: #e03030;
+  --calendar-today-number: #e03030;
+  --calendar-today-number-bg: rgba(224, 48, 48, 0.75);
   --today-ring:  #e03030;
   --star:        #f0a500;
   --accent-shadow: rgba(108, 110, 126, 0.18);
@@ -276,8 +279,14 @@ body.shader-static.skin-teal.dark #shader-bg {
   transform: translateY(-5px);
 }
 
-.day-cell.today {
-  border: 2px solid var(--today-ring);
+.day-cell.today::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--calendar-today-outline);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .day-cell.empty {
@@ -386,11 +395,11 @@ body.shader-static.skin-teal.dark #shader-bg {
 }
 
 .day-cell.today .day-num {
-  color: var(--today-ring);
+  color: var(--calendar-today-number);
   font-size: 26px;
 }
 .day-cell.today.has-image .day-num {
-  background: var(--today-ring-bg);
+  background: var(--calendar-today-number-bg);
   color: #fff;
 }
 
@@ -996,8 +1005,17 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   align-items: center;
   justify-content: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+.react-schedule-datecopy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 260px;
 }
 .react-schedule-datelabel { font-size: 14px; font-weight: 600; }
+.react-schedule-datesub { font-size: 11px; color: var(--text-muted); }
 .react-schedule-today {
   font-size: 12px;
   padding: 4px 12px;
@@ -1023,7 +1041,7 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   font-size: 13px;
 }
 
-/* Day-scale timeline — reuses .timeline-bar styling, adds its own scroll surface. */
+/* Week timeline — shared horizontal hour axis with one vertically stacked day row per weekday. */
 .rtimeline {
   height: 100%;
   display: flex;
@@ -1031,21 +1049,43 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   min-height: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--surface);
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.38), transparent 40%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface) 88%, transparent));
   overflow: hidden;
 }
 .rtimeline-scroll { overflow: auto; flex: 1; min-height: 0; }
 .rtimeline-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
 .rtimeline-scroll::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
 body.dark .rtimeline-scroll::-webkit-scrollbar-thumb { background: #48484a; }
+.rtimeline-sheet {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  position: relative;
+}
 .rtimeline-header {
   display: flex;
   position: sticky;
   top: 0;
-  z-index: 2;
-  height: 30px;
-  background: var(--surface);
+  z-index: 4;
+  min-height: 34px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
+}
+.rtimeline-dayhead {
+  width: 104px;
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  border-right: 1px solid var(--border);
+  background: inherit;
+}
+.rtimeline-hours {
+  display: flex;
+  position: relative;
 }
 .rtimeline-hour {
   flex-shrink: 0;
@@ -1055,17 +1095,88 @@ body.dark .rtimeline-scroll::-webkit-scrollbar-thumb { background: #48484a; }
   border-left: 1px solid var(--border);
   box-sizing: border-box;
 }
-.rtimeline-bars { position: relative; cursor: crosshair; }
+.rtimeline-week {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  position: relative;
+}
+.rtimeline-dayrow {
+  display: flex;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+}
+.rtimeline-dayrow:last-child { border-bottom: none; }
+.rtimeline-dayrow.is-active .rtimeline-daytrack {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 44%, transparent), transparent);
+}
+.rtimeline-dayrow.is-active .rtimeline-daylabel {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 64%, var(--surface));
+}
+.rtimeline-dayrow.is-today .rtimeline-daylabel {
+  box-shadow: inset 3px 0 0 var(--today-ring);
+}
+.rtimeline-daylabel {
+  width: 104px;
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding: 12px 14px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+.rtimeline-daylabel:hover {
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface));
+  color: var(--accent);
+}
+.rtimeline-dayname {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.rtimeline-daydate {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.rtimeline-daytrack {
+  position: relative;
+  cursor: crosshair;
+  flex-shrink: 0;
+}
 .rtimeline-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); opacity: 0.45; }
+.rtimeline-dayempty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  pointer-events: none;
+}
 .rtimeline-empty {
   position: absolute;
-  inset: 30px 0 0 0;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
   font-size: 13px;
   pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
 }
 
 /* Daily clock mode — reuses .clock-*, .ampm-btn and .block-chip from the vanilla view. */
@@ -1132,6 +1243,7 @@ body.dark .rtimeline-scroll::-webkit-scrollbar-thumb { background: #48484a; }
 .rblock-editor-head { display: flex; align-items: baseline; justify-content: space-between; }
 .rblock-editor-head h3 { margin: 0; font-size: 15px; }
 .rblock-editor-time { font-size: 12px; color: var(--text-muted); }
+.rblock-editor-form { display: flex; flex-direction: column; gap: 12px; }
 .rblock-editor-input,
 .rblock-editor-row select {
   font: inherit; border: 1px solid var(--border); border-radius: 8px;
@@ -1142,8 +1254,11 @@ body.dark .rtimeline-scroll::-webkit-scrollbar-thumb { background: #48484a; }
 .rblock-editor-row label { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); }
 .rblock-editor-row select { font-size: 12px; padding: 6px 8px; }
 .rblock-editor-scope { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.rblock-editor-note { min-height: 16px; font-size: 11px; color: var(--text-muted); }
+.rblock-editor-note.is-error { color: var(--today-ring); }
 .rblock-editor-actions { display: flex; gap: 8px; margin-top: 4px; }
 .rblock-editor-save { flex: 1; padding: 8px; border: none; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.rblock-editor-save:disabled { opacity: 0.55; cursor: not-allowed; }
 .rblock-editor-del { padding: 8px 14px; border: 1px solid var(--today-ring); border-radius: 8px; background: transparent; color: var(--today-ring); font: inherit; cursor: pointer; }
 .rblock-editor-cancel { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .task-list::-webkit-scrollbar { width: 4px; }

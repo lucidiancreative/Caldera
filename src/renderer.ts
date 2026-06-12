@@ -31,40 +31,6 @@ interface ShaderPalette {
   speed: number;
 }
 
-interface TimeBlockPopupState {
-  mode: 'new' | 'edit';
-  key: string;
-  startMin: number;
-  endMin: number;
-  id?: string;
-  _cleanup?: () => void;
-}
-
-interface TimelineResizeState {
-  key: string;
-  kind: 'leading' | 'between' | 'trailing';
-  leftBlockId?: string;
-  rightBlockId?: string;
-  hourWidth: number;
-}
-
-interface TimelineSegment {
-  block: TimeBlock | RecurringBlock;
-  recurring: boolean;
-  completed: boolean;
-  start: number;
-  end: number;
-}
-
-interface ScheduleBlockSelection {
-  key: string;
-  blockId: string;
-}
-
-type BlockOrPartial =
-  | (TimeBlock & { _recurring?: boolean; _amOverlay?: boolean; recurrence?: string; dayOfWeek?: number; dayOfMonth?: number; completedDates?: string[]; excludedDates?: string[] })
-  | { startMin: number; endMin: number; id?: undefined; label?: undefined; color?: string; paletteSlot?: number; ampm?: AmPm };
-
 const BLOCK_COLORS:    string[]                                         = ['#4f6ef7', '#e03030', '#2eb67d', '#f0a500', '#a259ff', '#ff6b35'];
 
 // Lighter highlight paired with each block color — used for radial/linear gradients on arcs and chips
@@ -236,17 +202,9 @@ function getBlockGradientCss(block: { paletteSlot?: number; color?: string }, an
   return `linear-gradient(${angle}, ${getBlockHighlightBySlot(slot)} 0%, ${getBlockColorBySlot(slot)} 100%)`;
 }
 
-function applyBlockGradientStyle(el: HTMLElement, block: { paletteSlot?: number; color?: string }, angle = '135deg'): void {
-  el.style.background = getBlockGradientCss(block, angle);
-}
-
 function getBlockStorageAppearance(block: { paletteSlot?: number; color?: string }): { paletteSlot: number; color: string } {
   const paletteSlot = getBlockPaletteSlot(block);
   return { paletteSlot, color: getBlockColorBySlot(paletteSlot) };
-}
-
-function getBlockGradientId(slot: number): string {
-  return `block-grad-slot-${slot}`;
 }
 
 function getClockBlockCornerRadius(): number {
@@ -262,6 +220,127 @@ window.calderaAppearance = {
   gradientCss: (block) => getBlockGradientCss(block),
   cornerRadius: () => getClockBlockCornerRadius(),
 };
+
+// Schedule block write operations exposed via window.calderaSchedule below. They run the
+// shared block domain logic (palette slots, recurring conversion, scope handling) and persist
+// through saveCalendarData → notify so a React edit repaints the mirror. React always passes an
+// explicit ampm, so there is no clock meridian to track here.
+async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMin: number; endMin: number; label: string }, recurrence: string, ampm: AmPm): Promise<void> {
+  pushCalendarSnapshot();
+  if (recurrence === 'none') {
+    const day = getOrInitDayData(key);
+    const paletteSlot = day.timeBlocks.length % getBlockPaletteSize();
+    day.timeBlocks.push({
+      id: generateCalendarEntryId(),
+      startMin,
+      endMin,
+      label,
+      ...getBlockStorageAppearance({ paletteSlot }),
+      ampm,
+      completed: false,
+      subtasks: [],
+    });
+  } else {
+    if (!calData._recurring) calData._recurring = [];
+    const paletteSlot = calData._recurring.length % getBlockPaletteSize();
+    const [y, m, d] = key.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    calData._recurring.push({
+      id: generateCalendarEntryId(), startMin, endMin, label, ...getBlockStorageAppearance({ paletteSlot }), ampm,
+      recurrence: recurrence as RecurringBlock['recurrence'],
+      dayOfWeek: date.getDay(),
+      dayOfMonth: d,
+      completedDates: [],
+      excludedDates: [],
+      subtasks: [],
+    });
+  }
+  await saveCalendarDataAndRefresh(key, { renderSchedule: true });
+}
+
+async function updateTimeBlock(key: string, blockId: string, label: string, recurrence: string, scope: string, ampm: AmPm): Promise<void> {
+  pushCalendarSnapshot();
+  const recurring = calData._recurring || [];
+  const rIdx = recurring.findIndex(b => b.id === blockId);
+  const isRecurring = rIdx !== -1;
+
+  if (isRecurring) {
+    const block = recurring[rIdx];
+    const appearance = getBlockStorageAppearance(block);
+    if (scope === 'today') {
+      if (!block.excludedDates) block.excludedDates = [];
+      block.excludedDates.push(key);
+      const day = getOrInitDayData(key);
+      day.timeBlocks.push({
+        id: generateCalendarEntryId(), startMin: block.startMin, endMin: block.endMin,
+        label, ...appearance, ampm, completed: false, subtasks: [...(block.subtasks || [])],
+      });
+    } else {
+      block.label = label;
+      block.ampm = ampm;
+      if (recurrence === 'none') {
+        recurring.splice(rIdx, 1);
+        const day = getOrInitDayData(key);
+        const completed = block.completedDates?.includes(key) || false;
+        day.timeBlocks.push({
+          id: block.id, startMin: block.startMin, endMin: block.endMin,
+          label, ...appearance, ampm, completed, subtasks: [...(block.subtasks || [])],
+        });
+      } else {
+        block.recurrence = recurrence as RecurringBlock['recurrence'];
+        const [y, m, d] = key.split('-').map(Number);
+        const date = new Date(y, m - 1, d);
+        block.dayOfWeek = date.getDay();
+        block.dayOfMonth = d;
+      }
+    }
+  } else {
+    const block = getDayData(key)?.timeBlocks?.find(b => b.id === blockId);
+    if (!block) return;
+    const appearance = getBlockStorageAppearance(block);
+    block.label = label;
+    block.ampm = ampm;
+    if (recurrence !== 'none') {
+      const day = getDayData(key)!;
+      day.timeBlocks = day.timeBlocks.filter(b => b.id !== blockId);
+      if (!calData._recurring) calData._recurring = [];
+      const [y, m, d] = key.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      calData._recurring.push({
+        id: block.id, startMin: block.startMin, endMin: block.endMin,
+        label, ...appearance, ampm,
+        recurrence: recurrence as RecurringBlock['recurrence'],
+        dayOfWeek: date.getDay(),
+        dayOfMonth: d,
+        completedDates: block.completed ? [key] : [],
+        excludedDates: [],
+        subtasks: [...(block.subtasks || [])],
+      });
+    }
+  }
+  await saveCalendarDataAndRefresh(key, { renderCurrentSchedule: true });
+}
+
+async function deleteTimeBlock(key: string, blockId: string, scope?: string): Promise<void> {
+  pushCalendarSnapshot();
+  const recurring = calData._recurring || [];
+  const rIdx = recurring.findIndex(b => b.id === blockId);
+  if (rIdx !== -1) {
+    if (scope === 'today') {
+      const block = recurring[rIdx];
+      if (!block.excludedDates) block.excludedDates = [];
+      block.excludedDates.push(key);
+    } else {
+      recurring.splice(rIdx, 1);
+    }
+    await saveCalendarDataAndRefresh(key, { renderCurrentSchedule: true });
+    return;
+  }
+  const day = getDayData(key);
+  if (!day?.timeBlocks) return;
+  day.timeBlocks = day.timeBlocks.filter(b => b.id !== blockId);
+  await saveCalendarDataAndRefresh(key, { renderSchedule: true });
+}
 
 // Expose the schedule write operations so the React view edits blocks through the same
 // domain logic as the vanilla view (palette slots, recurring conversion, scopes) instead
@@ -381,14 +460,10 @@ function activateSkin(id: SkinId): void {
       document.body.classList.add('shader-static');
     }
   }
-  _skinSwitchPending = true;
   localStorage.setItem('skin', id);
   notifyCalendarDataChanged(); // repaint the React mirror with the new skin's palette
   notifyCalendarPrefsChanged();
 }
-
-// -- Skin switch animation flag -------------------------
-let _skinSwitchPending = false;
 
 // -- Shader preference & low-power detection ------------
 type ShaderPref = 'on' | 'off' | 'auto';
@@ -623,598 +698,6 @@ function bindCalendarUIEvents(): void {
   bindGlassButtonLightFollow();
 }
 
-// -- Skin picker -----------------------------------------
-function openSettingsModal(): void {
-  renderThemeToggle();
-  renderSkinGrid();
-  renderShaderToggle();
-  qId('settings-overlay').classList.remove('hidden');
-}
-
-function closeSettingsModal(): void {
-  qId('settings-overlay').classList.add('hidden');
-}
-
-// -- AI Import: Settings Modal -------------------------
-
-async function openAiSettingsModal(): Promise<void> {
-  const cfg = await calBridge.aiLoadConfig();
-  const savedModel = cfg?.ollamaModel || '';
-  if (cfg) {
-    qId<HTMLInputElement>('ai-apikey-input').value    = cfg.apiKey      || '';
-    qId<HTMLInputElement>('ai-interests-input').value = cfg.interests   || '';
-    qId<HTMLInputElement>('ai-ollama-url').value      = cfg.ollamaUrl   || 'http://localhost:11434';
-    setAiDateValue('ai-date-start', cfg.dateRangeStart || '');
-    setAiDateValue('ai-date-end', cfg.dateRangeEnd || '');
-    renderAiUrlList(cfg.sites || []);
-    renderAiKeywordList(cfg.keywords || []);
-    const providerRadio = document.querySelector(`input[name="ai-provider"][value="${cfg.provider || 'claude'}"]`) as HTMLInputElement | null;
-    if (providerRadio) { providerRadio.checked = true; syncAiProviderPanel(cfg.provider || 'claude'); }
-    const modeRadio = document.querySelector(`input[name="ai-mode"][value="${cfg.mode || 'fetch'}"]`) as HTMLInputElement | null;
-    if (modeRadio) { modeRadio.checked = true; syncAiModePanel(cfg.mode || 'fetch'); }
-    if (cfg.provider === 'ollama') {
-      await refreshOllamaModels();
-      if (savedModel) selectModel(savedModel);
-    }
-  } else {
-    qId<HTMLInputElement>('ai-provider-claude').checked = true;
-    qId<HTMLInputElement>('ai-mode-fetch').checked      = true;
-    qId<HTMLInputElement>('ai-ollama-url').value        = 'http://localhost:11434';
-    setAiDateValue('ai-date-start', '');
-    setAiDateValue('ai-date-end', '');
-    syncAiProviderPanel('claude');
-    syncAiModePanel('fetch');
-    renderAiUrlList([]);
-    renderAiKeywordList([]);
-  }
-  setAiStatus('', '');
-  qId('ai-overlay').classList.remove('hidden');
-}
-
-function closeAiSettingsModal(): void {
-  qId('ai-overlay').classList.add('hidden');
-}
-
-function syncAiProviderPanel(provider: string): void {
-  const isOllama = provider === 'ollama';
-  const needsApiKey = provider === 'claude' || provider === 'openai';
-  qId('ai-apikey-panel').classList.toggle('hidden', !needsApiKey);
-  qId('ai-ollama-panel').classList.toggle('hidden', !isOllama);
-  // Update API key label and placeholder based on provider
-  const label = qId('ai-apikey-label');
-  const input = qId<HTMLInputElement>('ai-apikey-input');
-  if (provider === 'claude') {
-    label.textContent = 'Anthropic API Key';
-    input.placeholder = 'sk-ant-api03-…';
-  } else if (provider === 'openai') {
-    label.textContent = 'OpenAI API Key';
-    input.placeholder = 'sk-...';
-  }
-  // Only Claude supports web search mode — hide mode selector for others
-  const showModeSelector = provider === 'claude';
-  qId('ai-mode-group').classList.toggle('hidden', !showModeSelector);
-  if (!showModeSelector) {
-    qId<HTMLInputElement>('ai-mode-fetch').checked = true;
-    syncAiModePanel('fetch');
-  }
-}
-
-function syncAiModePanel(mode: string): void {
-  qId('ai-fetch-panel').classList.toggle('hidden', mode !== 'fetch');
-  qId('ai-websearch-panel').classList.toggle('hidden', mode !== 'websearch');
-}
-
-function toggleModelDropdown(): void {
-  const trigger = qId('ai-model-trigger');
-  const list = qId('ai-model-list');
-  const isOpen = !list.classList.contains('hidden');
-  if (isOpen) {
-    closeModelDropdown();
-  } else {
-    trigger.classList.add('open');
-    list.classList.remove('hidden');
-  }
-}
-
-function closeModelDropdown(): void {
-  qId('ai-model-trigger').classList.remove('open');
-  qId('ai-model-list').classList.add('hidden');
-}
-
-function selectModel(model: string): void {
-  qId<HTMLInputElement>('ai-ollama-model').value = model;
-  const valueEl = qId('ai-model-value');
-  valueEl.textContent = model || 'Select a model...';
-  valueEl.classList.toggle('placeholder', !model);
-  qId('ai-model-list').querySelectorAll('.ai-model-item').forEach((item) => {
-    item.classList.toggle('selected', item.getAttribute('data-model') === model);
-  });
-  closeModelDropdown();
-}
-
-async function refreshOllamaModels(): Promise<void> {
-  const list = qId('ai-model-list');
-  const btn = qId<HTMLButtonElement>('ai-refresh-models');
-  const trigger = qId<HTMLButtonElement>('ai-model-trigger');
-  const currentValue = qId<HTMLInputElement>('ai-ollama-model').value;
-
-  btn.classList.add('loading');
-  btn.disabled = true;
-  trigger.disabled = true;
-
-  try {
-    const models = await calBridge.ollamaListModels();
-    list.innerHTML = '';
-    if (models.length === 0) {
-      const item = document.createElement('div');
-      item.className = 'ai-model-item no-models';
-      item.textContent = 'No models found';
-      list.appendChild(item);
-    } else {
-      models.forEach((name) => {
-        const item = document.createElement('div');
-        item.className = 'ai-model-item';
-        if (name === currentValue) item.classList.add('selected');
-        item.setAttribute('data-model', name);
-        item.textContent = name;
-        item.addEventListener('click', () => selectModel(name));
-        list.appendChild(item);
-      });
-      if (!currentValue && models.length > 0) selectModel(models[0]);
-    }
-  } catch {
-    list.innerHTML = '<div class="ai-model-item no-models">Error fetching models</div>';
-  } finally {
-    btn.classList.remove('loading');
-    btn.disabled = false;
-    trigger.disabled = false;
-  }
-}
-
-// -- AI Date Picker ------------------------------------
-
-let aiDatePickerTarget: string | null = null;
-let aiDatePickerYear = new Date().getFullYear();
-let aiDatePickerMonth = new Date().getMonth();
-
-function setAiDateValue(inputId: string, value: string): void {
-  qId<HTMLInputElement>(inputId).value = value;
-  const btn = qId<HTMLButtonElement>(inputId + '-btn');
-  const textSpan = btn.querySelector('.ai-date-btn-text') as HTMLSpanElement;
-  if (value) {
-    textSpan.textContent = formatDisplayDate(value);
-    btn.classList.add('has-value');
-  } else {
-    textSpan.textContent = inputId === 'ai-date-start' ? 'Start date' : 'End date';
-    btn.classList.remove('has-value');
-  }
-}
-
-function openAiDatePicker(targetId: string, anchorBtn: HTMLElement): void {
-  aiDatePickerTarget = targetId;
-  const currentVal = qId<HTMLInputElement>(targetId).value;
-  if (currentVal && /^\d{4}-\d{2}-\d{2}$/.test(currentVal)) {
-    const [y, m] = currentVal.split('-').map(Number);
-    aiDatePickerYear = y;
-    aiDatePickerMonth = m - 1;
-  } else {
-    const now = new Date();
-    aiDatePickerYear = now.getFullYear();
-    aiDatePickerMonth = now.getMonth();
-  }
-  renderAiDatePicker();
-  const picker = qId('ai-datepicker');
-  picker.classList.remove('hidden');
-  const rect = anchorBtn.getBoundingClientRect();
-  const pickerHeight = 280;
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const showAbove = spaceBelow < pickerHeight && rect.top > pickerHeight;
-  picker.style.left = rect.left + 'px';
-  picker.style.top = showAbove ? (rect.top - pickerHeight - 4) + 'px' : (rect.bottom + 4) + 'px';
-}
-
-function closeAiDatePicker(): void {
-  qId('ai-datepicker').classList.add('hidden');
-  aiDatePickerTarget = null;
-}
-
-function renderAiDatePicker(): void {
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                      'July', 'August', 'September', 'October', 'November', 'December'];
-  qId('ai-dp-month-year').textContent = `${monthNames[aiDatePickerMonth]} ${aiDatePickerYear}`;
-
-  const daysContainer = qId('ai-dp-days');
-  daysContainer.innerHTML = '';
-
-  const firstDay = new Date(aiDatePickerYear, aiDatePickerMonth, 1).getDay();
-  const daysInMonth = new Date(aiDatePickerYear, aiDatePickerMonth + 1, 0).getDate();
-  const daysInPrevMonth = new Date(aiDatePickerYear, aiDatePickerMonth, 0).getDate();
-
-  const today = getTodayKey();
-  const selectedVal = aiDatePickerTarget ? qId<HTMLInputElement>(aiDatePickerTarget).value : '';
-
-  for (let i = firstDay - 1; i >= 0; i--) {
-    const day = daysInPrevMonth - i;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ai-dp-day other-month';
-    btn.textContent = String(day);
-    const m = aiDatePickerMonth === 0 ? 12 : aiDatePickerMonth;
-    const y = aiDatePickerMonth === 0 ? aiDatePickerYear - 1 : aiDatePickerYear;
-    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    btn.addEventListener('click', () => selectAiDate(dateStr));
-    daysContainer.appendChild(btn);
-  }
-
-  for (let day = 1; day <= daysInMonth; day++) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ai-dp-day';
-    btn.textContent = String(day);
-    const dateStr = `${aiDatePickerYear}-${String(aiDatePickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    if (dateStr === today) btn.classList.add('today');
-    if (dateStr === selectedVal) btn.classList.add('selected');
-    btn.addEventListener('click', () => selectAiDate(dateStr));
-    daysContainer.appendChild(btn);
-  }
-
-  const totalCells = firstDay + daysInMonth;
-  const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
-  for (let day = 1; day <= remaining; day++) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ai-dp-day other-month';
-    btn.textContent = String(day);
-    const m = aiDatePickerMonth === 11 ? 1 : aiDatePickerMonth + 2;
-    const y = aiDatePickerMonth === 11 ? aiDatePickerYear + 1 : aiDatePickerYear;
-    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    btn.addEventListener('click', () => selectAiDate(dateStr));
-    daysContainer.appendChild(btn);
-  }
-}
-
-function selectAiDate(dateStr: string): void {
-  if (aiDatePickerTarget) {
-    setAiDateValue(aiDatePickerTarget, dateStr);
-  }
-  closeAiDatePicker();
-}
-
-function aiDatePickerPrev(): void {
-  aiDatePickerMonth--;
-  if (aiDatePickerMonth < 0) {
-    aiDatePickerMonth = 11;
-    aiDatePickerYear--;
-  }
-  renderAiDatePicker();
-}
-
-function aiDatePickerNext(): void {
-  aiDatePickerMonth++;
-  if (aiDatePickerMonth > 11) {
-    aiDatePickerMonth = 0;
-    aiDatePickerYear++;
-  }
-  renderAiDatePicker();
-}
-
-function aiDatePickerToday(): void {
-  selectAiDate(getTodayKey());
-}
-
-function aiDatePickerClear(): void {
-  if (aiDatePickerTarget) {
-    setAiDateValue(aiDatePickerTarget, '');
-  }
-  closeAiDatePicker();
-}
-
-function renderAiUrlList(sites: string[]): void {
-  const list = qId('ai-url-list');
-  renderList(list, sites, (url, i) => {
-    const row  = document.createElement('div');
-    row.className = 'ai-url-row';
-    const span = document.createElement('span');
-    span.textContent = url;
-    const btn  = document.createElement('button');
-    btn.className   = 'ai-url-remove';
-    btn.textContent = '\u2715';
-    btn.title       = 'Remove';
-    btn.addEventListener('click', () => {
-      const current = getAiSitesFromList();
-      current.splice(i, 1);
-      renderAiUrlList(current);
-    });
-    row.append(span, btn);
-    return row;
-  });
-}
-
-function getAiSitesFromList(): string[] {
-  return Array.from(document.querySelectorAll('#ai-url-list .ai-url-row span')).map(s => s.textContent || '');
-}
-
-function renderAiKeywordList(keywords: string[]): void {
-  const list = qId('ai-keyword-list');
-  renderList(list, keywords, (kw, i) => {
-    const row  = document.createElement('div');
-    row.className = 'ai-url-row';
-    const span = document.createElement('span');
-    span.textContent = kw;
-    const btn  = document.createElement('button');
-    btn.className   = 'ai-url-remove';
-    btn.textContent = '\u2715';
-    btn.title       = 'Remove';
-    btn.addEventListener('click', () => {
-      const current = getAiKeywordsFromList();
-      current.splice(i, 1);
-      renderAiKeywordList(current);
-    });
-    row.append(span, btn);
-    return row;
-  });
-}
-
-function getAiKeywordsFromList(): string[] {
-  return Array.from(document.querySelectorAll('#ai-keyword-list .ai-url-row span')).map(s => s.textContent || '');
-}
-
-function getAiConfig(): AiConfig {
-  const provider       = (document.querySelector('input[name="ai-provider"]:checked') as HTMLInputElement | null)?.value || 'claude';
-  const apiKey         = qId<HTMLInputElement>('ai-apikey-input').value.trim();
-  const ollamaUrl      = qId<HTMLInputElement>('ai-ollama-url').value.trim();
-  const ollamaModel    = qId<HTMLInputElement>('ai-ollama-model').value;
-  const mode           = (document.querySelector('input[name="ai-mode"]:checked') as HTMLInputElement | null)?.value || 'fetch';
-  const interests      = qId<HTMLInputElement>('ai-interests-input').value.trim();
-  const sites          = getAiSitesFromList();
-  const keywords       = getAiKeywordsFromList();
-  const dateRangeStart = qId<HTMLInputElement>('ai-date-start').value.trim();
-  const dateRangeEnd   = qId<HTMLInputElement>('ai-date-end').value.trim();
-  return { provider: provider as AiConfig['provider'], apiKey, ollamaUrl, ollamaModel, mode: mode as AiConfig['mode'], interests, sites, keywords, dateRangeStart, dateRangeEnd };
-}
-
-function setAiStatus(msg: string, type: string): void {
-  const el = qId('ai-status');
-  el.textContent = msg;
-  el.className   = 'ai-status' + (type ? ` ${type}` : '') + (msg ? '' : ' hidden');
-}
-
-function isLocalhostUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.toLowerCase();
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
-  } catch { return false; }
-}
-
-async function saveAiSettings(): Promise<void> {
-  const cfg = getAiConfig();
-  if (cfg.provider === 'claude' && !cfg.apiKey) {
-    setAiStatus('Please enter your Anthropic API key.', 'error'); return;
-  }
-  if (cfg.provider === 'openai' && !cfg.apiKey) {
-    setAiStatus('Please enter your OpenAI API key.', 'error'); return;
-  }
-  if (cfg.provider === 'ollama' && !cfg.ollamaUrl) {
-    setAiStatus('Please enter the Ollama endpoint URL.', 'error'); return;
-  }
-  // Warn if using unencrypted HTTP for non-localhost Ollama endpoint
-  if (cfg.provider === 'ollama' && cfg.ollamaUrl.startsWith('http://') && !isLocalhostUrl(cfg.ollamaUrl)) {
-    setAiStatus('Warning: Using unencrypted HTTP for a remote Ollama server. Consider using HTTPS.', 'warning');
-    await calBridge.aiSaveConfig(cfg);
-    return;
-  }
-  await calBridge.aiSaveConfig(cfg);
-  setAiStatus('Settings saved.', '');
-}
-
-async function runAiImport(): Promise<void> {
-  const cfg = getAiConfig();
-  if (cfg.provider === 'claude' && !cfg.apiKey) {
-    setAiStatus('Please enter and save your API key first.', 'error'); return;
-  }
-  if (cfg.provider === 'openai' && !cfg.apiKey) {
-    setAiStatus('Please enter and save your API key first.', 'error'); return;
-  }
-  if (cfg.provider === 'ollama' && !cfg.ollamaUrl) {
-    setAiStatus('Please enter the Ollama endpoint URL.', 'error'); return;
-  }
-  await calBridge.aiSaveConfig(cfg);
-  setAiStatus('Running import\u2026 this may take up to 30 seconds.', 'loading');
-  qId<HTMLButtonElement>('ai-run-btn').disabled = true;
-  try {
-    const result = await calBridge.aiRunImport();
-    if (result.error) { setAiStatus(`Error: ${result.error}`, 'error'); return; }
-    if (!result.events?.length) { setAiStatus('No events found. Try adjusting your interests or URLs.', ''); return; }
-    aiPendingEvents = result.events;
-    closeAiSettingsModal();
-    openAiReviewModal(result.events);
-  } finally {
-    qId<HTMLButtonElement>('ai-run-btn').disabled = false;
-  }
-}
-
-// -- AI Import: Review Modal ---------------------------
-
-function openAiReviewModal(events: AiEvent[]): void {
-  const count = events.length;
-  qId('ai-review-title').textContent =
-    `Found ${count} Event${count === 1 ? '' : 's'}`;
-  qId('ai-review-subtitle').textContent =
-    'Select the events you want to add to your calendar.';
-  renderAiEventList(events);
-  qId('ai-review-overlay').classList.remove('hidden');
-}
-
-function closeAiReviewModal(): void {
-  qId('ai-review-overlay').classList.add('hidden');
-  aiPendingEvents = [];
-}
-
-function renderAiEventList(events: AiEvent[]): void {
-  const list = qId('ai-event-list');
-  renderList(list, events, (ev, i) => {
-    const row = document.createElement('div');
-    row.className  = 'ai-event-row checked';
-    row.dataset.idx = String(i);
-
-    const cb    = document.createElement('input') as HTMLInputElement;
-    cb.type     = 'checkbox';
-    cb.checked  = true;
-    cb.addEventListener('change', () => row.classList.toggle('checked', cb.checked));
-    row.addEventListener('click', (e: MouseEvent) => {
-      if (e.target === cb) return;
-      cb.checked = !cb.checked;
-      cb.dispatchEvent(new Event('change'));
-    });
-
-    const info  = document.createElement('div');
-    info.className = 'ai-event-info';
-
-    const title = document.createElement('div');
-    title.className   = 'ai-event-title';
-    title.textContent = ev.title;
-
-    const meta  = document.createElement('div');
-    meta.className = 'ai-event-meta';
-    let metaText = formatDisplayDate(ev.date);
-    if (ev.time) metaText += ' \u00b7 ' + formatTime12h(ev.time);
-    meta.textContent = metaText;
-    if (ev.sourceUrl) {
-      let hostname = ev.sourceUrl;
-      try { hostname = new URL(ev.sourceUrl).hostname; } catch {}
-      const sep  = document.createTextNode(' \u00b7 ');
-      const link = document.createElement('span');
-      link.className   = 'ai-event-link';
-      link.textContent = hostname;
-      link.title       = ev.sourceUrl;
-      link.addEventListener('click', (e: MouseEvent) => {
-        e.stopPropagation(); // don't toggle the checkbox
-        calBridge.openExternal(ev.sourceUrl);
-      });
-      meta.append(sep, link);
-    }
-
-    const notes = document.createElement('div');
-    notes.className   = 'ai-event-notes';
-    notes.textContent = ev.notes;
-    if (!ev.notes) notes.style.display = 'none';
-
-    info.append(title, meta, notes);
-    row.append(cb, info);
-    return row;
-  });
-}
-
-async function addSelectedAiEvents(): Promise<void> {
-  const rows = Array.from(document.querySelectorAll('#ai-event-list .ai-event-row.checked')) as HTMLElement[];
-  if (!rows.length) { closeAiReviewModal(); return; }
-  pushCalendarSnapshot();
-  for (const row of rows) {
-    const ev  = aiPendingEvents[parseInt(row.dataset.idx!)];
-    if (!ev) continue;
-    const day = getOrInitDayData(ev.date);
-    const id  = generateCalendarEntryId();
-    const noteParts = [ev.title, ev.notes, ev.sourceUrl].filter(Boolean);
-    day.events.push({ id, image: null, notes: noteParts.join('\n'), time: ev.time || '' });
-    if (!day.featuredId) day.featuredId = id;
-  }
-  await saveCalendarDataAndRefresh(rows[0] ? aiPendingEvents[parseInt(rows[0].dataset.idx!)]?.date || getTodayKey() : getTodayKey(), {
-    renderCalendarGrid: true,
-    renderMonth: true,
-  });
-  closeAiReviewModal();
-}
-
-function renderThemeToggle(): void {
-  const isDark = document.body.classList.contains('dark');
-  (document.querySelectorAll('.theme-opt') as NodeListOf<HTMLButtonElement>).forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.theme === (isDark ? 'dark' : 'light'));
-  });
-}
-
-function renderSkinGrid(): void {
-  const grid    = qId('skin-grid');
-  grid.innerHTML = '';
-  const current = getCurrentSkin();
-
-  Object.values(SKINS).forEach(skin => {
-    const card = document.createElement('button');
-    card.className   = 'skin-card' + (skin.id === current ? ' active' : '');
-    card.dataset.skinId = skin.id;
-
-    const preview = document.createElement('div');
-    preview.className = `skin-preview skin-preview-${skin.id}`;
-
-    const label = document.createElement('span');
-    label.textContent = skin.label;
-
-    card.append(preview, label);
-    card.addEventListener('click', () => {
-      activateSkin(skin.id);
-      renderSkinGrid();
-      renderShaderToggle();
-      // Re-render grid so cell animation delays apply/remove correctly
-      renderCalendarGrid();
-    });
-    grid.appendChild(card);
-  });
-}
-
-function renderShaderToggle(): void {
-  const section = qId('shader-toggle-section');
-  const current = getCurrentSkin();
-  const isGlassSkin = SKINS[current]?.glassVariant ?? false;
-
-  // Only show shader toggle for glass skins
-  section.style.display = isGlassSkin ? '' : 'none';
-  if (!isGlassSkin) return;
-
-  const pref = getShaderPref();
-  (document.querySelectorAll('.shader-opt') as NodeListOf<HTMLButtonElement>).forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.pref === pref);
-  });
-
-  // Update hint text based on current state
-  const hint = qId('shader-toggle-hint');
-  if (pref === 'auto') {
-    if (_shaderDisabledByLowPower) {
-      hint.textContent = 'Disabled (low battery detected)';
-    } else if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      hint.textContent = 'Disabled (reduced motion preference)';
-    } else {
-      hint.textContent = 'Adjusts based on battery and system preferences';
-    }
-  } else if (pref === 'off') {
-    hint.textContent = 'Static background for better performance';
-  } else {
-    hint.textContent = 'Animated shader always enabled';
-  }
-}
-
-function bindThemeToggleEvents(): void {
-  (document.querySelectorAll('.theme-opt') as NodeListOf<HTMLButtonElement>).forEach(btn => {
-    btn.addEventListener('click', () => {
-      const isDark = btn.dataset.theme === 'dark';
-      applyCalendarTheme(isDark);
-      renderThemeToggle();
-    });
-  });
-}
-
-function bindShaderToggleEvents(): void {
-  (document.querySelectorAll('.shader-opt') as NodeListOf<HTMLButtonElement>).forEach(btn => {
-    btn.addEventListener('click', () => {
-      const pref = btn.dataset.pref as ShaderPref;
-      setShaderPref(pref);
-      // Re-activate current skin to apply shader change
-      activateSkin(getCurrentSkin());
-      renderShaderToggle();
-      renderCalendarGrid();
-    });
-  });
-}
-
 // -- Glass: button light-follow effect ------------------
 function bindGlassButtonLightFollow(): void {
   const selector = [
@@ -1248,61 +731,6 @@ function bindGlassButtonLightFollow(): void {
       btn.style.setProperty('--my', ((ev.clientY - rect.top)  / rect.height * 100) + '%');
     });
   });
-}
-
-function changeMonth(delta: number): void {
-  viewMonth += delta;
-  if (viewMonth < 0)  { viewMonth = 11; viewYear--; }
-  if (viewMonth > 11) { viewMonth = 0;  viewYear++; }
-  renderMonthStrip();
-  renderCalendarGrid();
-  if (activeView !== 'calendar') switchCalendarView('calendar');
-}
-
-function changeYear(delta: number): void {
-  viewYear += delta;
-  renderMonthStrip();
-  renderCalendarGrid();
-  if (activeView !== 'calendar') switchCalendarView('calendar');
-}
-
-// -- Day-change watcher ---------------------------------
-// Keeps the today-highlight accurate after midnight or a system sleep/wake cycle.
-// visibilitychange fires immediately when the window regains focus (e.g. wake from sleep),
-// which is faster and more reliable than waiting for the next 60-second poll tick.
-function startDayChangeWatcher(): void {
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && getTodayKey() !== renderedTodayKey) {
-      renderCalendarGrid();
-    }
-  });
-  // Fallback: poll every 60 s to catch midnight rollover while the app stays visible
-  setInterval(() => {
-    if (getTodayKey() !== renderedTodayKey) renderCalendarGrid();
-  }, 60_000);
-}
-
-// -- View switching --------------------------------------
-function switchCalendarView(view: ViewType): void {
-  activeView = view;
-  qId('calendar-wrapper').classList.toggle('hidden', view !== 'calendar');
-  // The Schedule page is now owned by the React island; the vanilla #schedule-view stays
-  // hidden and #react-root takes its layout slot when schedule is active.
-  qId('schedule-view').classList.add('hidden');
-  qId('react-root').classList.toggle('is-active', view === 'schedule');
-  (document.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).forEach(btn =>
-    btn.classList.toggle('active', btn.dataset.view === view)
-  );
-  if (view === 'schedule' && !scheduleDate) scheduleDate = getTodayKey();
-  notifyCalendarViewChanged();
-}
-
-function stepScheduleDay(delta: number): void {
-  if (!scheduleDate) scheduleDate = getTodayKey();
-  const [y, m, d] = scheduleDate.split('-').map(Number);
-  const dt = new Date(y, m - 1, d + delta);
-  scheduleDate = dateKey(dt.getFullYear(), dt.getMonth(), dt.getDate());
-  renderScheduleView(scheduleDate);
 }
 
 // -- Start ----------------------------------------------

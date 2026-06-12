@@ -8,9 +8,6 @@
   "include": [
     "src/renderer-ui.ts",
     "src/renderer-data.ts",
-    "src/clock.ts",
-    "src/schedule.ts",
-    "src/calendar-grid.ts",
     "src/renderer.ts",
     "src/renderer-globals.d.ts"
   ]

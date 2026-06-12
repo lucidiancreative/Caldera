@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.16] - 2026-06-11
+
+### Removed
+- Completed the vanilla→React migration cleanup (Phase C): deleted the retired vanilla `schedule.ts`, `calendar-grid.ts`, and `clock.ts`, plus the dead clock UI, calendar-navigation, settings-modal, and AI-import clusters and their backing module state/types in `renderer.ts`/`renderer-data.ts`. The live React UI is unchanged and `renderer.ts` is ~1000 lines lighter; this removes the runtime symbol-drift hazard behind the v1.7.15 bug. The schedule write bridge (`saveTimeBlock`/`updateTimeBlock`/`deleteTimeBlock`) moved into `renderer.ts` beside its `window.calderaSchedule` wiring.
+
+### Changed
+- Replaced the transitional `loaded-runtime-symbols` test with `renderer-script-manifest`, which asserts the renderer's compile list (`tsconfig.renderer.json`) and load list (`index.html`) stay aligned — a durable guard against the script-manifest drift that caused the v1.7.15 runtime error.
+
+---
+
 ## [1.7.15] - 2026-06-11
 
 ### Fixed

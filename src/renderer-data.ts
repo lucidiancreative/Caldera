@@ -7,25 +7,8 @@ function getDayData(key: string): DayData | undefined {
 const calBridge = window.calAPI;
 
 let calData: CalData = { _recurring: [] };
-let viewYear = new Date().getFullYear();
-let viewMonth = new Date().getMonth();
-let modalDate: string | null = null;
-let pasteCellDate: string | null = null;
-let renderedTodayKey: string | null = null;
-let hoveredGridCell: Element | null = null;
 let activeView: ViewType = 'calendar';
 let scheduleDate: string | null = null;
-let scheduleViewMode: ScheduleViewMode = 'daily';
-let scheduleTimelineScale: ScheduleTimelineScale = 'day';
-let clockDragState: { startMin: number; svg: SVGSVGElement } | null = null;
-let timelineResizeState: TimelineResizeState | null = null;
-let suppressNextTimelineBarClick = false;
-let selectedScheduleBlock: ScheduleBlockSelection | null = null;
-let aiPendingEvents: AiEvent[] = [];
-let timeBlockPopupState: TimeBlockPopupState | null = null;
-let clockAmPm: AmPm = new Date().getHours() >= 12 ? 'PM' : 'AM';
-let rescheduleBlock: (TimeBlock & { _key: string }) | null = null;
-let hoveredClockBlock: { block: TimeBlock | RecurringBlock; key: string } | null = null;
 const undoStack: string[] = [];
 const redoStack: string[] = [];
 const MAX_HISTORY = 50;

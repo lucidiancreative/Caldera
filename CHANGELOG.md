@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.9.0] - 2026-06-18
+
+### Added
+- **Multiple independent calendars via browser-style tabs.** A tab bar below the titlebar lets you keep several fully separate calendars — each with its own events, time blocks, and recurring tasks — and switch between them like browser tabs. **+** adds a calendar, **double-click** renames inline, **×** deletes (via a themed in-app confirmation dialog that matches the skin/theme; the last calendar can't be closed), and **drag** reorders. Tabs and the active selection persist across restarts. (`TabBar` + `useCalderaTabs` over a new `window.calderaTabs` bridge.)
+
+### Changed
+- On-disk format upgraded to a versioned multi-calendar workspace: `{ version: 2, activeCalendarId, calendars: [{ id, name, data }] }`. Existing single-calendar files migrate automatically on first launch, and a one-time `calendar-data.v1.bak.json` backup is written beside the data file before the upgrade. Internally `calData` is now a pointer to the active calendar's data, so all existing event/schedule logic operates on the active tab unchanged; undo/redo is scoped per calendar. View state (focused date + lens) is shared across tabs.
+- AI import settings (`_aiConfig`) are now global (shared by all calendars) and owned solely by the main process — `save-data` preserves them so a routine data save never drops your AI configuration.
+
+### Removed
+- Retired the unused `activeView` view-routing state and the `ViewType` type left over from the old Calendar/Schedule split that the consolidated view (1.8.0) replaced.
+
+---
+
+## [1.8.0] - 2026-06-18
+
+### Changed
+- Consolidated the separate Calendar and Schedule views into one workspace with three lenses — **Month**, **Week**, and **Day** — chosen from a single mode toggle. The top-bar Calendar/Schedule toggle is gone; in its place a single **adaptive date nav** sits just above the main UI and steps by month, week, or day to match the active lens (new `ScheduleNav` component + `stepMonthKey` helper), with the **Jan–Dec quick-jump strip** kept right beside it (reuses the `.month-tab` styling; `withMonth` helper). The monthly image calendar is now the Month lens and the default on launch; the task sidebar stays visible alongside it in every lens. Clicking a day in Month still opens the existing image/notes day modal, and the Event Import (★) action moved into the new control row. Internally the calendar month/year and schedule date collapsed to one shared focused date. (Phase A of the multi-calendar workspace — independent, tabbed calendars land in Phase B.)
+
+---
+
 ## [1.7.19] - 2026-06-18
 
 ### Changed

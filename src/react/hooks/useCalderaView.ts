@@ -1,25 +1,20 @@
 import { useEffect, useState } from 'react';
-import type { ViewType } from '../../types';
 
+// The single focused date shared by all lenses (Month/Week/Day). Owned by the vanilla
+// data layer so it survives the React boundary; this hook mirrors it and writes back.
 export function useCalderaView() {
   const bridge = window.calderaView;
-  const [activeView, setActiveView] = useState<ViewType>(bridge?.activeView() ?? 'calendar');
   const [scheduleDate, setScheduleDateState] = useState<string | null>(bridge?.scheduleDate() ?? null);
 
   useEffect(() => {
     if (!bridge) return;
-    const sync = () => {
-      setActiveView(bridge.activeView());
-      setScheduleDateState(bridge.scheduleDate());
-    };
+    const sync = () => setScheduleDateState(bridge.scheduleDate());
     sync();
     return bridge.subscribe(sync);
   }, [bridge]);
 
   return {
-    activeView,
     scheduleDate,
-    setActiveView: (view: ViewType) => bridge?.setActiveView(view),
     setScheduleDate: (key: string) => bridge?.setScheduleDate(key),
   };
 }

@@ -12,7 +12,6 @@ type DateKey = string;
 type AmPm = 'AM' | 'PM';
 type RecurrenceType = 'daily' | 'weekly' | 'monthly';
 type SkinId = 'default' | 'arctic' | 'glacier' | 'teal';
-type ViewType = 'calendar' | 'schedule';
 
 interface CalendarEvent {
   id: string;
@@ -66,6 +65,18 @@ interface CalData {
   _recurring: RecurringBlock[];
   _aiConfig?: unknown;
   [dateKey: string]: DayData | RecurringBlock[] | unknown;
+}
+
+interface Calendar {
+  id: string;
+  name: string;
+  data: CalData;
+}
+
+interface Workspace {
+  version: 2;
+  activeCalendarId: string;
+  calendars: Calendar[];
 }
 
 interface AiConfig {
@@ -143,12 +154,25 @@ interface CalderaSchedule {
   deleteBlock(key: string, id: string, scope?: string): Promise<void>;
 }
 
-// View-routing bridge so the React island knows when the Schedule page is active.
+// Tracks the single focused date shared by all lenses (Month/Week/Day), written back
+// by React so the in-memory state stays in sync.
 interface CalderaView {
-  activeView(): ViewType;
-  setActiveView(view: ViewType): void;
   scheduleDate(): string | null;
   setScheduleDate(key: string): void;
+  subscribe(listener: () => void): () => void;
+  notify(): void;
+}
+
+// Multi-calendar workspace bridge: each tab is an independent calendar. Switching the
+// active calendar repoints calData and notifies, so all data consumers re-render.
+interface CalderaTabs {
+  list(): { id: string; name: string }[];
+  activeId(): string;
+  setActive(id: string): void;
+  create(name?: string): string;
+  rename(id: string, name: string): void;
+  close(id: string): void;
+  reorder(fromIndex: number, toIndex: number): void;
   subscribe(listener: () => void): () => void;
   notify(): void;
 }
@@ -172,5 +196,6 @@ interface Window {
   calderaAppearance: CalderaAppearance;
   calderaSchedule: CalderaSchedule;
   calderaView: CalderaView;
+  calderaTabs: CalderaTabs;
   calderaPrefs: CalderaPrefs;
 }

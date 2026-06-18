@@ -351,19 +351,13 @@ window.calderaSchedule = {
   deleteBlock: (key, id, scope) => deleteTimeBlock(key, id, scope),
 };
 
-// View-routing bridge: lets the React island know when the Schedule page is active and
-// on which date, and lets React write the date back so vanilla stays in sync.
+// Focused-date bridge: holds the single date shared by all lenses (Month/Week/Day)
+// and lets React write it back so the in-memory state stays in sync.
 const calderaViewListeners = new Set<() => void>();
 function notifyCalendarViewChanged(): void {
   calderaViewListeners.forEach(listener => listener());
 }
 window.calderaView = {
-  activeView: () => activeView,
-  setActiveView: (view) => {
-    activeView = view;
-    if (view === 'schedule' && !scheduleDate) scheduleDate = getTodayKey();
-    notifyCalendarViewChanged();
-  },
   scheduleDate: () => scheduleDate,
   setScheduleDate: (key) => {
     scheduleDate = key;
@@ -661,8 +655,7 @@ async function initCalendarApp(): Promise<void> {
   await detectLowPowerMode();
   activateSkin(getCurrentSkin());
   const raw = await calBridge.loadData();
-  calData = migrateCalendarDataFormat(raw);
-  notifyCalendarDataChanged();
+  loadWorkspaceFromRaw(raw);
   bindCalendarUIEvents();
 }
 

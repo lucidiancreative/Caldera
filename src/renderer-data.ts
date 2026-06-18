@@ -6,8 +6,10 @@ function getDayData(key: string): DayData | undefined {
 
 const calBridge = window.calAPI;
 
+// The whole on-disk workspace (all calendars). `calData` always points at the active
+// calendar's data, so every existing read/write keeps operating on the active tab.
+let workspace: Workspace = { version: 2, activeCalendarId: '', calendars: [] };
 let calData: CalData = { _recurring: [] };
-let activeView: ViewType = 'calendar';
 let scheduleDate: string | null = null;
 const undoStack: string[] = [];
 const redoStack: string[] = [];
@@ -71,10 +73,131 @@ window.calderaBridge = {
   pushSnapshot: () => pushCalendarSnapshot(),
 };
 
+// ── Multi-calendar workspace ──────────────────────────────────────────────────
+// Each tab is a fully independent calendar. Switching the active calendar repoints
+// calData and notifies, so the React island re-renders against the new calendar
+// without any of the domain logic below needing to know calendars exist.
+const calderaTabsListeners = new Set<() => void>();
+function notifyCalendarTabsChanged(): void {
+  calderaTabsListeners.forEach(listener => listener());
+}
+
+function generateCalendarId(): string {
+  return 'cal_' + generateCalendarEntryId();
+}
+
+function getActiveCalendar(): Calendar {
+  return workspace.calendars.find(cal => cal.id === workspace.activeCalendarId) ?? workspace.calendars[0];
+}
+
+function pointCalDataAtActiveCalendar(): void {
+  calData = getActiveCalendar().data;
+}
+
+// Wrap whatever was on disk into a v2 workspace. A legacy single-calendar file (flat
+// date keys + _recurring) becomes the workspace's first calendar; the top-level
+// `_aiConfig` is intentionally left behind — it stays main-owned at the file root.
+function migrateWorkspaceFormat(raw: Record<string, unknown>): Workspace {
+  const isV2 = !!raw && (raw as { version?: unknown }).version === 2 && Array.isArray((raw as { calendars?: unknown }).calendars);
+
+  if (isV2) {
+    const source = raw as unknown as Workspace;
+    const calendars = (source.calendars || [])
+      .filter(cal => cal && typeof cal === 'object')
+      .map(cal => ({
+        id: typeof cal.id === 'string' && cal.id ? cal.id : generateCalendarId(),
+        name: typeof cal.name === 'string' && cal.name.trim() ? cal.name.trim() : 'Calendar',
+        data: migrateCalendarDataFormat((cal.data as Record<string, unknown>) || {}),
+      }));
+    if (!calendars.length) calendars.push({ id: generateCalendarId(), name: 'Calendar', data: { _recurring: [] } });
+    const activeIsValid = calendars.some(cal => cal.id === source.activeCalendarId);
+    return { version: 2, activeCalendarId: activeIsValid ? source.activeCalendarId : calendars[0].id, calendars };
+  }
+
+  const id = generateCalendarId();
+  return { version: 2, activeCalendarId: id, calendars: [{ id, name: 'Calendar', data: migrateCalendarDataFormat(raw) }] };
+}
+
+function loadWorkspaceFromRaw(raw: Record<string, unknown>): void {
+  const wasV2 = !!raw && (raw as { version?: unknown }).version === 2;
+  workspace = migrateWorkspaceFormat(raw);
+  pointCalDataAtActiveCalendar();
+  if (!wasV2) void saveCalendarData(); // persist the v1→v2 upgrade once
+  notifyCalendarDataChanged();
+  notifyCalendarTabsChanged();
+}
+
+window.calderaTabs = {
+  list: () => workspace.calendars.map(cal => ({ id: cal.id, name: cal.name })),
+  activeId: () => workspace.activeCalendarId,
+  setActive: (id) => {
+    if (id === workspace.activeCalendarId || !workspace.calendars.some(cal => cal.id === id)) return;
+    workspace.activeCalendarId = id;
+    pointCalDataAtActiveCalendar();
+    undoStack.length = 0;
+    redoStack.length = 0;
+    notifyCalendarDataChanged();
+    notifyCalendarTabsChanged();
+    void saveCalendarData();
+  },
+  create: (name) => {
+    const id = generateCalendarId();
+    const trimmed = (name || '').trim();
+    workspace.calendars.push({ id, name: trimmed || `Calendar ${workspace.calendars.length + 1}`, data: { _recurring: [] } });
+    workspace.activeCalendarId = id;
+    pointCalDataAtActiveCalendar();
+    undoStack.length = 0;
+    redoStack.length = 0;
+    notifyCalendarDataChanged();
+    notifyCalendarTabsChanged();
+    void saveCalendarData();
+    return id;
+  },
+  rename: (id, name) => {
+    const cal = workspace.calendars.find(entry => entry.id === id);
+    const trimmed = name.trim();
+    if (!cal || !trimmed) return;
+    cal.name = trimmed;
+    notifyCalendarTabsChanged();
+    void saveCalendarData();
+  },
+  close: (id) => {
+    if (workspace.calendars.length <= 1) return; // always keep at least one calendar
+    const index = workspace.calendars.findIndex(cal => cal.id === id);
+    if (index === -1) return;
+    workspace.calendars.splice(index, 1);
+    if (workspace.activeCalendarId === id) {
+      workspace.activeCalendarId = workspace.calendars[Math.max(0, index - 1)].id;
+      pointCalDataAtActiveCalendar();
+      undoStack.length = 0;
+      redoStack.length = 0;
+      notifyCalendarDataChanged();
+    }
+    notifyCalendarTabsChanged();
+    void saveCalendarData();
+  },
+  reorder: (fromIndex, toIndex) => {
+    const cals = workspace.calendars;
+    if (fromIndex < 0 || fromIndex >= cals.length || toIndex < 0 || toIndex >= cals.length || fromIndex === toIndex) return;
+    const [moved] = cals.splice(fromIndex, 1);
+    cals.splice(toIndex, 0, moved);
+    notifyCalendarTabsChanged();
+    void saveCalendarData();
+  },
+  subscribe(listener) {
+    calderaTabsListeners.add(listener);
+    return () => { calderaTabsListeners.delete(listener); };
+  },
+  notify: notifyCalendarTabsChanged,
+};
+
 async function saveCalendarData(): Promise<void> {
   normalizeCalendarBlockSubtasks(calData);
   syncCalendarBlockColorsToCurrentSkin();
-  await calBridge.saveData(calData);
+  // calData is a reference to the active calendar's data, so persisting the whole
+  // workspace already includes the edits just made. The main process preserves the
+  // top-level _aiConfig it owns.
+  await calBridge.saveData(workspace);
   notifyCalendarDataChanged();
 }
 
@@ -104,6 +227,7 @@ async function applyCalendarSnapshot(snapshot: string): Promise<void> {
   calData = JSON.parse(snapshot);
   normalizeCalendarBlockSubtasks(calData);
   normalizeCalendarBlockAppearance(calData);
+  getActiveCalendar().data = calData; // undo/redo operates on the active calendar
   await saveCalendarData();
 }
 
@@ -116,10 +240,8 @@ function migrateCalendarDataFormat(raw: Record<string, unknown>): CalData {
       continue;
     }
 
-    if (key === '_aiConfig') {
-      out._aiConfig = value;
-      continue;
-    }
+    // _aiConfig lives at the workspace top level (main-owned); never fold it into a calendar.
+    if (key === '_aiConfig') continue;
 
     const valueObject = value as Record<string, unknown>;
     if (valueObject && typeof valueObject === 'object' && valueObject.events) {

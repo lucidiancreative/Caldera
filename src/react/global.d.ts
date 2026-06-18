@@ -26,10 +26,19 @@ declare global {
       deleteBlock(key: string, id: string, scope?: string): Promise<void>;
     };
     calderaView?: {
-      activeView(): 'calendar' | 'schedule';
-      setActiveView(view: 'calendar' | 'schedule'): void;
       scheduleDate(): string | null;
       setScheduleDate(key: string): void;
+      subscribe(listener: () => void): () => void;
+      notify(): void;
+    };
+    calderaTabs?: {
+      list(): { id: string; name: string }[];
+      activeId(): string;
+      setActive(id: string): void;
+      create(name?: string): string;
+      rename(id: string, name: string): void;
+      close(id: string): void;
+      reorder(fromIndex: number, toIndex: number): void;
       subscribe(listener: () => void): () => void;
       notify(): void;
     };

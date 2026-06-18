@@ -116,7 +116,14 @@ ipcMain.handle('load-data', () => {
   const calendarDataPath = calendarDataFilePath();
   if (!fs.existsSync(calendarDataPath)) return {};
   try {
-    return JSON.parse(fs.readFileSync(calendarDataPath, 'utf8'));
+    const rawText = fs.readFileSync(calendarDataPath, 'utf8');
+    const parsed = JSON.parse(rawText);
+    // One-time safety copy before the v1→v2 multi-calendar migration rewrites the file.
+    if (parsed && typeof parsed === 'object' && (parsed as { version?: unknown }).version !== 2) {
+      const backupPath = path.join(app.getPath('userData'), 'calendar-data.v1.bak.json');
+      if (!fs.existsSync(backupPath)) fs.writeFileSync(backupPath, rawText, 'utf8');
+    }
+    return parsed;
   } catch {
     return {};
   }
@@ -124,7 +131,21 @@ ipcMain.handle('load-data', () => {
 
 ipcMain.handle('save-data', (_event, data: unknown) => {
   try {
-    fs.writeFileSync(calendarDataFilePath(), JSON.stringify(data, null, 2), 'utf8');
+    const filePath = calendarDataFilePath();
+    // _aiConfig is owned by the main process (ai-import) and never sent by the renderer.
+    // Carry the existing one forward so a routine data save doesn't drop the AI settings.
+    const payload = (data && typeof data === 'object') ? { ...(data as Record<string, unknown>) } : data;
+    if (payload && typeof payload === 'object' && (payload as Record<string, unknown>)._aiConfig === undefined && fs.existsSync(filePath)) {
+      try {
+        const existing = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        if (existing && typeof existing === 'object' && existing._aiConfig !== undefined) {
+          (payload as Record<string, unknown>)._aiConfig = existing._aiConfig;
+        }
+      } catch {
+        // Unreadable existing file — just write the new payload as-is.
+      }
+    }
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
   } catch (err) {
     console.error('[save-data] write failed:', err);
     throw err;

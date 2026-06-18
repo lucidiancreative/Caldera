@@ -28,6 +28,23 @@ export function stepDateKey(key: string, delta: number): string {
   return dateKey(dt.getFullYear(), dt.getMonth(), dt.getDate());
 }
 
+// Step by whole months while keeping the same day-of-month, clamped to the target
+// month's length (e.g. Jan 31 → Feb 28) so Month-mode navigation never overflows.
+export function stepMonthKey(key: string, delta: number): string {
+  const [year, month, day] = key.split('-').map(Number);
+  const target = new Date(year, month - 1 + delta, 1);
+  const daysInTarget = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  return dateKey(target.getFullYear(), target.getMonth(), Math.min(day, daysInTarget));
+}
+
+// Jump to a specific month (0–11) in the same year, keeping the day-of-month clamped.
+// Backs the Jan–Dec quick-jump strip next to the date nav.
+export function withMonth(key: string, monthIndex: number): string {
+  const [year, , day] = key.split('-').map(Number);
+  const daysInTarget = new Date(year, monthIndex + 1, 0).getDate();
+  return dateKey(year, monthIndex, Math.min(day, daysInTarget));
+}
+
 export function getWeekStartKey(key: string): string {
   const dt = parseDateKey(key);
   dt.setDate(dt.getDate() - dt.getDay());

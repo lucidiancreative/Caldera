@@ -6,7 +6,6 @@ export type DateKey = string;
 export type AmPm = 'AM' | 'PM';
 export type RecurrenceType = 'daily' | 'weekly' | 'monthly';
 export type SkinId = 'default' | 'arctic' | 'glacier' | 'teal';
-export type ViewType = 'calendar' | 'schedule';
 export type ScheduleViewMode = 'daily' | 'schedule';
 export type ScheduleTimelineScale = 'day';
 
@@ -77,6 +76,24 @@ export interface CalData {
   /** Owned by ai-import; opaque to the renderer */
   _aiConfig?: unknown;
   [dateKey: string]: DayData | RecurringBlock[] | unknown;
+}
+
+/** One independent calendar in the workspace — its own events, blocks, and recurring tasks. */
+export interface Calendar {
+  id: string;
+  name: string;
+  data: CalData;
+}
+
+/**
+ * Top-level on-disk shape (v2): a set of independent calendars plus the active one.
+ * `_aiConfig` also sits at this top level but is owned by the main process (ai-import.ts)
+ * and is intentionally not modelled here — the renderer never reads or writes it.
+ */
+export interface Workspace {
+  version: 2;
+  activeCalendarId: string;
+  calendars: Calendar[];
 }
 
 // ── AI types (shared between ai-import.ts and renderer.ts) ──────────────────

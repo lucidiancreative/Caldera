@@ -3,25 +3,34 @@ import { TaskList } from './TaskList';
 import { TimelineMode } from './TimelineMode';
 import { DailyMode } from './DailyMode';
 import { BlockEditor, type EditorTarget } from './BlockEditor';
-import { formatDisplayDate, formatWeekRange, getTodayKey, stepDateKey } from '../util/format';
+import { ScheduleNav, type CalMode } from './ScheduleNav';
+import { CalendarView } from '../calendar/CalendarView';
+import { MONTH_TAB_LABELS, getTodayKey, withMonth } from '../util/format';
 
-type ScheduleMode = 'daily' | 'timeline';
 type SelectedOccurrence = { date: string; blockId: string };
 
 export function SchedulePage({
   externalDate,
   initialDate,
-  initialMode,
+  mode,
+  onModeChange,
+  onOpenDay,
+  onHoverDateChange,
+  onOpenAi,
 }: {
   externalDate?: string;
   initialDate?: string;
-  initialMode?: ScheduleMode;
+  mode: CalMode;
+  onModeChange: (mode: CalMode) => void;
+  onOpenDay: (key: string) => void;
+  onHoverDateChange: (key: string | null) => void;
+  onOpenAi: () => void;
 }) {
   const [internalDate, setInternalDate] = useState(externalDate ?? initialDate ?? getTodayKey());
-  const [mode, setMode] = useState<ScheduleMode>(initialMode ?? 'timeline');
   const [selection, setSelection] = useState<SelectedOccurrence | null>(null);
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const date = externalDate ?? internalDate;
+  const [year, month] = date.split('-').map(Number);
 
   useEffect(() => {
     if (externalDate !== undefined) return;
@@ -37,23 +46,15 @@ export function SchedulePage({
     }
   }
 
-  const scheduleLabel = mode === 'timeline' ? formatWeekRange(date) : formatDisplayDate(date);
+  function selectMode(next: CalMode) {
+    onModeChange(next);
+    setSelection(null);
+  }
+
   const selectedBlockId = selection?.date === date ? selection.blockId : null;
 
   return (
     <div className="react-schedule">
-      <div className="react-schedule-datenav">
-        <button className="nav-arrow" title="Previous day" onClick={() => focusDate(stepDateKey(date, -1))}>&#8249;</button>
-        <div className="react-schedule-datecopy">
-          <span className="react-schedule-datelabel">{scheduleLabel}</span>
-          {mode === 'timeline' && (
-            <span className="react-schedule-datesub">Focused day: {formatDisplayDate(date)}</span>
-          )}
-        </div>
-        <button className="nav-arrow" title="Next day" onClick={() => focusDate(stepDateKey(date, 1))}>&#8250;</button>
-        <button className="react-schedule-today" onClick={() => focusDate(getTodayKey())}>Today</button>
-      </div>
-
       <div className="react-schedule-body">
         <TaskList
           date={date}
@@ -63,24 +64,38 @@ export function SchedulePage({
         />
 
         <div className="react-schedule-main">
-          <div className="react-schedule-modetoggle">
-            <button
-              className={'schedule-mode-btn' + (mode === 'daily' ? ' active' : '')}
-              onClick={() => {
-                setMode('daily');
-                setSelection(null);
-              }}
-            >Daily</button>
-            <button
-              className={'schedule-mode-btn' + (mode === 'timeline' ? ' active' : '')}
-              onClick={() => {
-                setMode('timeline');
-                setSelection(null);
-              }}
-            >Timeline</button>
+          {/* Control row lives in the calendar column so the toggles line up with the
+              calendar's left edge, the nav centers over it, and the months sit at its right. */}
+          <div className="react-schedule-topbar">
+            <div className="react-schedule-modetoggle">
+              <button className={'schedule-mode-btn' + (mode === 'month' ? ' active' : '')} onClick={() => selectMode('month')}>Month</button>
+              <button className={'schedule-mode-btn' + (mode === 'week' ? ' active' : '')} onClick={() => selectMode('week')}>Week</button>
+              <button className={'schedule-mode-btn' + (mode === 'day' ? ' active' : '')} onClick={() => selectMode('day')}>Day</button>
+              <button className="react-schedule-ai" title="Event Import" onClick={onOpenAi}>&#9733;</button>
+            </div>
+            <ScheduleNav mode={mode} date={date} onChange={(key) => focusDate(key)} />
+            <div className="react-schedule-monthtabs">
+              {MONTH_TAB_LABELS.map((label, index) => (
+                <button
+                  key={label}
+                  className={'month-tab' + (index === month - 1 ? ' active' : '')}
+                  onClick={() => focusDate(withMonth(date, index))}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
+
           <div className="react-schedule-canvas">
-            {mode === 'timeline' ? (
+            {mode === 'month' ? (
+              <CalendarView
+                month={month - 1}
+                year={year}
+                onOpenDay={onOpenDay}
+                onHoverDateChange={onHoverDateChange}
+              />
+            ) : mode === 'week' ? (
               <TimelineMode
                 date={date}
                 selection={selection}

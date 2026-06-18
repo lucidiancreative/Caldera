@@ -20,6 +20,7 @@ button:focus, [role="button"]:focus { outline: none; }
 
   --titlebar-h:  36px;
   --strip-h:     56px;
+  --tabbar-h:    40px;
   --header-h:    36px;
   --radius:      12px;
 }
@@ -226,13 +227,15 @@ body.shader-static.skin-teal.dark #shader-bg {
 }
 
 /* ── Calendar wrapper ─────────────────────────────────── */
+/* The month grid is now a lens inside the schedule canvas (not a standalone fixed
+   view), so it fills its flex parent instead of pinning to the viewport. */
 #calendar-wrapper {
-  position: fixed;
-  top: calc(var(--titlebar-h) + var(--strip-h));
-  left: 0; right: 0; bottom: 0;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px 16px 16px;
+  padding: 0;
   gap: 0;
 }
 
@@ -808,10 +811,158 @@ body.dark .card-toolbar .card-action-btn:hover {
 /* ── Hide/show views ──────────────────────────────────── */
 #calendar-wrapper.hidden { display: none; }
 
+/* ── Calendar tab bar ─────────────────────────────────── */
+/* Browser-style tabs, one per independent calendar, between the titlebar and the
+   consolidated view. Tabs reuse the app's accent-on-active pill treatment. */
+.tabbar {
+  position: fixed;
+  top: var(--titlebar-h);
+  left: 0; right: 0;
+  height: var(--tabbar-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  z-index: 95;
+}
+.tabbar-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabbar-tabs::-webkit-scrollbar { display: none; }
+.cal-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.cal-tab:hover { color: var(--text); border-color: var(--text-muted); }
+.cal-tab.active { color: var(--accent); border-color: var(--accent); }
+.cal-tab.drag-over { border-color: var(--accent); border-style: dashed; }
+.cal-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+.cal-tab-close {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px;
+  border-radius: 4px;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.cal-tab-close:hover { opacity: 1; background: var(--today-ring); color: #fff; }
+.cal-tab-input {
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  width: 110px;
+  outline: none;
+}
+.tabbar-add {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.12s, border-color 0.12s;
+}
+.tabbar-add:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ── Confirm dialog (themed replacement for window.confirm) ── */
+/* Mirrors the .rblock-editor treatment: blurred overlay + color-mix surface, so it
+   reads consistently in light/dark and every skin without per-skin overrides. */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(0, 0, 0, 0.44);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.confirm-dialog {
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.confirm-title { margin: 0; font-size: 15px; font-weight: 700; }
+.confirm-message { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.confirm-cancel {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.confirm-cancel:hover { border-color: var(--text-muted); }
+.confirm-ok {
+  padding: 8px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s, background 0.12s;
+}
+.confirm-ok:hover { opacity: 0.88; }
+.confirm-ok.destructive {
+  border-color: var(--today-ring);
+  background: var(--today-ring);
+}
+
 /* ── Schedule view ────────────────────────────────────── */
+/* The consolidated view sits below the titlebar + calendar tab bar. The adaptive nav
+   + mode toggle live inside it (.react-schedule-topbar). */
 #schedule-view {
   position: fixed;
-  top: calc(var(--titlebar-h) + var(--strip-h));
+  top: calc(var(--titlebar-h) + var(--tabbar-h));
   left: 0; right: 0; bottom: 0;
   display: flex;
   flex-direction: column;
@@ -1027,8 +1178,49 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 .react-schedule-today:hover { border-color: var(--accent); color: var(--accent); }
 .react-schedule-body { display: flex; gap: 18px; flex: 1; min-height: 0; }
 .react-schedule-main { flex: 1; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.react-schedule-modetoggle { display: flex; gap: 6px; }
-.react-schedule-canvas { flex: 1; display: flex; min-height: 0; }
+.react-schedule-canvas { flex: 1; display: flex; min-height: 0; min-width: 0; }
+
+/* One control row above the main UI as a 3-column grid: the four toggles (Month/Week/Day
+   + Import) on the left, the adaptive nav centered, and the Jan–Dec quick-jump on the
+   right. Equal 1fr side columns keep the nav truly centered; the month strip scrolls
+   within its column when space is tight. */
+.react-schedule-topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+.react-schedule-modetoggle { display: flex; align-items: center; gap: 6px; justify-self: start; }
+.react-schedule-topbar .react-schedule-datenav { justify-self: center; }
+.react-schedule-monthtabs {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  justify-self: end;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.react-schedule-monthtabs::-webkit-scrollbar { display: none; }
+.react-schedule-ai {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--star, #f0a500);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.react-schedule-ai:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px var(--accent-shadow);
+}
 .react-schedule-placeholder {
   flex: 1;
   display: flex;

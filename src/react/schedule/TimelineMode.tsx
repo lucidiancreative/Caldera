@@ -21,8 +21,8 @@ import {
 
 const HOUR_WIDTH = 96;
 const TOTAL_HOURS = 24;
-const LANE_HEIGHT = 48;
-const BAR_HEIGHT = 38;
+const LANE_HEIGHT = 62;
+const BAR_HEIGHT = 52;
 const DAY_LABEL_WIDTH = 104;
 
 function hourLabel(hour: number): string {

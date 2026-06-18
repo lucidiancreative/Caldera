@@ -145,6 +145,7 @@ function EventCard({
           className={'card-img' + (event.image ? '' : ' hidden')}
           alt=""
           src={imageUrl}
+          draggable={false}
           onClick={() => { if (imageUrl) onOpenLightbox(imageUrl); }}
         />
         {!event.image && <div className="card-no-img">Drop image here or use Assign</div>}

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.7.18] - 2026-06-18
+
+### Fixed
+- Fixed the day-event modal image preview not opening the fullscreen lightbox on click. The React migration moved the click handler onto the `<img>` itself, but `.card-img` still carried `pointer-events: none` (a holdover from the old container-delegated click), so the handler could never fire — only the `zoom-in` hover cursor survived. Removed the `pointer-events: none` rule and added `draggable={false}` to the image so clicking now opens the lightbox without enabling native image-drag.
+
+---
+
+## [1.7.17] - 2026-06-17
+
+### Fixed
+- Made the Schedule Timeline blocks taller (`BAR_HEIGHT` 38→52, `LANE_HEIGHT` 48→62) so each block's title fits and is no longer clipped by the bar's `overflow: hidden`; the label + time rows now have room to render in full.
+
+---
+
 ## [1.7.16] - 2026-06-11
 
 ### Removed

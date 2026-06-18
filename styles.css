@@ -613,7 +613,6 @@ body.dark #event-cards::-webkit-scrollbar-thumb:hover { background: #636366; }
   height: 100%;
   object-fit: contain;
   display: block;
-  pointer-events: none;
 }
 .card-img.hidden { display: none; }
 

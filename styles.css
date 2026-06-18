@@ -1178,9 +1178,8 @@ body.dark .rtimeline-scroll::-webkit-scrollbar-thumb { background: #48484a; }
   background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
 }
 
-/* Daily clock mode — reuses .clock-*, .ampm-btn and .block-chip from the vanilla view. */
+/* Daily clock mode — reuses .clock-* and .block-chip from the vanilla view. */
 .rdaily { display: flex; flex-direction: column; align-items: center; justify-content: stretch; gap: 10px; height: 100%; width: 100%; }
-.rdaily-ampm { display: flex; gap: 4px; }
 .rdaily-clock {
   flex: 1;
   width: 100%;
@@ -1280,24 +1279,6 @@ body.dark .task-list::-webkit-scrollbar-thumb { background: #48484a; }
   display: flex;
   gap: 4px;
   flex-shrink: 0;
-}
-
-.ampm-btn {
-  padding: 4px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: none;
-  cursor: pointer;
-  color: var(--text-muted);
-  transition: all 0.12s;
-}
-.ampm-btn:hover  { background: transparent; color: var(--text); border-color: var(--text-muted); }
-.ampm-btn.active {
-  background: transparent;
-  color: var(--accent);
-  border-color: var(--accent);
 }
 
 #timeline-mode-panel {
@@ -1490,6 +1471,7 @@ body.dark .task-list::-webkit-scrollbar-thumb { background: #48484a; }
 }
 
 .timeline-bar.is-past {
+  opacity: 0.2;
   box-shadow: 0 8px 18px rgba(0,0,0,0.08);
 }
 
@@ -1757,11 +1739,10 @@ body.is-dragging-timeline-block * {
 /* Faded arc for block currently being rescheduled */
 .rescheduling-arc { opacity: 0.2; }
 
-/* Past blocks stay visible so clock layout doesn't shift as the hand crosses noon; near-zero opacity signals they're done */
-.crossover-arc { opacity: 0.07; pointer-events: none; }
-
-/* AM events carried over to the PM clock — visible but clearly secondary */
-.am-overlay-arc { opacity: 0.3; pointer-events: none; }
+/* Both AM and PM blocks share one 12-hour face, so done-vs-upcoming is shown by a
+   time-based fade rather than an AM/PM filter. Past arcs stay on the dial (layout
+   doesn't shift) but recede; they're still clickable so a past block can be edited. */
+.rdaily-clock g.is-past { opacity: 0.2; }
 
 /* All SVG clock primitives use CSS variables so they theme correctly in dark mode */
 .clock-face     { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
@@ -1824,6 +1805,7 @@ body.is-dragging-timeline-block * {
     0 0 0 2px color-mix(in srgb, var(--accent) 48%, transparent),
     0 2px 8px rgba(0,0,0,0.12);
 }
+.block-chip.is-past { opacity: 0.5; }
 
 /* ── Block label popup ────────────────────────────────── */
 #block-label-popup {
@@ -2312,7 +2294,6 @@ body.skin-glass #win-controls button,
 body.skin-glass .nav-arrow,
 body.skin-glass .month-tab,
 body.skin-glass .view-tab,
-body.skin-glass .ampm-btn,
 body.skin-glass #btn-add-event,
 body.skin-glass #btn-schedule-day {
   position: relative;
@@ -2323,7 +2304,6 @@ body.skin-glass #win-controls button::before,
 body.skin-glass .nav-arrow::before,
 body.skin-glass .month-tab::before,
 body.skin-glass .view-tab::before,
-body.skin-glass .ampm-btn::before,
 body.skin-glass #btn-add-event::before,
 body.skin-glass #btn-schedule-day::before {
   content: '';
@@ -2344,7 +2324,6 @@ body.skin-glass #win-controls button:hover::before,
 body.skin-glass .nav-arrow:hover::before,
 body.skin-glass .month-tab:hover::before,
 body.skin-glass .view-tab:hover::before,
-body.skin-glass .ampm-btn:hover::before,
 body.skin-glass #btn-add-event:hover::before,
 body.skin-glass #btn-schedule-day:hover::before {
   opacity: 1;
@@ -2352,8 +2331,7 @@ body.skin-glass #btn-schedule-day:hover::before {
 
 /* Keep pills consistent with non-glass skins: no hover "fill" effect */
 body.skin-glass .month-tab:hover::before,
-body.skin-glass .view-tab:hover::before,
-body.skin-glass .ampm-btn:hover::before {
+body.skin-glass .view-tab:hover::before {
   opacity: 0;
 }
 
@@ -2649,17 +2627,14 @@ body.skin-glass.dark .nav-arrow {
 /* Active pills must not double-blur — disable backdrop-filter on all glass skins */
 body.skin-glass .month-tab.active,
 body.skin-glass .view-tab.active,
-body.skin-glass .ampm-btn.active,
 body.skin-frost .month-tab.active,
-body.skin-frost .view-tab.active,
-body.skin-frost .ampm-btn.active {
+body.skin-frost .view-tab.active {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
 body.skin-glass .month-tab.active,
-body.skin-glass .view-tab.active,
-body.skin-glass .ampm-btn.active {
+body.skin-glass .view-tab.active {
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
   border-color: rgba(255, 255, 255, 0.55);
@@ -2674,8 +2649,7 @@ body.skin-glass .card-toolbar .card-action-btn:hover {
 
 /* ── Light-glass pill hover (uses --lg-pill-border for border alignment) ── */
 body.skin-frost .month-tab:hover,
-body.skin-frost .view-tab:hover,
-body.skin-frost .ampm-btn:hover {
+body.skin-frost .view-tab:hover {
   background: transparent;
   color: var(--text);
   border-color: var(--lg-pill-border);
@@ -2684,8 +2658,7 @@ body.skin-frost .ampm-btn:hover {
 /* Dark-mode hover */
 body.skin-frost.dark .nav-arrow:hover,
 body.skin-frost.dark .month-tab:hover,
-body.skin-frost.dark .view-tab:hover,
-body.skin-frost.dark .ampm-btn:hover {
+body.skin-frost.dark .view-tab:hover {
   background: transparent;
   color: var(--text);
   border-color: var(--lg-pill-border);
@@ -2717,16 +2690,14 @@ body.skin-frost.dark .nav-arrow {
 
 /* ── Light-glass active pills ──────────────────────────── */
 body.skin-frost:not(.dark) .month-tab.active,
-body.skin-frost:not(.dark) .view-tab.active,
-body.skin-frost:not(.dark) .ampm-btn.active {
+body.skin-frost:not(.dark) .view-tab.active {
   background: rgba(50, 50, 62, 0.09);
   color: rgba(30, 30, 42, 0.88);
   border-color: rgba(55, 55, 70, 0.32);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
 }
 body.skin-frost.dark .month-tab.active,
-body.skin-frost.dark .view-tab.active,
-body.skin-frost.dark .ampm-btn.active {
+body.skin-frost.dark .view-tab.active {
   background: rgba(200, 205, 220, 0.14);
   color: rgba(225, 228, 240, 0.92);
   border-color: rgba(200, 205, 220, 0.26);
@@ -2878,7 +2849,6 @@ body.skin-frost:not(.dark) #win-controls button::before,
 body.skin-frost:not(.dark) .nav-arrow::before,
 body.skin-frost:not(.dark) .month-tab::before,
 body.skin-frost:not(.dark) .view-tab::before,
-body.skin-frost:not(.dark) .ampm-btn::before,
 body.skin-frost:not(.dark) #btn-add-event::before,
 body.skin-frost:not(.dark) #btn-schedule-day::before {
   background: radial-gradient(
@@ -2891,7 +2861,6 @@ body.skin-frost.dark #win-controls button::before,
 body.skin-frost.dark .nav-arrow::before,
 body.skin-frost.dark .month-tab::before,
 body.skin-frost.dark .view-tab::before,
-body.skin-frost.dark .ampm-btn::before,
 body.skin-frost.dark #btn-add-event::before,
 body.skin-frost.dark #btn-schedule-day::before {
   background: radial-gradient(

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.7.19] - 2026-06-18
+
+### Changed
+- The Schedule Daily clock now shows the whole day on one 12-hour face instead of filtering by an AM/PM toggle, so upcoming afternoon/evening blocks are visible without switching modes (e.g. a 4–6 PM block is now seen in the morning). Both AM and PM blocks paint at their clock position; fade is driven purely by time via `isBlockPast` — past blocks recede to a faded-but-visible `.is-past` arc (and stay clickable), while current/upcoming blocks stay solid. Past arcs paint first so an AM/PM pair landing on the same wedge keeps the upcoming one on top. The legend lists every block for the day (sorted, past chips dimmed).
+- Past blocks on the Schedule Timeline (linear) view now fade to `opacity: 0.2` as well, matching the clock's done-vs-upcoming treatment so the two views read consistently.
+
+### Removed
+- Removed the now-redundant AM/PM toggle from the Daily clock, plus its dead `.ampm-btn` / `.rdaily-ampm` styles (base + all skin overrides) and the stale `.ampm-btn` entry in the glass button light-follow list. Drag-to-create now defaults a new block's AM/PM to the next occurrence of the dragged spot (new pure helper `inferClockBlockAmpm`, covered by unit tests); the block editor's AM/PM dropdown still overrides before saving.
+
+---
+
 ## [1.7.18] - 2026-06-18
 
 ### Fixed

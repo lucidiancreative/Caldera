@@ -104,3 +104,14 @@ export function isBlockPast(
   if (block.ampm === 'AM' && block.endMin < block.startMin) endMin = block.endMin + 720;
   return nowMin >= endMin;
 }
+
+/**
+ * Pick the AM/PM half for a block dragged onto the 12-hour clock face now that there is
+ * no toggle to choose it. `clockStartMin` is the wedge's start (0–719, measured from
+ * 12 o'clock) and `nowMinuteOfDay` is the current minutes-since-midnight. Defaults to the
+ * next occurrence of that spot: its AM time if still ahead today, otherwise the upcoming
+ * PM time (so afternoons always land in PM). The editor can override before saving.
+ */
+export function inferClockBlockAmpm(clockStartMin: number, nowMinuteOfDay: number): 'AM' | 'PM' {
+  return clockStartMin >= nowMinuteOfDay ? 'AM' : 'PM';
+}

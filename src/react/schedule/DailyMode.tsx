@@ -1,11 +1,13 @@
-// Daily clock mode — a faithful React port of the vanilla analog clock. 12-hour dial
-// with an AM/PM toggle; in PM the AM blocks show as a dimmed overlay. Arcs paint from
-// the shared appearance bridge so colors match the active skin exactly. Drag-to-create
-// is deferred to the editing step; selection works by clicking an arc or legend chip.
+// Daily clock mode — a 12-hour analog face that shows the whole day at once. Both AM
+// and PM blocks share the dial; fade is driven purely by time (past arcs dimmed via
+// isBlockPast, upcoming arcs solid) so coming events stay visible without a mode flip.
+// Arcs paint from the shared appearance bridge so colors match the active skin exactly.
+// Drag-to-create defaults a block's AM/PM to the next occurrence of the dragged spot;
+// the editor can override. Selection works by clicking an arc or legend chip.
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useMinuteTick } from '../hooks/useMinuteTick';
 import { useCalData } from '../store/calStore';
-import { getDayData, getScheduleBlocksForDate, isBlockPast, type ScheduleBlock } from '../store/selectors';
+import { getDayData, getScheduleBlocksForDate, getSortedScheduleBlocks, inferClockBlockAmpm, isBlockPast, type ScheduleBlock } from '../store/selectors';
 import { arcPath, labelArcPath, fitArcLabel, minutesFromPoint, CLOCK } from './clock';
 import { formatBlockTimeRange, getTodayKey } from '../util/format';
 
@@ -21,7 +23,6 @@ interface DailyModeProps {
 
 export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyModeProps) {
   const calData = useCalData();
-  const [ampm, setAmpm] = useState<AmPm>(new Date().getHours() >= 12 ? 'PM' : 'AM');
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ start: number; current: number } | null>(null);
   const dragControllerRef = useRef<AbortController | null>(null);
@@ -37,10 +38,14 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
   const rMid = (r1 + r2) / 2;
 
   const allBlocks = getScheduleBlocksForDate(calData, date);
-  const visibleBlocks = allBlocks.filter((block) => block.ampm === ampm);
-  const overlayBlocks = ampm === 'PM' ? allBlocks.filter((block) => block.ampm === 'AM') : [];
+  const sortedBlocks = getSortedScheduleBlocks(calData, date);
   const now = new Date();
   const todayKey = getTodayKey();
+  // Both halves of the day share one 12-hour face now; fade is driven purely by
+  // whether a block has already passed. Past arcs paint first so upcoming ones sit
+  // on top where an AM/PM pair lands on the same wedge.
+  const pastBlocks = allBlocks.filter((block) => isBlockPast(block, date, now, todayKey));
+  const upcomingBlocks = allBlocks.filter((block) => !isBlockPast(block, date, now, todayKey));
 
   const fillOf = (block: ScheduleBlock) =>
     palette.length ? `url(#${gradId(appearance!.slotForBlock(block))})` : block.color;
@@ -85,7 +90,11 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
       setDragView(null);
       if (!drag) return;
       const span = (drag.current - drag.start + 720) % 720;
-      if (span >= 15) onCreate({ startMin: drag.start, endMin: drag.current, ampm });
+      if (span < 15) return;
+      // No AM/PM toggle anymore — default to the next occurrence of the dragged spot.
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const ampm: AmPm = inferClockBlockAmpm(drag.start, nowMin);
+      onCreate({ startMin: drag.start, endMin: drag.current, ampm });
     };
     document.addEventListener('mousemove', onMove, { signal: controller.signal });
     document.addEventListener('mouseup', onUp, { signal: controller.signal, once: true });
@@ -95,25 +104,23 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
   const previewSlot = palette.length
     ? (getDayData(calData, date)?.timeBlocks?.length ?? 0) % palette.length
     : 0;
-  const visibleBoundaryRounding = getBoundaryRoundingMap(visibleBlocks);
-  const overlayBoundaryRounding = getBoundaryRoundingMap(overlayBlocks);
+  const boundaryRounding = getBoundaryRoundingMap(allBlocks);
 
-  function renderArc(block: ScheduleBlock, overlay: boolean) {
+  function renderArc(block: ScheduleBlock) {
     const spanMin = (block.endMin - block.startMin + 720) % 720;
     const past = isBlockPast(block, date, now, todayKey);
     const arcClass =
       'clock-block-arc' +
       (block.recurring ? ' recurring-arc' : '') +
-      (!overlay && block.id === selectedBlockId ? ' is-selected' : '');
-    const dimClass = overlay ? 'am-overlay-arc' : past ? 'crossover-arc' : '';
-    const labelId = `react-arc-label-${overlay ? 'ov-' : ''}${block.id}`;
-    const rounding = (overlay ? overlayBoundaryRounding : visibleBoundaryRounding).get(block.id) ?? { roundStart: true, roundEnd: true };
+      (block.id === selectedBlockId ? ' is-selected' : '');
+    const labelId = `react-arc-label-${block.id}`;
+    const rounding = boundaryRounding.get(block.id) ?? { roundStart: true, roundEnd: true };
     return (
       <g
-        key={(overlay ? 'ov-' : '') + block.id}
-        className={dimClass}
-        onClick={overlay ? undefined : () => onSelect(block.id)}
-        style={overlay ? undefined : { cursor: 'pointer' }}
+        key={block.id}
+        className={past ? 'is-past' : undefined}
+        onClick={() => onSelect(block.id)}
+        style={{ cursor: 'pointer' }}
       >
         <path
           className={arcClass}
@@ -142,11 +149,6 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
 
   return (
     <div className="rdaily">
-      <div className="rdaily-ampm">
-        <button className={'ampm-btn' + (ampm === 'AM' ? ' active' : '')} onClick={() => setAmpm('AM')}>AM</button>
-        <button className={'ampm-btn' + (ampm === 'PM' ? ' active' : '')} onClick={() => setAmpm('PM')}>PM</button>
-      </div>
-
       <div className="rdaily-clock">
         <svg ref={svgRef} viewBox={`0 0 ${CLOCK.vb} ${CLOCK.vb}`} onMouseDown={onRingMouseDown} style={{ cursor: 'crosshair' }}>
           <defs>
@@ -190,8 +192,8 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
             );
           })}
 
-          {overlayBlocks.map((block) => renderArc(block, true))}
-          {visibleBlocks.map((block) => renderArc(block, false))}
+          {pastBlocks.map((block) => renderArc(block))}
+          {upcomingBlocks.map((block) => renderArc(block))}
 
           {dragView && dragSpan >= 15 && (
             <path
@@ -211,13 +213,17 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
       </div>
 
       <div className="rdaily-legend">
-        {visibleBlocks.length === 0 ? (
-          <span className="rdaily-hint">No {ampm} blocks. Drag on the ring to add one.</span>
+        {sortedBlocks.length === 0 ? (
+          <span className="rdaily-hint">No blocks today. Drag on the ring to add one.</span>
         ) : (
-          visibleBlocks.map((block) => (
+          sortedBlocks.map((block) => (
             <span
               key={block.id}
-              className={'block-chip' + (block.id === selectedBlockId ? ' is-selected' : '')}
+              className={
+                'block-chip' +
+                (block.id === selectedBlockId ? ' is-selected' : '') +
+                (isBlockPast(block, date, now, todayKey) ? ' is-past' : '')
+              }
               style={{ background: appearance?.gradientCss(block) ?? block.color }}
               title={formatBlockTimeRange(block)}
               onClick={() => onSelect(block.id)}

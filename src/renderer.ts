@@ -705,7 +705,6 @@ function bindGlassButtonLightFollow(): void {
     '.nav-arrow',
     '.month-tab',
     '.view-tab',
-    '.ampm-btn',
     '#btn-add-event',
     '#btn-schedule-day',
   ].join(', ');

@@ -5,6 +5,7 @@ import {
   getRecurringBlocksForDate,
   getScheduleBlocksForDate,
   getSortedScheduleBlocks,
+  inferClockBlockAmpm,
   isBlockPast,
 } from '../src/react/store/selectors';
 import type { CalData, RecurringBlock, TimeBlock } from '../src/types';
@@ -85,4 +86,25 @@ test('should mark a block past only once the current time is at or beyond its en
   const now = new Date(2026, 2, 12, 9, 0); // 9:00 AM
   assert.equal(isBlockPast(earlyBlock, todayKey, now, todayKey), true);
   assert.equal(isBlockPast(laterBlock, todayKey, now, todayKey), false);
+});
+
+test('should infer AM for a dragged spot still ahead in the morning', () => {
+  // 9:00 AM (540), drag the 11 o'clock spot (660): its AM time is still ahead → AM.
+  assert.equal(inferClockBlockAmpm(660, 540), 'AM');
+});
+
+test('should infer PM for a morning-half spot that has already passed today', () => {
+  // 9:00 AM (540), drag the 2 o'clock spot (120): 2 AM is past, so the next 2 o'clock is 2 PM.
+  assert.equal(inferClockBlockAmpm(120, 540), 'PM');
+});
+
+test('should always infer PM once the current time is in the afternoon', () => {
+  // 3:00 PM (900): every clock-face spot (0–719) is behind now, so the next one is PM.
+  assert.equal(inferClockBlockAmpm(240, 900), 'PM'); // 4 o'clock → 4 PM
+  assert.equal(inferClockBlockAmpm(600, 900), 'PM'); // 10 o'clock → 10 PM
+});
+
+test('should infer AM when a spot is reached exactly at the current minute', () => {
+  // 4:00 AM (240) dragging the 4 o'clock spot (240): the AM occurrence is "now" → AM.
+  assert.equal(inferClockBlockAmpm(240, 240), 'AM');
 });

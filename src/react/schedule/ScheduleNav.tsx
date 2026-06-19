@@ -39,11 +39,23 @@ export function ScheduleNav({
       <div className="react-schedule-datecopy">
         <span className="react-schedule-datelabel">{label}</span>
         {mode === 'week' && (
-          <span className="react-schedule-datesub">Focused day: {formatDisplayDate(date)}</span>
+          <span className="react-schedule-datesub">{formatDisplayDate(date)}</span>
         )}
       </div>
       <button className="nav-arrow" title={labels.next} onClick={() => step(1)}>&#8250;</button>
-      <button className="react-schedule-today" onClick={() => onChange(getTodayKey())}>Today</button>
+      <button
+        className="react-schedule-today"
+        title="Jump to today"
+        aria-label="Jump to today"
+        onClick={() => onChange(getTodayKey())}
+      >
+        {/* Calendar with a dot on today (Lucide-style). currentColor inherits the button's color. */}
+        <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <path d="M16 2v4M8 2v4M3 10h18" />
+          <circle cx="12" cy="16" r="1.5" />
+        </svg>
+      </button>
     </div>
   );
 }

@@ -109,7 +109,7 @@ export function App() {
         </div>
       </div>
 
-      <TabBar />
+      <TabBar onOpenAi={() => setAiOpen(true)} />
 
       <div id="schedule-view">
         <SchedulePage
@@ -118,7 +118,6 @@ export function App() {
           onModeChange={setMode}
           onOpenDay={openDay}
           onHoverDateChange={setPasteTargetDate}
-          onOpenAi={() => setAiOpen(true)}
         />
       </div>
 
@@ -138,7 +137,13 @@ export function App() {
         </div>
       )}
 
-      <button id="btn-settings" title="Settings" onClick={() => setSettingsOpen(true)}>&#9881;</button>
+      <button id="btn-settings" title="Settings" aria-label="Settings" onClick={() => setSettingsOpen(true)}>
+        {/* Lucide settings (gear) */}
+        <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      </button>
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {aiOpen && <AiImportModal onClose={() => setAiOpen(false)} onImported={setAiReviewEvents} />}

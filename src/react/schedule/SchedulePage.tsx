@@ -16,7 +16,6 @@ export function SchedulePage({
   onModeChange,
   onOpenDay,
   onHoverDateChange,
-  onOpenAi,
 }: {
   externalDate?: string;
   initialDate?: string;
@@ -24,7 +23,6 @@ export function SchedulePage({
   onModeChange: (mode: CalMode) => void;
   onOpenDay: (key: string) => void;
   onHoverDateChange: (key: string | null) => void;
-  onOpenAi: () => void;
 }) {
   const [internalDate, setInternalDate] = useState(externalDate ?? initialDate ?? getTodayKey());
   const [selection, setSelection] = useState<SelectedOccurrence | null>(null);
@@ -71,7 +69,6 @@ export function SchedulePage({
               <button className={'schedule-mode-btn' + (mode === 'month' ? ' active' : '')} onClick={() => selectMode('month')}>Month</button>
               <button className={'schedule-mode-btn' + (mode === 'week' ? ' active' : '')} onClick={() => selectMode('week')}>Week</button>
               <button className={'schedule-mode-btn' + (mode === 'day' ? ' active' : '')} onClick={() => selectMode('day')}>Day</button>
-              <button className="react-schedule-ai" title="Event Import" onClick={onOpenAi}>&#9733;</button>
             </div>
             <ScheduleNav mode={mode} date={date} onChange={(key) => focusDate(key)} />
             <div className="react-schedule-monthtabs">

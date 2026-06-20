@@ -30,7 +30,24 @@ export function addSubtaskToBlock(calData: CalData, key: string, blockId: string
     id: generateCalendarEntryId(),
     label: trimmed,
     completed: false,
+    notes: '',
   });
+  return true;
+}
+
+export function updateSubtaskNotesInBlock(
+  calData: CalData,
+  key: string,
+  blockId: string,
+  subtaskId: string,
+  notes: string,
+): boolean {
+  const block = findStoredBlock(calData, key, blockId);
+  const task = block?.subtasks?.find((entry) => entry.id === subtaskId);
+  if (!task) return false;
+  const nextNotes = notes.trim();
+  if ((task.notes || '') === nextNotes) return false;
+  task.notes = nextNotes;
   return true;
 }
 

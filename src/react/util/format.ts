@@ -62,6 +62,16 @@ export function formatDisplayDate(key: string): string {
   });
 }
 
+// Relative descriptor used as the Day-view sub-label, where the full date is already the main line.
+export function formatRelativeDay(key: string): string {
+  const todayKey = getTodayKey();
+  if (key === todayKey) return 'Today';
+  const diffDays = Math.round((parseDateKey(key).getTime() - parseDateKey(todayKey).getTime()) / 86400000);
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays === -1) return 'Yesterday';
+  return diffDays > 0 ? `In ${diffDays} days` : `${-diffDays} days ago`;
+}
+
 export function formatWeekdayLabel(key: string): string {
   return parseDateKey(key).toLocaleDateString('en-US', { weekday: 'short' });
 }

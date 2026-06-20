@@ -3,7 +3,7 @@
 // logic (getRecurringBlocksForDate / getScheduleBlocksForDate / task sort /
 // isPastBlock) during the migration; the vanilla copies are removed once each view
 // moves to React. Keep the two in lock-step until then.
-import type { CalData, DayData, TimeBlock, RecurringBlock } from '../../types';
+import type { CalData, DayData, TimeBlock, RecurringBlock, InboxTask } from '../../types';
 
 /** A one-off or recurring block flattened for a single day's schedule list. */
 export interface ScheduleBlock {
@@ -15,9 +15,14 @@ export interface ScheduleBlock {
   paletteSlot?: number;
   ampm: 'AM' | 'PM';
   completed: boolean;
-  subtasks: { id: string; label: string; completed: boolean }[];
+  subtasks: { id: string; label: string; completed: boolean; notes: string }[];
   recurring: boolean;
   recurrence?: 'daily' | 'weekly' | 'monthly';
+}
+
+/** The per-calendar inbox of un-timed tasks. Empty when the calendar has none yet. */
+export function getInboxTasks(calData: CalData): InboxTask[] {
+  return Array.isArray(calData._tasks) ? calData._tasks : [];
 }
 
 export function getDayData(calData: CalData, key: string): DayData | undefined {

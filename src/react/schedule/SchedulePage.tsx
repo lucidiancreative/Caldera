@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
+import { TaskInbox } from './TaskInbox';
 import { TaskList } from './TaskList';
 import { TimelineMode } from './TimelineMode';
+import { SubtaskSection } from './SubtaskSection';
 import { DailyMode } from './DailyMode';
 import { BlockEditor, type EditorTarget } from './BlockEditor';
 import { ScheduleNav, type CalMode } from './ScheduleNav';
 import { CalendarView } from '../calendar/CalendarView';
+import { useCalData } from '../store/calStore';
+import { scheduleInboxTask } from '../store/inboxActions';
 import { MONTH_TAB_LABELS, getTodayKey, withMonth } from '../util/format';
 
 type SelectedOccurrence = { date: string; blockId: string };
@@ -24,6 +28,7 @@ export function SchedulePage({
   onOpenDay: (key: string) => void;
   onHoverDateChange: (key: string | null) => void;
 }) {
+  const calData = useCalData();
   const [internalDate, setInternalDate] = useState(externalDate ?? initialDate ?? getTodayKey());
   const [selection, setSelection] = useState<SelectedOccurrence | null>(null);
   const [editor, setEditor] = useState<EditorTarget | null>(null);
@@ -49,17 +54,30 @@ export function SchedulePage({
     setSelection(null);
   }
 
+  async function handleScheduleTask(
+    taskId: string,
+    draft: { date: string; startMin: number; endMin: number; ampm: 'AM' | 'PM' },
+  ) {
+    const blockId = await scheduleInboxTask(calData, taskId, draft.date, draft.startMin, draft.endMin, draft.ampm);
+    if (!blockId) return;
+    focusDate(draft.date, { preserveSelection: true });
+    setSelection({ date: draft.date, blockId }); // select the new block so it can be adjusted right away
+  }
+
   const selectedBlockId = selection?.date === date ? selection.blockId : null;
 
   return (
     <div className="react-schedule">
       <div className="react-schedule-body">
-        <TaskList
-          date={date}
-          selectedBlockId={selectedBlockId}
-          onSelect={(blockId) => setSelection({ date, blockId })}
-          onEdit={(block) => setEditor({ mode: 'edit', date, block })}
-        />
+        <div className="task-sidebar">
+          <TaskInbox />
+          <TaskList
+            date={date}
+            selectedBlockId={selectedBlockId}
+            onSelect={(blockId) => setSelection({ date, blockId })}
+            onEdit={(block) => setEditor({ mode: 'edit', date, block })}
+          />
+        </div>
 
         <div className="react-schedule-main">
           {/* Control row lives in the calendar column so the toggles line up with the
@@ -93,20 +111,24 @@ export function SchedulePage({
                 onHoverDateChange={onHoverDateChange}
               />
             ) : mode === 'week' ? (
-              <TimelineMode
-                date={date}
-                selection={selection}
-                onFocusDate={focusDate}
-                onSelect={(nextSelection) => {
-                  setSelection(nextSelection);
-                  focusDate(nextSelection.date, { preserveSelection: true });
-                }}
-                onCreate={(draft) => {
-                  setSelection(null);
-                  focusDate(draft.date);
-                  setEditor({ mode: 'create', date: draft.date, startMin: draft.startMin, endMin: draft.endMin, ampm: draft.ampm });
-                }}
-              />
+              <div className="react-schedule-week">
+                <TimelineMode
+                  date={date}
+                  selection={selection}
+                  onFocusDate={focusDate}
+                  onSelect={(nextSelection) => {
+                    setSelection(nextSelection);
+                    focusDate(nextSelection.date, { preserveSelection: true });
+                  }}
+                  onCreate={(draft) => {
+                    setSelection(null);
+                    focusDate(draft.date);
+                    setEditor({ mode: 'create', date: draft.date, startMin: draft.startMin, endMin: draft.endMin, ampm: draft.ampm });
+                  }}
+                  onScheduleTask={handleScheduleTask}
+                />
+                <SubtaskSection selection={selection} />
+              </div>
             ) : (
               <DailyMode
                 date={date}

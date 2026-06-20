@@ -240,6 +240,13 @@ function migrateCalendarDataFormat(raw: Record<string, unknown>): CalData {
       continue;
     }
 
+    // The per-calendar inbox is its own top-level array, not a day; without this branch
+    // it would fall through to the legacy-day wrapper below and be destroyed on load.
+    if (key === '_tasks') {
+      out._tasks = Array.isArray(value) ? value : [];
+      continue;
+    }
+
     // _aiConfig lives at the workspace top level (main-owned); never fold it into a calendar.
     if (key === '_aiConfig') continue;
 

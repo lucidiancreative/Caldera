@@ -10,6 +10,7 @@ import {
   deleteSubtaskFromBlock,
   findStoredBlock,
   moveOneOffBlockToDate,
+  updateSubtaskNotesInBlock,
 } from './scheduleMutations';
 
 type RendererWindow = typeof globalThis & {
@@ -192,6 +193,29 @@ export async function moveBlock(key: string, id: string, newKey: string): Promis
   await saveCalData();
 }
 
+// Move a one-off block to another day AND reposition it there in a single snapshot/save
+// — the cross-day drag on the Week timeline. Recurring blocks never reach here (they have
+// no stored date to move), so this only ever handles one-off blocks.
+export async function moveBlockToDate(
+  calData: CalData,
+  key: string,
+  blockId: string,
+  newKey: string,
+  times: { startMin: number; endMin: number; ampm: 'AM' | 'PM' },
+): Promise<void> {
+  if (!newKey || newKey === key) return;
+  if (!getDayData(calData, key)?.timeBlocks?.some((block) => block.id === blockId)) return;
+  window.calderaBridge?.pushSnapshot();
+  if (!moveOneOffBlockToDate(calData, key, blockId, newKey)) return;
+  const block = findStoredBlock(calData, newKey, blockId);
+  if (block) {
+    block.startMin = times.startMin;
+    block.endMin = times.endMin;
+    block.ampm = times.ampm;
+  }
+  await saveCalData();
+}
+
 export async function addSubtask(key: string, id: string, label: string): Promise<void> {
   if (!label.trim()) return;
   const calData = window.calderaBridge?.getData();
@@ -207,5 +231,15 @@ export async function deleteSubtask(key: string, id: string, subtaskId: string):
   if (!calData || !block?.subtasks?.some((entry) => entry.id === subtaskId)) return;
   window.calderaBridge?.pushSnapshot();
   if (!deleteSubtaskFromBlock(calData, key, id, subtaskId)) return;
+  await saveCalData();
+}
+
+export async function updateSubtaskNotes(key: string, id: string, subtaskId: string, notes: string): Promise<void> {
+  const calData = window.calderaBridge?.getData();
+  const block = calData ? findStoredBlock(calData, key, id) : null;
+  if (!calData || !block?.subtasks?.some((entry) => entry.id === subtaskId)) return;
+  if ((block.subtasks.find((entry) => entry.id === subtaskId)?.notes || '') === notes.trim()) return;
+  window.calderaBridge?.pushSnapshot();
+  if (!updateSubtaskNotesInBlock(calData, key, id, subtaskId, notes)) return;
   await saveCalData();
 }

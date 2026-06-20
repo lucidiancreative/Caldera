@@ -1,15 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMinuteTick } from '../hooks/useMinuteTick';
 import { useCalData } from '../store/calStore';
 import { getSortedScheduleBlocks, isBlockPast, type ScheduleBlock } from '../store/selectors';
-import {
-  toggleBlockCompleted,
-  toggleSubtaskCompleted,
-  deleteBlock,
-  moveBlock,
-  addSubtask,
-  deleteSubtask,
-} from '../store/actions';
+import { toggleBlockCompleted, deleteBlock, moveBlock } from '../store/actions';
 import { formatBlockTimeRange, getTodayKey, stepDateKey } from '../util/format';
 
 interface TaskListProps {
@@ -27,11 +20,6 @@ export function TaskList({ date, selectedBlockId, onSelect, onEdit }: TaskListPr
   const [deletingRecurringId, setDeletingRecurringId] = useState<string | null>(null);
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
-  const [subtaskDraft, setSubtaskDraft] = useState('');
-
-  useEffect(() => {
-    setSubtaskDraft('');
-  }, [selectedBlockId]);
 
   if (!blocks.length) {
     return (
@@ -128,46 +116,6 @@ export function TaskList({ date, selectedBlockId, onSelect, onEdit }: TaskListPr
                   &#10003;
                 </button>
                 <button className="task-btn" title="Cancel" onClick={() => setReschedulingId(null)}>&#10005;</button>
-              </div>
-            )}
-
-            {(block.subtasks.length > 0 || selected) && (
-              <div className="task-subtasks" onClick={(event) => event.stopPropagation()}>
-                {block.subtasks.map((task) => (
-                  <div key={task.id} className={'schedule-subtask-item' + (task.completed ? ' completed' : '')}>
-                    <button
-                      className="schedule-subtask-toggle"
-                      title={task.completed ? 'Mark sub-task incomplete' : 'Mark sub-task complete'}
-                      onClick={() => void toggleSubtaskCompleted(calData, date, block.id, task.id)}
-                    >
-                      {task.completed ? <>&#8634;</> : <>&#10003;</>}
-                    </button>
-                    <div className="schedule-subtask-label">{task.label}</div>
-                    <button
-                      className="schedule-subtask-delete"
-                      title="Delete sub-task"
-                      onClick={() => void deleteSubtask(date, block.id, task.id)}
-                    >
-                      &#10005;
-                    </button>
-                  </div>
-                ))}
-                {selected && (
-                  <form
-                    className="task-subtask-add"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const value = subtaskDraft.trim();
-                      if (value) {
-                        void addSubtask(date, block.id, value);
-                        setSubtaskDraft('');
-                      }
-                    }}
-                  >
-                    <input value={subtaskDraft} onChange={(event) => setSubtaskDraft(event.target.value)} placeholder="Add a sub-task" />
-                    <button className="task-btn" type="submit" title="Add sub-task">+</button>
-                  </form>
-                )}
               </div>
             )}
           </div>

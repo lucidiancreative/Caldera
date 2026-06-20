@@ -29,6 +29,14 @@ export interface BlockSubtask {
   id: string;
   label: string;
   completed: boolean;
+  notes: string;
+}
+
+/** A quick-add task in the per-calendar inbox — no time yet; gets scheduled by dragging onto the timeline. */
+export interface InboxTask {
+  id: string;
+  label: string;
+  completed: boolean;
 }
 
 export interface TimeBlock {
@@ -73,6 +81,8 @@ export interface RecurringBlock {
  */
 export interface CalData {
   _recurring: RecurringBlock[];
+  /** Per-calendar inbox of un-timed tasks, shown on every day until scheduled. */
+  _tasks?: InboxTask[];
   /** Owned by ai-import; opaque to the renderer */
   _aiConfig?: unknown;
   [dateKey: string]: DayData | RecurringBlock[] | unknown;

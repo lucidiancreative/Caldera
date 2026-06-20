@@ -68,6 +68,33 @@ export function absoluteMinutesToBlockTimes(startAbs: number, endAbs: number): {
   };
 }
 
+function snapTimelineMinutes(value: number): number {
+  return Math.round(value / MIN_BLOCK_MINUTES) * MIN_BLOCK_MINUTES;
+}
+
+function clampTimelineMinutes(value: number): number {
+  return Math.max(0, Math.min(DAY_MINUTES, snapTimelineMinutes(value)));
+}
+
+export function clientXToTimelineMinutes(clientX: number, trackLeft: number, hourWidth: number): number {
+  const offsetX = clientX - trackLeft;
+  return clampTimelineMinutes((offsetX / hourWidth) * 60);
+}
+
+export function getTimelineZoomScrollLeft(
+  scrollLeft: number,
+  viewportWidth: number,
+  oldHourWidth: number,
+  newHourWidth: number,
+  frozenPaneWidth = 0,
+): number {
+  if (oldHourWidth <= 0 || newHourWidth <= 0) return Math.max(0, scrollLeft);
+  const visibleTimelineWidth = Math.max(0, viewportWidth - frozenPaneWidth);
+  const visibleCenterPx = Math.max(0, scrollLeft) + visibleTimelineWidth / 2;
+  const nextCenterPx = visibleCenterPx * (newHourWidth / oldHourWidth);
+  return Math.max(0, nextCenterPx - visibleTimelineWidth / 2);
+}
+
 export function getTimelineResizePlan(
   segments: TimelineSegment[],
   blockId: string,

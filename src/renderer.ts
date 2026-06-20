@@ -414,11 +414,12 @@ function normalizeCalendarBlockSubtasks(data: CalData): void {
       ? (block as { subtasks?: unknown[] }).subtasks || []
       : [];
     block.subtasks = rawTasks
-      .filter((task): task is { id?: unknown; label?: unknown; completed?: unknown } => !!task && typeof task === 'object')
+      .filter((task): task is { id?: unknown; label?: unknown; completed?: unknown; notes?: unknown } => !!task && typeof task === 'object')
       .map((task) => ({
         id: typeof task.id === 'string' && task.id ? task.id : generateCalendarEntryId(),
         label: typeof task.label === 'string' ? task.label.trim() : '',
         completed: Boolean(task.completed),
+        notes: typeof task.notes === 'string' ? task.notes.trim() : '',
       }))
       .filter(task => task.label.length > 0);
   });
@@ -727,6 +728,5 @@ function bindGlassButtonLightFollow(): void {
 
 // -- Start ----------------------------------------------
 initCalendarApp();
-
 
 

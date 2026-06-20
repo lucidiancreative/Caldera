@@ -5,6 +5,7 @@ import {
   addSubtaskToBlock,
   deleteSubtaskFromBlock,
   moveOneOffBlockToDate,
+  updateSubtaskNotesInBlock,
 } from '../src/react/store/scheduleMutations';
 import type { CalData, RecurringBlock, TimeBlock } from '../src/types';
 
@@ -32,6 +33,7 @@ test('should add a trimmed sub-task to a recurring block', () => {
   assert.equal(calData._recurring[0].subtasks.length, 1);
   assert.equal(calData._recurring[0].subtasks[0]?.label, 'Follow up');
   assert.equal(calData._recurring[0].subtasks[0]?.completed, false);
+  assert.equal(calData._recurring[0].subtasks[0]?.notes, '');
 });
 
 test('should ignore blank sub-task labels without mutating the block', () => {
@@ -52,7 +54,12 @@ test('should delete an existing sub-task from a one-off block', () => {
     '2026-06-10': {
       events: [],
       featuredId: null,
-      timeBlocks: [oneOff({ subtasks: [{ id: 's1', label: 'Prep', completed: false }, { id: 's2', label: 'Ship', completed: true }] })],
+      timeBlocks: [oneOff({
+        subtasks: [
+          { id: 's1', label: 'Prep', completed: false, notes: 'Bring deck' },
+          { id: 's2', label: 'Ship', completed: true, notes: 'Release notes' },
+        ],
+      })],
     },
   };
 
@@ -60,8 +67,33 @@ test('should delete an existing sub-task from a one-off block', () => {
 
   assert.equal(changed, true);
   assert.deepEqual((calData['2026-06-10'] as { timeBlocks: TimeBlock[] }).timeBlocks[0]?.subtasks, [
-    { id: 's2', label: 'Ship', completed: true },
+    { id: 's2', label: 'Ship', completed: true, notes: 'Release notes' },
   ]);
+});
+
+test('should update and trim sub-task notes on a stored block', () => {
+  const calData: CalData = {
+    _recurring: [],
+    '2026-06-10': {
+      events: [],
+      featuredId: null,
+      timeBlocks: [oneOff({ subtasks: [{ id: 's1', label: 'Prep', completed: false, notes: '' }] })],
+    },
+  };
+
+  const changed = updateSubtaskNotesInBlock(calData, '2026-06-10', 'b1', 's1', '  Bring projector  ');
+
+  assert.equal(changed, true);
+  assert.equal((calData['2026-06-10'] as { timeBlocks: TimeBlock[] }).timeBlocks[0]?.subtasks[0]?.notes, 'Bring projector');
+});
+
+test('should ignore unchanged sub-task notes', () => {
+  const calData: CalData = { _recurring: [recurring({ subtasks: [{ id: 's1', label: 'Prep', completed: false, notes: 'Done' }] })] };
+
+  const changed = updateSubtaskNotesInBlock(calData, '2026-06-10', 'r1', 's1', 'Done');
+
+  assert.equal(changed, false);
+  assert.equal(calData._recurring[0].subtasks[0]?.notes, 'Done');
 });
 
 test('should move a one-off block to another day and preserve its stored appearance', () => {

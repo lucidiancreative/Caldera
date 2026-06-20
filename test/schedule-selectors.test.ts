@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  getInboxTasks,
   getRecurringBlocksForDate,
   getScheduleBlocksForDate,
   getSortedScheduleBlocks,
@@ -25,6 +26,12 @@ function recurring(over: Partial<RecurringBlock> = {}): RecurringBlock {
   };
 }
 
+test('should return the inbox tasks, or an empty array when the calendar has none', () => {
+  assert.deepEqual(getInboxTasks({ _recurring: [] }), []);
+  const tasks = [{ id: 't1', label: 'Email Sarah', completed: false }];
+  assert.equal(getInboxTasks({ _recurring: [], _tasks: tasks }), tasks);
+});
+
 test('should include daily recurring blocks but exclude explicitly excluded dates', () => {
   const calData: CalData = { _recurring: [recurring({ recurrence: 'daily', excludedDates: ['2026-03-13'] })] };
   assert.equal(getRecurringBlocksForDate(calData, '2026-03-12').length, 1);
@@ -46,15 +53,26 @@ test('should match monthly recurring blocks only on the configured day of month'
 
 test('should merge one-off and recurring blocks and derive recurring completion from completedDates', () => {
   const calData: CalData = {
-    _recurring: [recurring({ id: 'r1', completedDates: ['2026-03-12'] })],
-    '2026-03-12': { events: [], featuredId: null, timeBlocks: [oneOff({ id: 'b1' })] },
+    _recurring: [recurring({
+      id: 'r1',
+      completedDates: ['2026-03-12'],
+      subtasks: [{ id: 'rs1', label: 'Recurring prep', completed: false, notes: 'Review cadence' }],
+    })],
+    '2026-03-12': {
+      events: [],
+      featuredId: null,
+      timeBlocks: [oneOff({ id: 'b1', subtasks: [{ id: 's1', label: 'Prep', completed: false, notes: 'Bring deck' }] })],
+    },
   };
   const blocks = getScheduleBlocksForDate(calData, '2026-03-12');
   assert.equal(blocks.length, 2);
-  assert.equal(blocks.find((b) => b.id === 'b1')!.recurring, false);
+  const oneOffBlock = blocks.find((b) => b.id === 'b1')!;
+  assert.equal(oneOffBlock.recurring, false);
+  assert.equal(oneOffBlock.subtasks[0]?.notes, 'Bring deck');
   const recur = blocks.find((b) => b.id === 'r1')!;
   assert.equal(recur.recurring, true);
   assert.equal(recur.completed, true); // completedDates includes the date
+  assert.equal(recur.subtasks[0]?.notes, 'Review cadence');
 });
 
 test('should sort blocks by start time treating PM as twelve hours later', () => {

@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.15.0] - 2026-06-20
+
+### Added
+- **Zoom controls and viewport persistence for the Week timeline.** The Week timeline now has compact zoom out/in controls that scale the horizontal hour grid from a dense overview to a wider detailed view while keeping the currently visible time centered. The timeline saves its zoom level plus horizontal and vertical scroll position in local storage, so leaving and returning to Week view restores the timeline to the same place.
+
+## [1.14.0] - 2026-06-20
+
+### Added
+- **Sub-task notes in the Week lower panel.** The sub-task section beneath the Week timeline is now split into two halves: the left side keeps the selected block's sub-task list and add controls, while the right side provides a dedicated **Sub-task notes** editor for the selected sub-task. Notes are stored directly on each sub-task, persist with the calendar data, and are removed naturally when that sub-task or its parent block is deleted. Existing saved sub-tasks migrate with empty notes so older calendar data keeps loading cleanly.
+
+## [1.13.1] - 2026-06-19
+
+### Fixed
+- Past time blocks now fade correctly in the Frost and Glass skins. The Day view's legend chips (`.block-chip`) were staying fully opaque for elapsed blocks under `skin-glass` and the light Frost shaders (Arctic/Glacier/Teal), because those skins carried an `opacity: 1` declaration that out-specified the `.block-chip.is-past { opacity: 0.5 }` fade added in 1.13.0. The redundant reset was removed (the base chip already defaults to opacity 1), so past chips now dim in every skin. The Week timeline bars and Day clock arcs were already fading correctly — they have no skin-specific opacity override.
+
+## [1.13.0] - 2026-06-19
+
+### Changed
+- **Sub-tasks moved to their own section beneath the Week timeline.** Sub-tasks used to be tucked inside the left task list, expanding under whichever block was selected. They now live in a dedicated section below the Week view's timeline: select a block (in the left list or by clicking a timeline bar) and its sub-tasks — with add, complete, and delete — appear there under the block's name and time. To make room, the timeline now sizes to its day rows (`flex: 0 1 auto` instead of `height: 100%`), so the empty space that used to sit below the last day row is reclaimed by the new section; when the week is taller than the available space the timeline shrinks and scrolls internally as before. Sub-task editing is now a Week-view feature — the left list shows only the block list (the Day and Month views no longer surface sub-tasks). (New `SubtaskSection` driven by the existing selection; the inline sub-task UI and its `.task-subtasks`/`.task-subtask-add` styles were removed from `TaskList`; `SchedulePage` wraps the timeline and section in a `.react-schedule-week` column.)
+
+## [1.12.0] - 2026-06-19
+
+### Added
+- **Drag time blocks between days on the Week timeline.** A block can now be dragged off its own row and dropped onto any other day's row — repositioning the day and the time in one motion, instead of only sliding along its original day. While you drag across rows the source block dims in place and a dashed ghost previews exactly where it will land (the destination row highlights like an inbox-task drop); the grab offset and 15-minute snapping are unchanged, so a moved block keeps its duration and lands under the pointer. The whole move is a single undo step. Same-day drags behave exactly as before. Recurring blocks stay on their own row (they recur on a rule, not a stored date) and continue to only change time. (`TimelineMode.beginMove` now hit-tests the row under the pointer and routes a cross-day drop through a new atomic `moveBlockToDate` action that relocates the one-off block and sets its new time in a single snapshot/save.)
+
+## [1.11.1] - 2026-06-19
+
+### Fixed
+- Fixed Week timeline cursor-to-time mapping after horizontal scrolling. Drag-created blocks now preview and land under the pointer, and existing blocks keep moving with the cursor instead of stopping early from an accidental double-count of the scroll offset. The inbox task drop path uses the same corrected mapping.
+
+## [1.11.0] - 2026-06-19
+
+### Added
+- **Drag inbox tasks onto the Week timeline to schedule them.** Grab a task from the sidebar inbox and drop it on any day row in Week view — it becomes a 60-minute block at the drop time (snapped to 15 min, clamped to the day), leaves the inbox, and is selected so you can immediately fine-tune it with the timeline's existing move/resize handles. The whole drop is a single undo step (Ctrl+Z brings the task back and removes the block). Uses the native HTML5 drag-and-drop API (no new dependency) and reuses the same x→time mapping and block-creation domain logic as drawing a block by hand, so a dropped block is indistinguishable from a drawn one. (`TaskInbox` items are now `draggable`; `TimelineMode` day tracks accept the drop via a shared `taskDnd` contract; a new `scheduleInboxTask` action does the task→block conversion.) Dropping onto the Day clock face is a planned fast-follow.
+
+## [1.10.0] - 2026-06-19
+
+### Added
+- **Quick-add task inbox in the sidebar.** A "+ Add task" input pinned to the top of the left sidebar lets you capture tasks without picking a date or time — type a name, press Enter, and it drops into the inbox below while the field stays focused for the next one (type, Enter, type, Enter…). Inbox tasks are checkable and deletable, and they live in a per-calendar inbox (`calData._tasks`) shown on every day until scheduled, so each tab keeps its own backlog. Groundwork for an upcoming drag-and-drop that will turn an inbox task into a scheduled time block by dropping it onto the timeline. (`TaskInbox` + `inboxActions` + a `getInboxTasks` selector; the left column is now a `.task-sidebar` wrapper that owns the fluid width and scroll, with `TaskList` rendering the scheduled blocks beneath the inbox.)
+- The workspace migrator now preserves the `_tasks` key on load (alongside `_recurring`), so the inbox survives restarts instead of being mistaken for a legacy day entry.
+
 ## [1.9.1] - 2026-06-18
 
 ### Changed
@@ -7,6 +48,7 @@
 - **Calendar control strip now scales with the window and stays on one row.** The day cells already grow to fill the window, but the control row above them (Month/Week/Day toggles + Import button, the date nav, and the Jan–Dec quick-jump) had fixed sizes and stayed constant. The strip is now fluid: `.react-schedule-main` is a size container and `.react-schedule-topbar` carries a single `font-size: clamp(0.8rem, calc(0.85rem + 0.51cqw), 1.875rem)` knob that tracks the calendar column's width (not the viewport, since the task sidebar shares the row); every control inside it (toggles, arrows, pills, labels, gaps) is sized in `em`, so they scale together. The clamp is anchored to the two window sizes in use — ~15px at 1280px wide, ~21px at 2560px. The strip layout changed from `1fr auto 1fr` to `auto 1fr auto` so the toggles and all 12 month buttons always get their full width (no more clipping the months off-screen at narrow widths); the date nav takes the flexible middle and shrinks first. The date label's `min-width` was also cut so the prev/next arrows hug the label instead of floating far from it.
 - **Tightened the toggles and turned Today + Import into icons.** The Month/Week/Day toggles and the Import button now share the Jan–Dec pills' padding and gap so the left group reads as one size family. The text "Today" button became a discrete borderless calendar icon (inline Lucide-style SVG with a dot on today, muted with an accent hover), and the Import button's ★ glyph was replaced with a Lucide `calendar-plus` SVG ("add events to the calendar"), un-tinted to `--text-muted` so it matches the surrounding text and icons. Smaller and lighter, and it frees a bit more row space.
 - **Settings button uses the Lucide gear icon.** The bottom-right Settings button's `⚙` glyph is now the Lucide `settings` SVG, consistent with the other vector icons; it keeps its discrete muted look and the rotate-on-hover.
+- **Date nav now shows a second line in every view.** The sub-label specifying the focused day (e.g. "Wednesday, June 17, 2026") now appears in Month and Week views, not just Week. Because the Day view's main line is already the full date, it shows a relative descriptor instead ("Today" / "Tomorrow" / "In 3 days" / "2 days ago") via a new `formatRelativeDay` helper — so all three lenses have a consistent two-line nav.
 - **Moved Event Import to the tab bar.** The calendar-plus Import button now lives in the top tab bar, to the right of the **+** add-tab button, instead of in the Month/Week/Day toggle group. `App` passes the open-import handler to `TabBar` (via a new `onOpenAi` prop); `SchedulePage` no longer owns it, and the now-dead `.react-schedule-ai` styles were removed. In the tab bar it matches the add-tab button's size.
 - **Matched the three Lucide icons.** Import, Today, and Settings now render at the same size and `1.5` stroke weight. Today's icon dropped from `1.25em` to `1.1em` to match the Import icon (its padding was raised to keep the button box matched to the nav arrows); the Settings button is a fixed size (`1.5rem`) since it floats outside the scaling calendar column.
 - **Task list now scales with the window too.** Previously the left sidebar was a fixed `220px` column with fixed `rem` text, so it stayed put while the calendar grew. `.react-schedule-body` is now a size container; the panel width is fluid (`clamp(190px, 17.5cqw, 320px)`) and `.task-list` carries a `clamp(…cqw…)` base font with every descendant (items, labels, times, buttons, swatches, sub-tasks, inputs, padding, gaps) converted to `em` — so the whole sidebar scales with the window like the calendar side. Borders and radii stay in `px`.

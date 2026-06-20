@@ -6,6 +6,8 @@ import {
   packTimelineDay,
   getAbsoluteMinutes,
   absoluteMinutesToBlockTimes,
+  clientXToTimelineMinutes,
+  getTimelineZoomScrollLeft,
   getTimelineResizePlan,
   makeTimelineOccurrenceKey,
   moveTimelineRange,
@@ -76,6 +78,26 @@ test('should clamp absolute times to the day and enforce a 15-minute minimum', (
     startMin: 705,
     endMin: 0,
   });
+});
+
+test('should map a scrolled timeline cursor from the visible day track position', () => {
+  const hourWidth = 96;
+  const scrollLeft = 480;
+  const trackLeft = 104 - scrollLeft;
+  const clientX = trackLeft + (10 * hourWidth);
+
+  assert.equal(clientXToTimelineMinutes(clientX, trackLeft, hourWidth), 600);
+});
+
+test('should preserve the visible timeline center when zooming', () => {
+  const nextScrollLeft = getTimelineZoomScrollLeft(480, 704, 96, 144, 104);
+
+  assert.equal(nextScrollLeft, 870);
+});
+
+test('should keep zoom scroll restoration within the timeline bounds', () => {
+  assert.equal(getTimelineZoomScrollLeft(-20, 704, 96, 144, 104), 150);
+  assert.equal(getTimelineZoomScrollLeft(480, 704, 0, 144, 104), 480);
 });
 
 test('should create a shared resize plan for touching blocks in the same lane', () => {

@@ -31,6 +31,13 @@ interface BlockSubtask {
   id: string;
   label: string;
   completed: boolean;
+  notes: string;
+}
+
+interface InboxTask {
+  id: string;
+  label: string;
+  completed: boolean;
 }
 
 interface TimeBlock {
@@ -63,6 +70,7 @@ interface RecurringBlock {
 
 interface CalData {
   _recurring: RecurringBlock[];
+  _tasks?: InboxTask[];
   _aiConfig?: unknown;
   [dateKey: string]: DayData | RecurringBlock[] | unknown;
 }

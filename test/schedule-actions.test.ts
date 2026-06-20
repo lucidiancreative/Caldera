@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { DayData } from '../src/types';
+import type { CalData, DayData } from '../src/types';
 
 type RuntimeWindow = typeof globalThis & {
   calderaBridge?: {
@@ -139,6 +139,137 @@ test('should restore the previous calendar data when the React createBlock bridg
       },
     });
     assert.equal(notifyCount, 1);
+  } finally {
+    runtime.window = originalWindow;
+  }
+});
+
+test('moveBlockToDate relocates a one-off block to another day with new times, snapshotting and saving once', async () => {
+  const runtime = globalThis as typeof globalThis & { window?: RuntimeWindow };
+  const originalWindow = runtime.window;
+  const calData: CalData = {
+    _recurring: [],
+    '2026-06-19': {
+      events: [],
+      featuredId: null,
+      timeBlocks: [{
+        id: 'b1', startMin: 60, endMin: 120, label: 'Standup',
+        color: '#000', ampm: 'AM', completed: false, subtasks: [],
+      }],
+    },
+  };
+  const counts = { snapshots: 0, saves: 0 };
+
+  runtime.window = {
+    calderaBridge: {
+      subscribe: () => () => {},
+      getData: () => calData as unknown as Record<string, unknown>,
+      notify: () => {},
+      save: async () => { counts.saves += 1; },
+      pushSnapshot: () => { counts.snapshots += 1; },
+    },
+  } as unknown as RuntimeWindow;
+
+  try {
+    const { moveBlockToDate } = await import('../src/react/store/actions');
+    await moveBlockToDate(calData, '2026-06-19', 'b1', '2026-06-21', { startMin: 30, endMin: 90, ampm: 'PM' });
+
+    // Source day had only this block, so it is pruned entirely.
+    assert.equal(calData['2026-06-19'], undefined);
+    const moved = (calData['2026-06-21'] as DayData).timeBlocks;
+    assert.equal(moved.length, 1);
+    assert.deepEqual(
+      { id: moved[0].id, startMin: moved[0].startMin, endMin: moved[0].endMin, ampm: moved[0].ampm },
+      { id: 'b1', startMin: 30, endMin: 90, ampm: 'PM' },
+    );
+    assert.equal(counts.snapshots, 1);
+    assert.equal(counts.saves, 1);
+  } finally {
+    runtime.window = originalWindow;
+  }
+});
+
+test('moveBlockToDate is a no-op when the destination equals the source day', async () => {
+  const runtime = globalThis as typeof globalThis & { window?: RuntimeWindow };
+  const originalWindow = runtime.window;
+  const calData: CalData = {
+    _recurring: [],
+    '2026-06-19': {
+      events: [],
+      featuredId: null,
+      timeBlocks: [{
+        id: 'b1', startMin: 60, endMin: 120, label: 'Standup',
+        color: '#000', ampm: 'AM', completed: false, subtasks: [],
+      }],
+    },
+  };
+  const counts = { snapshots: 0, saves: 0 };
+
+  runtime.window = {
+    calderaBridge: {
+      subscribe: () => () => {},
+      getData: () => calData as unknown as Record<string, unknown>,
+      notify: () => {},
+      save: async () => { counts.saves += 1; },
+      pushSnapshot: () => { counts.snapshots += 1; },
+    },
+  } as unknown as RuntimeWindow;
+
+  try {
+    const { moveBlockToDate } = await import('../src/react/store/actions');
+    await moveBlockToDate(calData, '2026-06-19', 'b1', '2026-06-19', { startMin: 30, endMin: 90, ampm: 'PM' });
+
+    const block = (calData['2026-06-19'] as DayData).timeBlocks[0];
+    assert.deepEqual(
+      { startMin: block.startMin, endMin: block.endMin, ampm: block.ampm },
+      { startMin: 60, endMin: 120, ampm: 'AM' },
+    );
+    assert.equal(counts.snapshots, 0);
+    assert.equal(counts.saves, 0);
+  } finally {
+    runtime.window = originalWindow;
+  }
+});
+
+test('updateSubtaskNotes saves changed notes with one snapshot', async () => {
+  const runtime = globalThis as typeof globalThis & { window?: RuntimeWindow };
+  const originalWindow = runtime.window;
+  const calData: CalData = {
+    _recurring: [],
+    '2026-06-19': {
+      events: [],
+      featuredId: null,
+      timeBlocks: [{
+        id: 'b1', startMin: 60, endMin: 120, label: 'Standup',
+        color: '#000', ampm: 'AM', completed: false,
+        subtasks: [{ id: 's1', label: 'Prep', completed: false, notes: '' }],
+      }],
+    },
+  };
+  const counts = { snapshots: 0, saves: 0 };
+
+  runtime.window = {
+    calderaBridge: {
+      subscribe: () => () => {},
+      getData: () => calData as unknown as Record<string, unknown>,
+      notify: () => {},
+      save: async () => { counts.saves += 1; },
+      pushSnapshot: () => { counts.snapshots += 1; },
+    },
+  } as unknown as RuntimeWindow;
+
+  try {
+    const { updateSubtaskNotes } = await import('../src/react/store/actions');
+    await updateSubtaskNotes('2026-06-19', 'b1', 's1', '  Bring agenda  ');
+
+    const task = (calData['2026-06-19'] as DayData).timeBlocks[0].subtasks[0];
+    assert.equal(task.notes, 'Bring agenda');
+    assert.equal(counts.snapshots, 1);
+    assert.equal(counts.saves, 1);
+
+    await updateSubtaskNotes('2026-06-19', 'b1', 's1', 'Bring agenda');
+    assert.equal(counts.snapshots, 1);
+    assert.equal(counts.saves, 1);
   } finally {
     runtime.window = originalWindow;
   }

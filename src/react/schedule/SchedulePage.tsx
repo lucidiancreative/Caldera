@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { TaskInbox } from './TaskInbox';
 import { TaskList } from './TaskList';
 import { TimelineMode } from './TimelineMode';
@@ -7,11 +7,53 @@ import { DailyMode } from './DailyMode';
 import { BlockEditor, type EditorTarget } from './BlockEditor';
 import { ScheduleNav, type CalMode } from './ScheduleNav';
 import { CalendarView } from '../calendar/CalendarView';
+import { LensLayout } from '../lens/LensLayout';
+import type { LensId } from '../lens/lenses';
 import { useCalData } from '../store/calStore';
 import { scheduleInboxTask } from '../store/inboxActions';
+import { getScheduleBlocksForDate } from '../store/selectors';
+import { useCalderaTabs } from '../tabs/useCalderaTabs';
 import { MONTH_TAB_LABELS, getTodayKey, withMonth } from '../util/format';
 
 type SelectedOccurrence = { date: string; blockId: string };
+
+const SELECTION_STORAGE_KEY = 'caldera.schedule.selectedBlock.v1';
+const DEFAULT_SELECTION_SCOPE = 'default';
+
+function selectionScope(activeId: string): string {
+  return activeId || window.calderaTabs?.activeId() || DEFAULT_SELECTION_SCOPE;
+}
+
+function isSelectedOccurrence(value: unknown): value is SelectedOccurrence {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<SelectedOccurrence>;
+  return typeof candidate.date === 'string' && typeof candidate.blockId === 'string';
+}
+
+function readStoredSelection(activeId: string): SelectedOccurrence | null {
+  try {
+    const raw = window.localStorage.getItem(SELECTION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const value = parsed[selectionScope(activeId)];
+    return isSelectedOccurrence(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSelection(activeId: string, selection: SelectedOccurrence | null): void {
+  try {
+    const raw = window.localStorage.getItem(SELECTION_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    const scope = selectionScope(activeId);
+    if (selection) parsed[scope] = selection;
+    else delete parsed[scope];
+    window.localStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify(parsed));
+  } catch {
+    // Selection persistence is a convenience; the schedule remains usable without storage.
+  }
+}
 
 export function SchedulePage({
   externalDate,
@@ -20,6 +62,8 @@ export function SchedulePage({
   onModeChange,
   onOpenDay,
   onHoverDateChange,
+  lens,
+  onSelectLens,
 }: {
   externalDate?: string;
   initialDate?: string;
@@ -27,18 +71,44 @@ export function SchedulePage({
   onModeChange: (mode: CalMode) => void;
   onOpenDay: (key: string) => void;
   onHoverDateChange: (key: string | null) => void;
+  lens: LensId;
+  onSelectLens: (lens: LensId) => void;
 }) {
   const calData = useCalData();
+  const { activeId } = useCalderaTabs();
   const [internalDate, setInternalDate] = useState(externalDate ?? initialDate ?? getTodayKey());
-  const [selection, setSelection] = useState<SelectedOccurrence | null>(null);
+  const [selection, setSelectionState] = useState<SelectedOccurrence | null>(() => readStoredSelection(activeId));
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const date = externalDate ?? internalDate;
   const [year, month] = date.split('-').map(Number);
+  const selectionIsValid = !!selection && getScheduleBlocksForDate(calData, selection.date).some((block) => block.id === selection.blockId);
+  const activeSelection = selectionIsValid ? selection : null;
+  const selectedBlockId = activeSelection?.date === date ? activeSelection.blockId : null;
+
+  function setSelection(nextSelection: SelectedOccurrence | null) {
+    setSelectionState(nextSelection);
+    writeStoredSelection(activeId, nextSelection);
+  }
+
+  const clearSelection = useCallback(() => {
+    setSelectionState(null);
+    writeStoredSelection(activeId, null);
+  }, [activeId]);
+
+  useEffect(() => {
+    setSelectionState(readStoredSelection(activeId));
+  }, [activeId]);
 
   useEffect(() => {
     if (externalDate !== undefined) return;
     window.calderaView?.setScheduleDate(date);
   }, [date, externalDate]);
+
+  useEffect(() => {
+    if (!selection || selectionIsValid) return;
+    setSelectionState(null);
+    writeStoredSelection(activeId, null);
+  }, [activeId, selection, selectionIsValid]);
 
   function focusDate(nextDate: string, options?: { preserveSelection?: boolean }) {
     if (externalDate === undefined) setInternalDate(nextDate);
@@ -51,7 +121,6 @@ export function SchedulePage({
 
   function selectMode(next: CalMode) {
     onModeChange(next);
-    setSelection(null);
   }
 
   async function handleScheduleTask(
@@ -64,12 +133,12 @@ export function SchedulePage({
     setSelection({ date: draft.date, blockId }); // select the new block so it can be adjusted right away
   }
 
-  const selectedBlockId = selection?.date === date ? selection.blockId : null;
-
   return (
-    <div className="react-schedule">
-      <div className="react-schedule-body">
-        <div className="task-sidebar">
+    <LensLayout
+      lens={lens}
+      onSelectLens={onSelectLens}
+      sidebar={
+        <>
           <TaskInbox />
           <TaskList
             date={date}
@@ -77,28 +146,35 @@ export function SchedulePage({
             onSelect={(blockId) => setSelection({ date, blockId })}
             onEdit={(block) => setEditor({ mode: 'edit', date, block })}
           />
-        </div>
-
-        <div className="react-schedule-main">
-          {/* Control row lives in the calendar column so the toggles line up with the
-              calendar's left edge, the nav centers over it, and the months sit at its right. */}
+        </>
+      }
+      main={
+        <>
+          {/* Calendar controls stack the date nav directly above the centered Jan-Dec
+              quick-jump strip, with view toggles anchored on the lower right. */}
           <div className="react-schedule-topbar">
-            <div className="react-schedule-modetoggle">
-              <button className={'schedule-mode-btn' + (mode === 'month' ? ' active' : '')} onClick={() => selectMode('month')}>Month</button>
-              <button className={'schedule-mode-btn' + (mode === 'week' ? ' active' : '')} onClick={() => selectMode('week')}>Week</button>
-              <button className={'schedule-mode-btn' + (mode === 'day' ? ' active' : '')} onClick={() => selectMode('day')}>Day</button>
+            <div className="react-schedule-navrow">
+              <ScheduleNav mode={mode} date={date} onChange={(key) => focusDate(key)} />
             </div>
-            <ScheduleNav mode={mode} date={date} onChange={(key) => focusDate(key)} />
-            <div className="react-schedule-monthtabs">
-              {MONTH_TAB_LABELS.map((label, index) => (
-                <button
-                  key={label}
-                  className={'month-tab' + (index === month - 1 ? ' active' : '')}
-                  onClick={() => focusDate(withMonth(date, index))}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="react-schedule-striprow">
+              <span className="react-schedule-stripspacer" aria-hidden="true" />
+              <div className="react-schedule-monthtabs" role="group" aria-label="Month quick jump">
+                {MONTH_TAB_LABELS.map((label, index) => (
+                  <button
+                    key={label}
+                    className={'month-tab' + (index === month - 1 ? ' active' : '')}
+                    aria-current={index === month - 1 ? 'date' : undefined}
+                    onClick={() => focusDate(withMonth(date, index))}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="react-schedule-modetoggle">
+                <button className={'schedule-mode-btn' + (mode === 'month' ? ' active' : '')} onClick={() => selectMode('month')}>Month</button>
+                <button className={'schedule-mode-btn' + (mode === 'week' ? ' active' : '')} onClick={() => selectMode('week')}>Week</button>
+                <button className={'schedule-mode-btn' + (mode === 'day' ? ' active' : '')} onClick={() => selectMode('day')}>Day</button>
+              </div>
             </div>
           </div>
 
@@ -114,12 +190,13 @@ export function SchedulePage({
               <div className="react-schedule-week">
                 <TimelineMode
                   date={date}
-                  selection={selection}
+                  selection={activeSelection}
                   onFocusDate={focusDate}
                   onSelect={(nextSelection) => {
                     setSelection(nextSelection);
                     focusDate(nextSelection.date, { preserveSelection: true });
                   }}
+                  onClearSelection={clearSelection}
                   onCreate={(draft) => {
                     setSelection(null);
                     focusDate(draft.date);
@@ -127,7 +204,7 @@ export function SchedulePage({
                   }}
                   onScheduleTask={handleScheduleTask}
                 />
-                <SubtaskSection selection={selection} />
+                <SubtaskSection selection={activeSelection} />
               </div>
             ) : (
               <DailyMode
@@ -141,10 +218,10 @@ export function SchedulePage({
               />
             )}
           </div>
-        </div>
-      </div>
-
+        </>
+      }
+    >
       {editor && <BlockEditor target={editor} onClose={() => setEditor(null)} />}
-    </div>
+    </LensLayout>
   );
 }

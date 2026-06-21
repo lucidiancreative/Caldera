@@ -8,6 +8,7 @@ import { getDayData } from './selectors';
 import {
   addSubtaskToBlock,
   deleteSubtaskFromBlock,
+  detachRecurringOccurrenceToOneOff,
   findStoredBlock,
   moveOneOffBlockToDate,
   updateSubtaskNotesInBlock,
@@ -57,6 +58,15 @@ function restoreCalendarData(snapshot: string | null): void {
   }
   Object.assign(current, restored);
   window.calderaBridge?.notify?.();
+}
+
+function hasEditableBlockOccurrence(calData: CalData, key: string, blockId: string): boolean {
+  if (getDayData(calData, key)?.timeBlocks?.some((block) => block.id === blockId)) return true;
+  return (calData._recurring || []).some((block) => block.id === blockId && !block.excludedDates?.includes(key));
+}
+
+function hasEditableRecurringOccurrence(calData: CalData, key: string, blockId: string): boolean {
+  return (calData._recurring || []).some((block) => block.id === blockId && !block.excludedDates?.includes(key));
 }
 
 export async function toggleBlockCompleted(calData: CalData, key: string, blockId: string): Promise<void> {
@@ -133,6 +143,46 @@ export async function updateBlockTimesBatch(
   await saveCalData();
 }
 
+export async function updateBlockOccurrenceTimesBatch(
+  calData: CalData,
+  key: string,
+  updates: Array<{
+    blockId: string;
+    startMin: number;
+    endMin: number;
+    ampm: 'AM' | 'PM';
+  }>,
+): Promise<Array<{ blockId: string; nextBlockId: string }>> {
+  if (updates.length === 0) return [];
+  if (!updates.some((update) => hasEditableBlockOccurrence(calData, key, update.blockId))) return [];
+
+  window.calderaBridge?.pushSnapshot();
+  const mappings: Array<{ blockId: string; nextBlockId: string }> = [];
+  let changed = false;
+
+  for (const update of updates) {
+    const oneOff = getDayData(calData, key)?.timeBlocks?.find((block) => block.id === update.blockId);
+    if (oneOff) {
+      oneOff.startMin = update.startMin;
+      oneOff.endMin = update.endMin;
+      oneOff.ampm = update.ampm;
+      mappings.push({ blockId: update.blockId, nextBlockId: update.blockId });
+      changed = true;
+      continue;
+    }
+
+    const detached = detachRecurringOccurrenceToOneOff(calData, key, update.blockId, key, update);
+    if (detached) {
+      mappings.push({ blockId: update.blockId, nextBlockId: detached.id });
+      changed = true;
+    }
+  }
+
+  if (!changed) return [];
+  await saveCalData();
+  return mappings;
+}
+
 // Thin wrappers over the schedule bridge, which runs the vanilla domain logic
 // (palette slots, recurring conversion, scope handling) and persists + notifies.
 const NOOP = Promise.resolve();
@@ -184,15 +234,6 @@ export const updateBlock = (
 export const deleteBlock = (key: string, id: string, scope?: string): Promise<void> =>
   window.calderaSchedule?.deleteBlock(key, id, scope) ?? NOOP;
 
-export async function moveBlock(key: string, id: string, newKey: string): Promise<void> {
-  if (!newKey || newKey === key) return;
-  const calData = window.calderaBridge?.getData();
-  if (!calData || !getDayData(calData, key)?.timeBlocks?.some((block) => block.id === id)) return;
-  window.calderaBridge?.pushSnapshot();
-  if (!moveOneOffBlockToDate(calData, key, id, newKey)) return;
-  await saveCalData();
-}
-
 // Move a one-off block to another day AND reposition it there in a single snapshot/save
 // — the cross-day drag on the Week timeline. Recurring blocks never reach here (they have
 // no stored date to move), so this only ever handles one-off blocks.
@@ -214,6 +255,22 @@ export async function moveBlockToDate(
     block.ampm = times.ampm;
   }
   await saveCalData();
+}
+
+export async function moveRecurringOccurrenceToOneOff(
+  calData: CalData,
+  key: string,
+  blockId: string,
+  newKey: string,
+  times: { startMin: number; endMin: number; ampm: 'AM' | 'PM' },
+): Promise<{ date: string; blockId: string } | null> {
+  if (!newKey) return null;
+  if (!hasEditableRecurringOccurrence(calData, key, blockId)) return null;
+  window.calderaBridge?.pushSnapshot();
+  const detached = detachRecurringOccurrenceToOneOff(calData, key, blockId, newKey, times);
+  if (!detached) return null;
+  await saveCalData();
+  return { date: newKey, blockId: detached.id };
 }
 
 export async function addSubtask(key: string, id: string, label: string): Promise<void> {

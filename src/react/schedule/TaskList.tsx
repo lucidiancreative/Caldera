@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useMinuteTick } from '../hooks/useMinuteTick';
 import { useCalData } from '../store/calStore';
 import { getSortedScheduleBlocks, isBlockPast, type ScheduleBlock } from '../store/selectors';
-import { toggleBlockCompleted, deleteBlock, moveBlock } from '../store/actions';
-import { formatBlockTimeRange, getTodayKey, stepDateKey } from '../util/format';
+import { toggleBlockCompleted, deleteBlock } from '../store/actions';
+import { formatBlockTimeRange, getTodayKey } from '../util/format';
 
 interface TaskListProps {
   date: string;
@@ -18,8 +18,6 @@ export function TaskList({ date, selectedBlockId, onSelect, onEdit }: TaskListPr
   const appearance = window.calderaAppearance;
   const blocks = getSortedScheduleBlocks(calData, date);
   const [deletingRecurringId, setDeletingRecurringId] = useState<string | null>(null);
-  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
-  const [rescheduleDate, setRescheduleDate] = useState('');
 
   if (!blocks.length) {
     return (
@@ -38,7 +36,6 @@ export function TaskList({ date, selectedBlockId, onSelect, onEdit }: TaskListPr
         const past = isBlockPast(block, date, now, todayKey) && !block.completed;
         const selected = block.id === selectedBlockId;
         const confirmingRecurringDelete = deletingRecurringId === block.id;
-        const rescheduling = reschedulingId === block.id;
 
         return (
           <div key={block.id} className="task-entry">
@@ -84,15 +81,6 @@ export function TaskList({ date, selectedBlockId, onSelect, onEdit }: TaskListPr
                       {block.completed ? <>&#8634;</> : <>&#10003;</>}
                     </button>
                     <button className="task-btn" title="Edit block" onClick={() => onEdit(block)}>&#9998;</button>
-                    {!block.recurring && (
-                      <button
-                        className="task-btn"
-                        title="Move to another day"
-                        onClick={() => { setReschedulingId(block.id); setRescheduleDate(stepDateKey(date, 1)); }}
-                      >
-                        &#8640;
-                      </button>
-                    )}
                     <button
                       className="task-btn task-btn-del"
                       title="Delete block"
@@ -104,20 +92,6 @@ export function TaskList({ date, selectedBlockId, onSelect, onEdit }: TaskListPr
                 )}
               </div>
             </div>
-
-            {rescheduling && (
-              <div className="task-reschedule" onClick={(event) => event.stopPropagation()}>
-                <input type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} />
-                <button
-                  className="task-btn"
-                  title="Move"
-                  onClick={() => { void moveBlock(date, block.id, rescheduleDate); setReschedulingId(null); }}
-                >
-                  &#10003;
-                </button>
-                <button className="task-btn" title="Cancel" onClick={() => setReschedulingId(null)}>&#10005;</button>
-              </div>
-            )}
           </div>
         );
       })}

@@ -88,22 +88,26 @@ export interface CalData {
   [dateKey: string]: DayData | RecurringBlock[] | unknown;
 }
 
-/** One independent calendar in the workspace — its own events, blocks, and recurring tasks. */
-export interface Calendar {
+/**
+ * One independent project in the workspace. `data` holds the Time lens (calendar events,
+ * blocks, recurring tasks); the other framework lenses (People/Money/Materials/Scope/
+ * Information) store their lists as reserved keys on that same CalData, like `_tasks`.
+ */
+export interface Project {
   id: string;
   name: string;
   data: CalData;
 }
 
 /**
- * Top-level on-disk shape (v2): a set of independent calendars plus the active one.
+ * Top-level on-disk shape (v3): a set of independent projects plus the active one.
  * `_aiConfig` also sits at this top level but is owned by the main process (ai-import.ts)
  * and is intentionally not modelled here — the renderer never reads or writes it.
  */
 export interface Workspace {
-  version: 2;
-  activeCalendarId: string;
-  calendars: Calendar[];
+  version: 3;
+  activeProjectId: string;
+  projects: Project[];
 }
 
 // ── AI types (shared between ai-import.ts and renderer.ts) ──────────────────

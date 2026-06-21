@@ -1,5 +1,88 @@
 # Changelog
 
+## [1.27.1] - 2026-06-21
+
+### Changed
+- **Moved the Week sub-task quick add.** The "Add a sub-task" input now appears at the top of the left sub-task column in the Week timeline sub-task panel, keeping the notes column reserved for sub-task notes.
+
+## [1.27.0] - 2026-06-21
+
+### Changed
+- **Recurring Week timeline drags now detach one occurrence.** Moving or resizing a recurring block in Week view now converts only that visible occurrence into a one-time block by excluding the original recurrence on that date and creating a one-off override at the new time/day. The rest of the recurring series keeps its original schedule.
+
+## [1.26.0] - 2026-06-20
+
+### Changed
+- **Trimmed the calendar date nav height.** The adaptive month/week/day nav now uses a single-line label, removing the secondary date text so the stacked calendar header takes less vertical space.
+
+## [1.25.0] - 2026-06-20
+
+### Changed
+- **Stacked the date nav above the month strip.** The calendar header now places the adaptive month/week/day nav directly above the centered Jan-Dec quick-jump buttons, while keeping the Month/Week/Day view toggles anchored on the right of the button strip.
+
+## [1.24.0] - 2026-06-20
+
+### Changed
+- **Centered the Jan-Dec quick-jump strip.** The calendar controls now place the adaptive month/week/day nav on the left, restore the full Jan-Dec quick-jump buttons in the centered top-bar position, and keep the Month/Week/Day view toggles on the right.
+
+## [1.23.0] - 2026-06-20
+
+### Changed
+- **Condensed the month quick-jump into a 5-month wheel.** The calendar control strip now shows the active month with two neighboring months on each side, compact chevrons for stepping, and mouse-wheel/trackpad support, reducing top-bar crowding while keeping month jumps fast.
+
+## [1.22.0] - 2026-06-20
+
+### Changed
+- **Rearranged the calendar control strip.** The Jan-Dec quick-jump buttons now align to the left side of the calendar pane, the Month/Week/Day view toggles align to the right, and the adaptive month/week/day date nav remains centered above the calendar area.
+
+## [1.21.0] - 2026-06-20
+
+### Added
+- **Discrete Z3n Studio copyright mark.** The app now displays a small bottom-center `© 2026 Z3n Studio.` mark that follows the active theme, stays non-interactive, and avoids the bottom-right Settings control.
+
+## [1.20.1] - 2026-06-20
+
+### Changed
+- **Improved selected Week timeline block outline.** Selected timeline blocks now use a two-layer ring with a bright inner contrast line and an outer accent halo, making the selected block easier to read across colorful gradients and active skins without changing layout.
+
+## [1.20.0] - 2026-06-20
+
+### Added
+- **Backspace deletes the selected Week timeline block.** In Week view, pressing Backspace now removes the currently selected time block while ignoring keystrokes from editable fields and open modals/editors. Recurring blocks remove only the selected day's occurrence.
+
+### Removed
+- **Removed the task-list move-to-day control.** Blocks are now moved between days through the Week timeline drag interaction, so the redundant move button and inline reschedule row were retired from the task sidebar.
+
+## [1.19.0] - 2026-06-20
+
+### Added
+- **Persistent selected time block for sub-tasks.** The schedule now remembers the selected time block per project in local storage, so switching away from the Time page or toggling Month/Week/Day no longer leaves the Week sub-task section empty when the user returns. The remembered selection is validated against the current project data and is cleared automatically if the block no longer exists.
+
+## [1.18.2] - 2026-06-20
+
+### Fixed
+- **Tooltip positioning and timing.** Pointer tooltips now wait briefly before appearing and flip above the cursor near the bottom of the window instead of being clamped far away from the pointer, fixing the Settings icon tooltip placement.
+
+## [1.18.1] - 2026-06-20
+
+### Changed
+- **Tooltips now follow the active theme and skin.** The shared tooltip layer no longer uses a fixed dark gray surface; its background, border, text, blur, and shadow now draw from the current Caldera CSS variables so default, dark, glass, and frost skins stay visually consistent.
+
+## [1.18.0] - 2026-06-20
+
+### Added
+- **Consistent in-app tooltip styling.** Native Electron title tooltips are now intercepted by a shared React `TooltipLayer`, which renders one compact app-styled tooltip for existing `title` attributes across window controls, tabs, schedule controls, task actions, and timeline blocks. The layer supports pointer hover and keyboard focus, clamps to the viewport, and suppresses the default OS tooltip chrome without requiring every tooltip call site to be rewritten.
+
+## [1.17.0] - 2026-06-20
+
+### Changed
+- **Tabs are now Projects (workspace renamed calendars → projects).** Each browser-style tab is conceptually a project rather than a calendar, matching the framework-lens direction. User-facing copy updated ("New project", "Delete project", and the delete confirmation). Internally the on-disk workspace upgraded from v2 to **v3**: `calendars` → `projects` and `activeCalendarId` → `activeProjectId` (`Calendar` type → `Project`, `CalendarTab` → `ProjectTab`, `getActiveCalendar` → `getActiveProject`, new project ids prefixed `proj_`). Existing v2 (and legacy v1) data migrates automatically on first load and is re-saved once — each calendar becomes a project with its events, blocks, and recurring tasks intact. The `calderaTabs` bridge keeps its name (these are still tabs). The Time-lens calendar **data** model (`CalData`, `CalendarEvent`, the schedule engine) is unchanged.
+
+## [1.16.0] - 2026-06-20
+
+### Added
+- **Project framework lenses (foundation).** The sidebar now leads with a row of six icons — **People · Time · Money · Materials · Scope · Information** — that switch the whole view between the parts of the project-management framework. The add-task input and task list moved down beneath the icons to make room. **Time** is the existing calendar (Month/Week/Day, the task inbox, drag-to-schedule) and works exactly as before; the other five lenses are labelled placeholders that we'll fill in stage by stage. This is the first step in evolving Caldera from a multi-calendar app into a multi-project workspace. (New `src/react/lens/` module: `lenses.tsx` registry with inline Lucide icons, `LensBar`, the shared two-column `LensLayout`, `ProjectWorkspace` owning the active lens, and `PlaceholderLens`. `SchedulePage` is now the Time lens rendered through `LensLayout`; the sidebar column split into an outer `.lens-sidebar` holding the pinned lens bar above the scrolling `.task-sidebar`.)
+
 ## [1.15.0] - 2026-06-20
 
 ### Added

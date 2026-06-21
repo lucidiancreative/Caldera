@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
-import { useCalderaTabs, type CalendarTab } from './useCalderaTabs';
+import { useCalderaTabs, type ProjectTab } from './useCalderaTabs';
 import { ConfirmDialog } from './ConfirmDialog';
 
-// Browser-style tab bar: each tab is an independent calendar. Click to switch,
+// Browser-style tab bar: each tab is an independent project. Click to switch,
 // double-click to rename inline, × to delete (kept hidden when only one remains),
 // drag to reorder, + to add. Tabs persist across restarts via the workspace file.
 export function TabBar({ onOpenAi }: { onOpenAi: () => void }) {
@@ -11,9 +11,9 @@ export function TabBar({ onOpenAi }: { onOpenAi: () => void }) {
   const [draft, setDraft] = useState('');
   const dragIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [pendingClose, setPendingClose] = useState<CalendarTab | null>(null);
+  const [pendingClose, setPendingClose] = useState<ProjectTab | null>(null);
 
-  function startRename(tab: CalendarTab) {
+  function startRename(tab: ProjectTab) {
     setEditingId(tab.id);
     setDraft(tab.name);
   }
@@ -69,7 +69,7 @@ export function TabBar({ onOpenAi }: { onOpenAi: () => void }) {
                 {tabs.length > 1 && (
                   <button
                     className="cal-tab-close"
-                    title="Delete calendar"
+                    title="Delete project"
                     onClick={(event) => { event.stopPropagation(); setPendingClose(tab); }}
                   >
                     &#10005;
@@ -80,7 +80,7 @@ export function TabBar({ onOpenAi }: { onOpenAi: () => void }) {
           </div>
         ))}
       </div>
-      <button className="tabbar-add" title="New calendar" onClick={() => create()}>+</button>
+      <button className="tabbar-add" title="New project" onClick={() => create()}>+</button>
       <button className="tabbar-add tabbar-import" title="Event Import" aria-label="Event Import" onClick={onOpenAi}>
         {/* Lucide calendar-plus — opens the AI event import */}
         <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -96,7 +96,7 @@ export function TabBar({ onOpenAi }: { onOpenAi: () => void }) {
       {pendingClose && (
         <ConfirmDialog
           title={`Delete “${pendingClose.name}”?`}
-          message="This calendar's events and tasks will be removed permanently. This can't be undone."
+          message="This project's events and tasks will be removed permanently. This can't be undone."
           confirmLabel="Delete"
           onConfirm={() => { close(pendingClose.id); setPendingClose(null); }}
           onCancel={() => setPendingClose(null)}

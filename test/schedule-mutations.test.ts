@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   addSubtaskToBlock,
   deleteSubtaskFromBlock,
+  detachRecurringOccurrenceToOneOff,
   moveOneOffBlockToDate,
   updateSubtaskNotesInBlock,
 } from '../src/react/store/scheduleMutations';
@@ -34,6 +35,78 @@ test('should add a trimmed sub-task to a recurring block', () => {
   assert.equal(calData._recurring[0].subtasks[0]?.label, 'Follow up');
   assert.equal(calData._recurring[0].subtasks[0]?.completed, false);
   assert.equal(calData._recurring[0].subtasks[0]?.notes, '');
+});
+
+test('should detach one recurring occurrence into a one-off block', () => {
+  const calData: CalData = {
+    _recurring: [recurring({
+      id: 'r2',
+      startMin: 60,
+      endMin: 120,
+      ampm: 'AM',
+      completedDates: ['2026-06-10'],
+      subtasks: [{ id: 's1', label: 'Prep', completed: true, notes: 'Bring agenda' }],
+    })],
+  };
+
+  const detached = detachRecurringOccurrenceToOneOff(
+    calData,
+    '2026-06-10',
+    'r2',
+    '2026-06-11',
+    { startMin: 180, endMin: 240, ampm: 'PM' },
+  );
+
+  assert.ok(detached);
+  assert.notEqual(detached.id, 'r2');
+  assert.deepEqual(calData._recurring[0].excludedDates, ['2026-06-10']);
+  assert.deepEqual(calData._recurring[0].completedDates, []);
+  assert.deepEqual(
+    {
+      startMin: calData._recurring[0].startMin,
+      endMin: calData._recurring[0].endMin,
+      ampm: calData._recurring[0].ampm,
+    },
+    { startMin: 60, endMin: 120, ampm: 'AM' },
+  );
+
+  const oneOffBlocks = (calData['2026-06-11'] as { timeBlocks: TimeBlock[] }).timeBlocks;
+  assert.equal(oneOffBlocks.length, 1);
+  assert.deepEqual(
+    {
+      id: oneOffBlocks[0].id,
+      startMin: oneOffBlocks[0].startMin,
+      endMin: oneOffBlocks[0].endMin,
+      ampm: oneOffBlocks[0].ampm,
+      completed: oneOffBlocks[0].completed,
+      subtasks: oneOffBlocks[0].subtasks,
+    },
+    {
+      id: detached.id,
+      startMin: 180,
+      endMin: 240,
+      ampm: 'PM',
+      completed: true,
+      subtasks: [{ id: 's1', label: 'Prep', completed: true, notes: 'Bring agenda' }],
+    },
+  );
+  assert.notEqual(oneOffBlocks[0].subtasks, calData._recurring[0].subtasks);
+});
+
+test('should ignore an already excluded recurring occurrence', () => {
+  const calData: CalData = { _recurring: [recurring({ excludedDates: ['2026-06-10'] })] };
+
+  const detached = detachRecurringOccurrenceToOneOff(
+    calData,
+    '2026-06-10',
+    'r1',
+    '2026-06-10',
+    { startMin: 180, endMin: 240, ampm: 'PM' },
+  );
+
+  assert.equal(detached, null);
+  assert.equal(calData['2026-06-10'], undefined);
+  assert.deepEqual(calData._recurring[0].excludedDates, ['2026-06-10']);
 });
 
 test('should ignore blank sub-task labels without mutating the block', () => {

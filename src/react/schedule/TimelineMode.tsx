@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMinuteTick } from '../hooks/useMinuteTick';
 import { useCalData } from '../store/calStore';
-import { moveBlockToDate, updateBlockTimesBatch } from '../store/actions';
+import {
+  deleteBlock,
+  moveBlockToDate,
+  moveRecurringOccurrenceToOneOff,
+  updateBlockOccurrenceTimesBatch,
+} from '../store/actions';
 import { getScheduleBlocksForDate, isBlockPast } from '../store/selectors';
 import {
   absoluteMinutesToBlockTimes,
@@ -42,6 +47,7 @@ interface TimelineModeProps {
   selection: { date: string; blockId: string } | null;
   onFocusDate: (date: string, options?: { preserveSelection?: boolean }) => void;
   onSelect: (selection: { date: string; blockId: string }) => void;
+  onClearSelection: () => void;
   onCreate: (draft: { date: string; startMin: number; endMin: number; ampm: 'AM' | 'PM' }) => void;
   onScheduleTask: (taskId: string, draft: { date: string; startMin: number; endMin: number; ampm: 'AM' | 'PM' }) => void;
 }
@@ -108,7 +114,14 @@ function saveTimelineViewport(viewport: PersistedTimelineViewport): void {
   }
 }
 
-export function TimelineMode({ date, selection, onFocusDate, onSelect, onCreate, onScheduleTask }: TimelineModeProps) {
+function isEditableKeyTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target.closest('.rblock-editor, #modal, #settings-modal, #ai-modal, #ai-review-modal')) return true;
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+}
+
+export function TimelineMode({ date, selection, onFocusDate, onSelect, onClearSelection, onCreate, onScheduleTask }: TimelineModeProps) {
   const calData = useCalData();
   useMinuteTick();
   const appearance = window.calderaAppearance;
@@ -144,6 +157,24 @@ export function TimelineMode({ date, selection, onFocusDate, onSelect, onCreate,
     : 0;
 
   useEffect(() => () => interactionControllerRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!selection) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Backspace') return;
+      if (event.defaultPrevented || isEditableKeyTarget(event.target)) return;
+      if (getWeekStartKey(selection.date) !== getWeekStartKey(date)) return;
+      const selectedBlock = getScheduleBlocksForDate(calData, selection.date).find((block) => block.id === selection.blockId);
+      if (!selectedBlock) return;
+      event.preventDefault();
+      onClearSelection();
+      void deleteBlock(selection.date, selection.blockId, selectedBlock.recurring ? 'today' : undefined);
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [calData, date, onClearSelection, selection]);
 
   useEffect(() => {
     if (restoredViewportRef.current) return;
@@ -298,9 +329,13 @@ export function TimelineMode({ date, selection, onFocusDate, onSelect, onCreate,
       } => !!entry);
 
       setPreviewByOccurrenceKey({});
-      onSelect({ date: targetSegment.date, blockId: targetSegment.block.id });
       if (updates.length > 0) {
-        void updateBlockTimesBatch(calData, targetSegment.date, updates);
+        void updateBlockOccurrenceTimesBatch(calData, targetSegment.date, updates).then((mappings) => {
+          const selected = mappings.find((mapping) => mapping.blockId === targetSegment.block.id);
+          onSelect({ date: targetSegment.date, blockId: selected?.nextBlockId ?? targetSegment.block.id });
+        });
+      } else {
+        onSelect({ date: targetSegment.date, blockId: targetSegment.block.id });
       }
     };
 
@@ -372,9 +407,6 @@ export function TimelineMode({ date, selection, onFocusDate, onSelect, onCreate,
     interactionControllerRef.current = controller;
     const anchorMinutes = pointerToMinutes(pointerEvent.clientX, track);
     const anchorClientX = pointerEvent.clientX;
-    // Recurring blocks recur on a rule, not a stored date — there is nowhere to land them
-    // on another day, so they stay on their own row and only their time can change.
-    const canChangeDay = !segment.block.recurring;
     let didDrag = false;
     let latestRange: SegmentOverride | null = null;
     let latestTargetDate = segment.date;
@@ -386,9 +418,7 @@ export function TimelineMode({ date, selection, onFocusDate, onSelect, onCreate,
       // the row under the cursor is what picks the destination day.
       const dragDelta = pointerToMinutes(moveEvent.clientX, track) - anchorMinutes;
       const nextRange = moveTimelineRange(segment.start, segment.end, dragDelta);
-      const targetDate = canChangeDay
-        ? dayDateUnderPointer(moveEvent.clientX, moveEvent.clientY) ?? segment.date
-        : segment.date;
+      const targetDate = dayDateUnderPointer(moveEvent.clientX, moveEvent.clientY) ?? segment.date;
 
       if (
         !didDrag &&
@@ -418,14 +448,23 @@ export function TimelineMode({ date, selection, onFocusDate, onSelect, onCreate,
       document.body.classList.remove('is-dragging-timeline-block');
       setMovePreview(null);
 
-      onSelect({ date: latestTargetDate, blockId: segment.block.id });
-      if (!didDrag || !latestRange) return;
+      if (!didDrag || !latestRange) {
+        onSelect({ date: latestTargetDate, blockId: segment.block.id });
+        return;
+      }
 
       const nextTimes = absoluteMinutesToBlockTimes(latestRange.start, latestRange.end);
-      if (latestTargetDate !== segment.date) {
+      if (segment.block.recurring) {
+        void moveRecurringOccurrenceToOneOff(calData, segment.date, segment.block.id, latestTargetDate, nextTimes)
+          .then((nextSelection) => {
+            onSelect(nextSelection ?? { date: latestTargetDate, blockId: segment.block.id });
+          });
+      } else if (latestTargetDate !== segment.date) {
+        onSelect({ date: latestTargetDate, blockId: segment.block.id });
         void moveBlockToDate(calData, segment.date, segment.block.id, latestTargetDate, nextTimes);
       } else {
-        void updateBlockTimesBatch(calData, segment.date, [
+        onSelect({ date: latestTargetDate, blockId: segment.block.id });
+        void updateBlockOccurrenceTimesBatch(calData, segment.date, [
           {
             blockId: segment.block.id,
             startMin: nextTimes.startMin,

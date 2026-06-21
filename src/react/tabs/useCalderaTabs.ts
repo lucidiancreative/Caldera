@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 
-export interface CalendarTab {
+export interface ProjectTab {
   id: string;
   name: string;
 }
 
-// Mirrors the vanilla calderaTabs bridge: the workspace (all calendars + the active
+// Mirrors the vanilla calderaTabs bridge: the workspace (all projects + the active
 // one) is owned by the data layer; this hook just reflects it and forwards mutations.
 export function useCalderaTabs() {
   const bridge = window.calderaTabs;
-  const [tabs, setTabs] = useState<CalendarTab[]>(bridge?.list() ?? []);
+  const [tabs, setTabs] = useState<ProjectTab[]>(bridge?.list() ?? []);
   const [activeId, setActiveId] = useState<string>(bridge?.activeId() ?? '');
 
   useEffect(() => {

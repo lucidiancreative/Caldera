@@ -7,8 +7,8 @@ function getDayData(key: string): DayData | undefined {
 const calBridge = window.calAPI;
 
 // The whole on-disk workspace (all calendars). `calData` always points at the active
-// calendar's data, so every existing read/write keeps operating on the active tab.
-let workspace: Workspace = { version: 2, activeCalendarId: '', calendars: [] };
+// project's data, so every existing read/write keeps operating on the active tab.
+let workspace: Workspace = { version: 3, activeProjectId: '', projects: [] };
 let calData: CalData = { _recurring: [] };
 let scheduleDate: string | null = null;
 const undoStack: string[] = [];
@@ -73,67 +73,72 @@ window.calderaBridge = {
   pushSnapshot: () => pushCalendarSnapshot(),
 };
 
-// ── Multi-calendar workspace ──────────────────────────────────────────────────
-// Each tab is a fully independent calendar. Switching the active calendar repoints
-// calData and notifies, so the React island re-renders against the new calendar
-// without any of the domain logic below needing to know calendars exist.
+// ── Multi-project workspace ───────────────────────────────────────────────────
+// Each tab is a fully independent project. Switching the active project repoints
+// calData and notifies, so the React island re-renders against the new project
+// without any of the domain logic below needing to know projects exist.
 const calderaTabsListeners = new Set<() => void>();
 function notifyCalendarTabsChanged(): void {
   calderaTabsListeners.forEach(listener => listener());
 }
 
-function generateCalendarId(): string {
-  return 'cal_' + generateCalendarEntryId();
+function generateProjectId(): string {
+  return 'proj_' + generateCalendarEntryId();
 }
 
-function getActiveCalendar(): Calendar {
-  return workspace.calendars.find(cal => cal.id === workspace.activeCalendarId) ?? workspace.calendars[0];
+function getActiveProject(): Project {
+  return workspace.projects.find(project => project.id === workspace.activeProjectId) ?? workspace.projects[0];
 }
 
-function pointCalDataAtActiveCalendar(): void {
-  calData = getActiveCalendar().data;
+function pointCalDataAtActiveProject(): void {
+  calData = getActiveProject().data;
 }
 
-// Wrap whatever was on disk into a v2 workspace. A legacy single-calendar file (flat
-// date keys + _recurring) becomes the workspace's first calendar; the top-level
-// `_aiConfig` is intentionally left behind — it stays main-owned at the file root.
+// Wrap whatever was on disk into a v3 workspace. v2 stored the list under
+// `calendars`/`activeCalendarId`; a legacy single-calendar file (flat date keys +
+// _recurring) becomes the workspace's first project. The top-level `_aiConfig` is
+// intentionally left behind — it stays main-owned at the file root.
 function migrateWorkspaceFormat(raw: Record<string, unknown>): Workspace {
-  const isV2 = !!raw && (raw as { version?: unknown }).version === 2 && Array.isArray((raw as { calendars?: unknown }).calendars);
+  const version = raw ? (raw as { version?: unknown }).version : undefined;
+  const isV3 = version === 3 && Array.isArray((raw as { projects?: unknown }).projects);
+  const isV2 = version === 2 && Array.isArray((raw as { calendars?: unknown }).calendars);
 
-  if (isV2) {
-    const source = raw as unknown as Workspace;
-    const calendars = (source.calendars || [])
-      .filter(cal => cal && typeof cal === 'object')
-      .map(cal => ({
-        id: typeof cal.id === 'string' && cal.id ? cal.id : generateCalendarId(),
-        name: typeof cal.name === 'string' && cal.name.trim() ? cal.name.trim() : 'Calendar',
-        data: migrateCalendarDataFormat((cal.data as Record<string, unknown>) || {}),
+  if (isV3 || isV2) {
+    const source = raw as Record<string, unknown>;
+    const rawList = (isV3 ? source.projects : source.calendars) as Array<Record<string, unknown>>;
+    const rawActiveId = (isV3 ? source.activeProjectId : source.activeCalendarId) as string;
+    const projects = (rawList || [])
+      .filter(entry => entry && typeof entry === 'object')
+      .map(entry => ({
+        id: typeof entry.id === 'string' && entry.id ? entry.id : generateProjectId(),
+        name: typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : 'Project',
+        data: migrateCalendarDataFormat((entry.data as Record<string, unknown>) || {}),
       }));
-    if (!calendars.length) calendars.push({ id: generateCalendarId(), name: 'Calendar', data: { _recurring: [] } });
-    const activeIsValid = calendars.some(cal => cal.id === source.activeCalendarId);
-    return { version: 2, activeCalendarId: activeIsValid ? source.activeCalendarId : calendars[0].id, calendars };
+    if (!projects.length) projects.push({ id: generateProjectId(), name: 'Project', data: { _recurring: [] } });
+    const activeIsValid = projects.some(project => project.id === rawActiveId);
+    return { version: 3, activeProjectId: activeIsValid ? rawActiveId : projects[0].id, projects };
   }
 
-  const id = generateCalendarId();
-  return { version: 2, activeCalendarId: id, calendars: [{ id, name: 'Calendar', data: migrateCalendarDataFormat(raw) }] };
+  const id = generateProjectId();
+  return { version: 3, activeProjectId: id, projects: [{ id, name: 'Project', data: migrateCalendarDataFormat(raw) }] };
 }
 
 function loadWorkspaceFromRaw(raw: Record<string, unknown>): void {
-  const wasV2 = !!raw && (raw as { version?: unknown }).version === 2;
+  const wasCurrent = !!raw && (raw as { version?: unknown }).version === 3;
   workspace = migrateWorkspaceFormat(raw);
-  pointCalDataAtActiveCalendar();
-  if (!wasV2) void saveCalendarData(); // persist the v1→v2 upgrade once
+  pointCalDataAtActiveProject();
+  if (!wasCurrent) void saveCalendarData(); // persist the upgrade (legacy/v1/v2 → v3) once
   notifyCalendarDataChanged();
   notifyCalendarTabsChanged();
 }
 
 window.calderaTabs = {
-  list: () => workspace.calendars.map(cal => ({ id: cal.id, name: cal.name })),
-  activeId: () => workspace.activeCalendarId,
+  list: () => workspace.projects.map(project => ({ id: project.id, name: project.name })),
+  activeId: () => workspace.activeProjectId,
   setActive: (id) => {
-    if (id === workspace.activeCalendarId || !workspace.calendars.some(cal => cal.id === id)) return;
-    workspace.activeCalendarId = id;
-    pointCalDataAtActiveCalendar();
+    if (id === workspace.activeProjectId || !workspace.projects.some(project => project.id === id)) return;
+    workspace.activeProjectId = id;
+    pointCalDataAtActiveProject();
     undoStack.length = 0;
     redoStack.length = 0;
     notifyCalendarDataChanged();
@@ -141,11 +146,11 @@ window.calderaTabs = {
     void saveCalendarData();
   },
   create: (name) => {
-    const id = generateCalendarId();
+    const id = generateProjectId();
     const trimmed = (name || '').trim();
-    workspace.calendars.push({ id, name: trimmed || `Calendar ${workspace.calendars.length + 1}`, data: { _recurring: [] } });
-    workspace.activeCalendarId = id;
-    pointCalDataAtActiveCalendar();
+    workspace.projects.push({ id, name: trimmed || `Project ${workspace.projects.length + 1}`, data: { _recurring: [] } });
+    workspace.activeProjectId = id;
+    pointCalDataAtActiveProject();
     undoStack.length = 0;
     redoStack.length = 0;
     notifyCalendarDataChanged();
@@ -154,21 +159,21 @@ window.calderaTabs = {
     return id;
   },
   rename: (id, name) => {
-    const cal = workspace.calendars.find(entry => entry.id === id);
+    const project = workspace.projects.find(entry => entry.id === id);
     const trimmed = name.trim();
-    if (!cal || !trimmed) return;
-    cal.name = trimmed;
+    if (!project || !trimmed) return;
+    project.name = trimmed;
     notifyCalendarTabsChanged();
     void saveCalendarData();
   },
   close: (id) => {
-    if (workspace.calendars.length <= 1) return; // always keep at least one calendar
-    const index = workspace.calendars.findIndex(cal => cal.id === id);
+    if (workspace.projects.length <= 1) return; // always keep at least one project
+    const index = workspace.projects.findIndex(project => project.id === id);
     if (index === -1) return;
-    workspace.calendars.splice(index, 1);
-    if (workspace.activeCalendarId === id) {
-      workspace.activeCalendarId = workspace.calendars[Math.max(0, index - 1)].id;
-      pointCalDataAtActiveCalendar();
+    workspace.projects.splice(index, 1);
+    if (workspace.activeProjectId === id) {
+      workspace.activeProjectId = workspace.projects[Math.max(0, index - 1)].id;
+      pointCalDataAtActiveProject();
       undoStack.length = 0;
       redoStack.length = 0;
       notifyCalendarDataChanged();
@@ -177,10 +182,10 @@ window.calderaTabs = {
     void saveCalendarData();
   },
   reorder: (fromIndex, toIndex) => {
-    const cals = workspace.calendars;
-    if (fromIndex < 0 || fromIndex >= cals.length || toIndex < 0 || toIndex >= cals.length || fromIndex === toIndex) return;
-    const [moved] = cals.splice(fromIndex, 1);
-    cals.splice(toIndex, 0, moved);
+    const projects = workspace.projects;
+    if (fromIndex < 0 || fromIndex >= projects.length || toIndex < 0 || toIndex >= projects.length || fromIndex === toIndex) return;
+    const [moved] = projects.splice(fromIndex, 1);
+    projects.splice(toIndex, 0, moved);
     notifyCalendarTabsChanged();
     void saveCalendarData();
   },
@@ -194,7 +199,7 @@ window.calderaTabs = {
 async function saveCalendarData(): Promise<void> {
   normalizeCalendarBlockSubtasks(calData);
   syncCalendarBlockColorsToCurrentSkin();
-  // calData is a reference to the active calendar's data, so persisting the whole
+  // calData is a reference to the active project's data, so persisting the whole
   // workspace already includes the edits just made. The main process preserves the
   // top-level _aiConfig it owns.
   await calBridge.saveData(workspace);
@@ -227,7 +232,7 @@ async function applyCalendarSnapshot(snapshot: string): Promise<void> {
   calData = JSON.parse(snapshot);
   normalizeCalendarBlockSubtasks(calData);
   normalizeCalendarBlockAppearance(calData);
-  getActiveCalendar().data = calData; // undo/redo operates on the active calendar
+  getActiveProject().data = calData; // undo/redo operates on the active project
   await saveCalendarData();
 }
 

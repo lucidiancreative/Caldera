@@ -6,11 +6,12 @@ import { DayModal } from './calendar/DayModal';
 import { useCalderaView } from './hooks/useCalderaView';
 import { addEventFromImageBuffer } from './store/calendarActions';
 import { useCalData } from './store/calStore';
-import { SchedulePage } from './schedule/SchedulePage';
+import { ProjectWorkspace } from './lens/ProjectWorkspace';
 import type { CalMode } from './schedule/ScheduleNav';
 import { SettingsModal } from './settings/SettingsModal';
 import { TabBar } from './tabs/TabBar';
 import { useCalderaTabs } from './tabs/useCalderaTabs';
+import { TooltipLayer } from './ui/TooltipLayer';
 import { getTodayKey } from './util/format';
 
 export function App() {
@@ -31,8 +32,8 @@ export function App() {
     if (!scheduleDate) setScheduleDate(getTodayKey());
   }, [scheduleDate, setScheduleDate]);
 
-  // Switching calendars swaps the underlying data, so close any open day modal/lightbox
-  // to avoid showing the previous calendar's content for the same date.
+  // Switching projects swaps the underlying data, so close any open day modal/lightbox
+  // to avoid showing the previous project's content for the same date.
   useEffect(() => {
     setDayModalDate(null);
     setLightboxUrl('');
@@ -112,7 +113,7 @@ export function App() {
       <TabBar onOpenAi={() => setAiOpen(true)} />
 
       <div id="schedule-view">
-        <SchedulePage
+        <ProjectWorkspace
           externalDate={scheduleDate ?? undefined}
           mode={mode}
           onModeChange={setMode}
@@ -137,6 +138,8 @@ export function App() {
         </div>
       )}
 
+      <div id="app-copyright" aria-hidden="true">&copy; 2026 Z3n Studio.</div>
+
       <button id="btn-settings" title="Settings" aria-label="Settings" onClick={() => setSettingsOpen(true)}>
         {/* Lucide settings (gear) */}
         <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -148,6 +151,7 @@ export function App() {
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {aiOpen && <AiImportModal onClose={() => setAiOpen(false)} onImported={setAiReviewEvents} />}
       {aiReviewEvents && <AiReviewModal events={aiReviewEvents} onClose={() => setAiReviewEvents(null)} />}
+      <TooltipLayer />
     </>
   );
 }

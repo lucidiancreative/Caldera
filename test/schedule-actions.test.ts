@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { CalData, DayData } from '../src/types';
+import type { CalData, DayData, RecurringBlock } from '../src/types';
 
 type RuntimeWindow = typeof globalThis & {
   calderaBridge?: {
@@ -226,6 +226,130 @@ test('moveBlockToDate is a no-op when the destination equals the source day', as
     );
     assert.equal(counts.snapshots, 0);
     assert.equal(counts.saves, 0);
+  } finally {
+    runtime.window = originalWindow;
+  }
+});
+
+test('moveRecurringOccurrenceToOneOff moves one occurrence without changing the recurring rule time', async () => {
+  const runtime = globalThis as typeof globalThis & { window?: RuntimeWindow };
+  const originalWindow = runtime.window;
+  const recurring: RecurringBlock = {
+    id: 'r1',
+    startMin: 60,
+    endMin: 120,
+    label: 'Standup',
+    color: '#000',
+    paletteSlot: 1,
+    ampm: 'AM',
+    recurrence: 'daily',
+    dayOfWeek: 5,
+    dayOfMonth: 19,
+    completedDates: ['2026-06-19'],
+    excludedDates: [],
+    subtasks: [{ id: 's1', label: 'Prep', completed: false, notes: 'Notes' }],
+  };
+  const calData: CalData = { _recurring: [recurring] };
+  const counts = { snapshots: 0, saves: 0 };
+
+  runtime.window = {
+    calderaBridge: {
+      subscribe: () => () => {},
+      getData: () => calData as unknown as Record<string, unknown>,
+      notify: () => {},
+      save: async () => { counts.saves += 1; },
+      pushSnapshot: () => { counts.snapshots += 1; },
+    },
+  } as unknown as RuntimeWindow;
+
+  try {
+    const { moveRecurringOccurrenceToOneOff } = await import('../src/react/store/actions');
+    const selection = await moveRecurringOccurrenceToOneOff(
+      calData,
+      '2026-06-19',
+      'r1',
+      '2026-06-21',
+      { startMin: 30, endMin: 90, ampm: 'PM' },
+    );
+
+    assert.ok(selection);
+    assert.equal(selection.date, '2026-06-21');
+    assert.notEqual(selection.blockId, 'r1');
+    assert.deepEqual(calData._recurring[0].excludedDates, ['2026-06-19']);
+    assert.deepEqual(calData._recurring[0].completedDates, []);
+    assert.deepEqual(
+      { startMin: calData._recurring[0].startMin, endMin: calData._recurring[0].endMin, ampm: calData._recurring[0].ampm },
+      { startMin: 60, endMin: 120, ampm: 'AM' },
+    );
+
+    const moved = (calData['2026-06-21'] as DayData).timeBlocks[0];
+    assert.deepEqual(
+      { id: moved.id, startMin: moved.startMin, endMin: moved.endMin, ampm: moved.ampm, completed: moved.completed },
+      { id: selection.blockId, startMin: 30, endMin: 90, ampm: 'PM', completed: true },
+    );
+    assert.equal(moved.subtasks[0]?.notes, 'Notes');
+    assert.equal(counts.snapshots, 1);
+    assert.equal(counts.saves, 1);
+  } finally {
+    runtime.window = originalWindow;
+  }
+});
+
+test('updateBlockOccurrenceTimesBatch detaches resized recurring occurrences instead of moving the rule', async () => {
+  const runtime = globalThis as typeof globalThis & { window?: RuntimeWindow };
+  const originalWindow = runtime.window;
+  const calData: CalData = {
+    _recurring: [{
+      id: 'r1',
+      startMin: 60,
+      endMin: 120,
+      label: 'Focus',
+      color: '#000',
+      ampm: 'AM',
+      recurrence: 'weekly',
+      dayOfWeek: 5,
+      dayOfMonth: 19,
+      completedDates: [],
+      excludedDates: [],
+      subtasks: [],
+    }],
+  };
+  const counts = { snapshots: 0, saves: 0 };
+
+  runtime.window = {
+    calderaBridge: {
+      subscribe: () => () => {},
+      getData: () => calData as unknown as Record<string, unknown>,
+      notify: () => {},
+      save: async () => { counts.saves += 1; },
+      pushSnapshot: () => { counts.snapshots += 1; },
+    },
+  } as unknown as RuntimeWindow;
+
+  try {
+    const { updateBlockOccurrenceTimesBatch } = await import('../src/react/store/actions');
+    const mappings = await updateBlockOccurrenceTimesBatch(calData, '2026-06-19', [{
+      blockId: 'r1',
+      startMin: 90,
+      endMin: 150,
+      ampm: 'AM',
+    }]);
+
+    assert.equal(mappings.length, 1);
+    assert.equal(mappings[0].blockId, 'r1');
+    assert.notEqual(mappings[0].nextBlockId, 'r1');
+    assert.deepEqual(calData._recurring[0].excludedDates, ['2026-06-19']);
+    assert.deepEqual(
+      { startMin: calData._recurring[0].startMin, endMin: calData._recurring[0].endMin },
+      { startMin: 60, endMin: 120 },
+    );
+    const detached = (calData['2026-06-19'] as DayData).timeBlocks[0];
+    assert.deepEqual(
+      { id: detached.id, startMin: detached.startMin, endMin: detached.endMin, ampm: detached.ampm },
+      { id: mappings[0].nextBlockId, startMin: 90, endMin: 150, ampm: 'AM' },
+    );
+    assert.equal(counts.snapshots, 1);
+    assert.equal(counts.saves, 1);
   } finally {
     runtime.window = originalWindow;
   }

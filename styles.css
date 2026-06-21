@@ -157,6 +157,51 @@ body.shader-static.skin-teal.dark #shader-bg {
   transform: rotate(45deg);
 }
 
+#app-copyright {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 80;
+  color: var(--text-muted);
+  font-size: 1.15rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  opacity: 0.86;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--bg) 82%, transparent);
+}
+
+.app-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(260px, calc(100vw - 16px));
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--bg));
+  color: var(--text);
+  box-shadow: 0 8px 24px var(--accent-shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  user-select: none;
+  white-space: normal;
+}
+
+body.skin-glass .app-tooltip,
+body.skin-frost .app-tooltip {
+  background: var(--surface);
+}
+
 /* ── Month strip ──────────────────────────────────────── */
 #month-strip {
   position: fixed;
@@ -1076,15 +1121,82 @@ body.dark .card-toolbar .card-action-btn:hover {
   padding: 6px 12px;
 }
 
-/* ── Task list sidebar ────────────────────────────────── */
-/* The sidebar column owns the fluid width, the cqw font scale, and the scroll for the
-   whole left side (quick-add inbox + scheduled blocks). 1em ≈ the old task-label
-   (1.2rem); every child below is sized in em so the panel scales with the window like
-   the calendar side. */
-.task-sidebar {
+/* ── Lens sidebar ─────────────────────────────────────── */
+/* The outer sidebar column owns the fluid width and the cqw font scale; it holds the
+   framework lens bar (pinned, doesn't scroll) above whichever lens's list is showing.
+   1em ≈ the old task-label (1.2rem) so every child scales with the window. */
+.lens-sidebar {
   font-size: clamp(1.05rem, calc(0.73rem + 0.43cqw), 1.7rem);
   width: clamp(190px, 17.5cqw, 320px);
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  min-height: 0;
+}
+
+/* The six framework lenses: People · Time · Money · Materials · Scope · Information.
+   Icon-only buttons share the row width; hover and active states tint the glyphs. */
+.lens-bar {
+  display: flex;
+  gap: 0.3em;
+  flex-shrink: 0;
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid var(--border);
+}
+.lens-icon {
+  --lens-icon-base-scale: 1;
+  --lens-icon-active-scale: 1;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 0;
+  font-size: 1.1em;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.lens-icon:hover {
+  color: var(--accent);
+}
+.lens-icon.active {
+  --lens-icon-active-scale: 1.5;
+  color: var(--accent);
+}
+.lens-icon svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+  transform: scale(calc(var(--lens-icon-base-scale) * var(--lens-icon-active-scale)));
+  transform-origin: center;
+  transition: transform 0.2s ease;
+}
+/* Empty-state copy for a lens whose list has no items yet. */
+.lens-empty { color: var(--text-muted); font-size: 0.95em; padding: 0.5em 0.2em; }
+
+/* Placeholder main panel for lenses we haven't built yet. */
+.lens-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  color: var(--text-muted);
+  text-align: center;
+}
+.lens-placeholder-title { font-size: 1.4rem; font-weight: 700; color: var(--text); }
+.lens-placeholder-note { font-size: 1rem; }
+
+/* ── Task list sidebar ────────────────────────────────── */
+/* Inner scroll area of the Time lens — the quick-add inbox + scheduled blocks. Sits
+   below the lens bar and owns the left side's scroll. */
+.task-sidebar {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.45em;
@@ -1236,13 +1348,10 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 }
 .react-schedule-datecopy {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.15em;
   min-width: 7em;  /* just wide enough for the month label so the arrows hug it */
 }
-.react-schedule-datelabel { font-size: 1.17em; font-weight: 600; }
-.react-schedule-datesub { font-size: 0.92em; color: var(--text-muted); }
+.react-schedule-datelabel { font-size: 1.17em; font-weight: 600; line-height: 1.2; }
 /* Discrete icon button (replaces the old "Today" text): borderless, muted, accent on hover.
    font-size sets the SVG size since the icon is width/height 1em. */
 .react-schedule-today {
@@ -1265,29 +1374,40 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 .react-schedule-main { flex: 1; display: flex; flex-direction: column; gap: 12px; min-width: 0; container-type: inline-size; }
 .react-schedule-canvas { flex: 1; display: flex; min-height: 0; min-width: 0; }
 
-/* One control row above the main UI: the Month/Week/Day toggles on the
-   left, the adaptive nav in the flexible middle, and the Jan–Dec quick-jump on the right.
-   Side columns are `auto` so the toggles and all 12 month buttons always get their full
-   width (no clipping); the centre nav (1fr) takes the slack and is the first to give when
-   space is tight. */
+/* Two-line calendar control group: the adaptive date nav sits just above the centered
+   Jan-Dec quick-jump strip, with Month/Week/Day toggles anchored on the lower right. */
 .react-schedule-topbar {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 0.9em;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45em;
   /* The whole strip scales from this one fluid base, anchored to the two window sizes in
      use: ~15px at a 1280px window (calendar col ~970px) so every control still fits on one
      row, rising to ~21px at 2560px (col ~2250px) where there is room. Every control below
      sizes its font/padding/box in em, so they scale together. */
   font-size: clamp(0.8rem, calc(0.85rem + 0.51cqw), 1.875rem);
 }
-.react-schedule-modetoggle { display: flex; align-items: center; gap: 0.25em; justify-self: start; }
+.react-schedule-navrow {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.react-schedule-striprow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.9em;
+  min-width: 0;
+}
+.react-schedule-stripspacer { min-width: 0; }
+.react-schedule-modetoggle { display: flex; align-items: center; gap: 0.25em; justify-self: end; }
 .react-schedule-topbar .react-schedule-datenav { justify-self: center; }
 .react-schedule-monthtabs {
   display: flex;
+  align-items: center;
   gap: 0.25em;
   min-width: 0;
-  justify-self: end;
+  justify-self: center;
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
@@ -1532,17 +1652,6 @@ body.dark .rtimeline-scroll::-webkit-scrollbar-thumb { background: #48484a; }
 }
 .rdaily-legend { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; width: 100%; max-width: 100%; }
 .rdaily-hint { font-size: 1.2rem; color: var(--text-muted); }
-
-.task-reschedule {
-  display: flex; gap: 0.45em; align-items: center;
-  margin: 0.3em 0 0.15em; padding: 0.45em 0.6em;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-}
-.task-reschedule input {
-  flex: 1; min-width: 0;
-  font: inherit; font-size: 0.92em; padding: 0.32em 0.57em;
-  border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit;
-}
 
 /* Sub-task section beneath the Week timeline — shows the selected block's sub-tasks. */
 .schedule-subtask-section {
@@ -1844,8 +1953,9 @@ body.dark .task-list::-webkit-scrollbar-thumb { background: #48484a; }
 
 .timeline-bar.is-selected {
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--accent) 62%, white),
-    0 10px 24px rgba(0,0,0,0.12);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.92),
+    0 0 0 3px color-mix(in srgb, var(--accent) 78%, white),
+    0 12px 28px rgba(0,0,0,0.18);
 }
 
 .timeline-bar.is-compact .timeline-bar-time {

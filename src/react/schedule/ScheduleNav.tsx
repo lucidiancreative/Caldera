@@ -1,7 +1,7 @@
 // One adaptive date nav shared by all three lenses. The arrows step by month, day,
 // or week depending on the active mode, and the label re-formats to match. Sits just
 // above the main UI and is the only date control now that the top month strip is gone.
-import { formatDisplayDate, formatMonthYear, formatRelativeDay, formatWeekRange, getTodayKey, stepDateKey, stepMonthKey } from '../util/format';
+import { formatDisplayDate, formatMonthYear, formatWeekRange, getTodayKey, stepDateKey, stepMonthKey } from '../util/format';
 
 export type CalMode = 'month' | 'week' | 'day';
 
@@ -21,10 +21,6 @@ export function ScheduleNav({
     : mode === 'week' ? formatWeekRange(date)
     : formatDisplayDate(date);
 
-  // Second line specifying the focused day. Day view's main line is already the full date,
-  // so it gets a relative descriptor instead of repeating it.
-  const sub = mode === 'day' ? formatRelativeDay(date) : formatDisplayDate(date);
-
   const labels = {
     month: { prev: 'Previous month', next: 'Next month' },
     week: { prev: 'Previous week', next: 'Next week' },
@@ -42,7 +38,6 @@ export function ScheduleNav({
       <button className="nav-arrow" title={labels.prev} onClick={() => step(-1)}>&#8249;</button>
       <div className="react-schedule-datecopy">
         <span className="react-schedule-datelabel">{label}</span>
-        <span className="react-schedule-datesub">{sub}</span>
       </div>
       <button className="nav-arrow" title={labels.next} onClick={() => step(1)}>&#8250;</button>
       <button

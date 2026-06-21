@@ -75,16 +75,16 @@ interface CalData {
   [dateKey: string]: DayData | RecurringBlock[] | unknown;
 }
 
-interface Calendar {
+interface Project {
   id: string;
   name: string;
   data: CalData;
 }
 
 interface Workspace {
-  version: 2;
-  activeCalendarId: string;
-  calendars: Calendar[];
+  version: 3;
+  activeProjectId: string;
+  projects: Project[];
 }
 
 interface AiConfig {
@@ -171,8 +171,9 @@ interface CalderaView {
   notify(): void;
 }
 
-// Multi-calendar workspace bridge: each tab is an independent calendar. Switching the
-// active calendar repoints calData and notifies, so all data consumers re-render.
+// Multi-project workspace bridge: each tab is an independent project. Switching the
+// active project repoints calData and notifies, so all data consumers re-render.
+// (Kept the `calderaTabs` name — these are still browser-style tabs.)
 interface CalderaTabs {
   list(): { id: string; name: string }[];
   activeId(): string;

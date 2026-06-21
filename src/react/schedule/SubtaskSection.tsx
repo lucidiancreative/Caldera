@@ -79,9 +79,19 @@ export function SubtaskSection({ selection }: SubtaskSectionProps) {
 
       <div className="schedule-subtask-section-content">
         <div className="schedule-subtask-list-pane">
+          <form className="schedule-subtask-section-add" onSubmit={submit}>
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Add a sub-task"
+              aria-label="Add a sub-task"
+            />
+            <button className="task-btn" type="submit" title="Add sub-task">+</button>
+          </form>
+
           <div className="schedule-subtask-section-body">
             {block.subtasks.length === 0 ? (
-              <div className="schedule-subtask-section-empty">No sub-tasks yet. Add one below.</div>
+              <div className="schedule-subtask-section-empty">No sub-tasks yet. Add one above.</div>
             ) : (
               block.subtasks.map((task) => (
                 <div
@@ -121,16 +131,6 @@ export function SubtaskSection({ selection }: SubtaskSectionProps) {
               ))
             )}
           </div>
-
-          <form className="schedule-subtask-section-add" onSubmit={submit}>
-            <input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Add a sub-task"
-              aria-label="Add a sub-task"
-            />
-            <button className="task-btn" type="submit" title="Add sub-task">+</button>
-          </form>
         </div>
 
         <div className="schedule-subtask-notes-pane">

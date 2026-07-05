@@ -1,6 +1,6 @@
 {
   "name": "caldera",
-  "version": "1.27.1",
+  "version": "1.33.1",
   "description": "A proprietary freeware visual event calendar with local-first event import functionality",
   "main": "dist/main.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "dist:win": "npm run build && electron-builder --win"
   },
   "keywords": [],
-  "author": "ZenFrog",
+  "author": "Z3n",
   "license": "SEE LICENSE IN LICENSE",
   "build": {
     "appId": "com.caldera.app",

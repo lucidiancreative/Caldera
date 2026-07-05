@@ -85,6 +85,22 @@ test('toggleInboxTask flips completed and deleteInboxTask removes by id', async 
   }
 });
 
+test('toggleInboxTaskDeadline flips the deadline flag, snapshots, and saves', async () => {
+  const calData: CalData = { _recurring: [], _tasks: [{ id: 't1', label: 'Ship release', completed: false }] };
+  const { counts, restore } = withStubbedBridge(calData);
+  try {
+    const { toggleInboxTaskDeadline } = await import('../src/react/store/inboxActions');
+    await toggleInboxTaskDeadline(calData, 't1');
+    assert.equal(calData._tasks?.[0].deadline, true);
+    assert.equal(counts.snapshots, 1);
+    assert.equal(counts.saves, 1);
+    await toggleInboxTaskDeadline(calData, 't1');
+    assert.equal(calData._tasks?.[0].deadline, false);
+  } finally {
+    restore();
+  }
+});
+
 test('scheduleInboxTask creates a block from the task, returns its id, and clears the task', async () => {
   const runtime = globalThis as typeof globalThis & { window?: RuntimeWindow };
   const original = runtime.window;
@@ -130,6 +146,94 @@ test('scheduleInboxTask creates a block from the task, returns its id, and clear
     assert.equal(createCalls[0].ampm, 'AM');
     assert.equal((calData['2026-06-19'] as DayData).timeBlocks.length, 1);
     assert.equal(calData._tasks?.length, 0);
+  } finally {
+    runtime.window = original;
+  }
+});
+
+test('scheduleInboxTask carries a deadline task through to the created block', async () => {
+  const runtime = globalThis as typeof globalThis & { window?: RuntimeWindow };
+  const original = runtime.window;
+  const calData: CalData = {
+    _recurring: [],
+    _tasks: [{ id: 't1', label: 'Ship release', completed: false, deadline: true }],
+    '2026-06-19': { events: [], featuredId: null, timeBlocks: [] },
+  };
+  const createCalls: Array<{ block: { startMin: number; endMin: number; label: string; deadline?: boolean } }> = [];
+
+  runtime.window = {
+    calderaBridge: {
+      getData: () => calData, save: async () => {}, subscribe: () => () => {}, notify: () => {}, pushSnapshot: () => {},
+    },
+    calderaSchedule: {
+      createBlock: async (key: string, block: { startMin: number; endMin: number; label: string; deadline?: boolean }, _recurrence: string, ampm: 'AM' | 'PM') => {
+        createCalls.push({ block });
+        (calData[key] as DayData).timeBlocks.push({
+          id: 'nb', startMin: block.startMin, endMin: block.endMin, label: block.label,
+          color: '#000', ampm, completed: false, deadline: block.deadline, subtasks: [],
+        });
+      },
+      updateBlock: async () => {}, deleteBlock: async () => {},
+    },
+  } as unknown as RuntimeWindow;
+
+  try {
+    const { scheduleInboxTask } = await import('../src/react/store/inboxActions');
+    await scheduleInboxTask(calData, 't1', '2026-06-19', 540, 600, 'AM');
+    assert.equal(createCalls[0].block.deadline, true);
+    assert.equal((calData['2026-06-19'] as DayData).timeBlocks[0].deadline, true);
+  } finally {
+    runtime.window = original;
+  }
+});
+
+test('createBlockFromTask creates a block from the editor draft/recurrence and clears the source task', async () => {
+  const runtime = globalThis as typeof globalThis & { window?: RuntimeWindow };
+  const original = runtime.window;
+  const calData: CalData = {
+    _recurring: [],
+    _tasks: [{ id: 't1', label: 'Draft proposal', completed: false }],
+    '2026-06-19': { events: [], featuredId: null, timeBlocks: [] },
+  };
+  const createCalls: Array<{ key: string; block: { startMin: number; endMin: number; label: string }; recurrence: string; ampm: string }> = [];
+  let saves = 0;
+
+  runtime.window = {
+    calderaBridge: {
+      getData: () => calData,
+      save: async () => { saves += 1; },
+      subscribe: () => () => {},
+      notify: () => {},
+      pushSnapshot: () => {},
+    },
+    calderaSchedule: {
+      createBlock: async (
+        key: string,
+        block: { startMin: number; endMin: number; label: string },
+        recurrence: string,
+        ampm: 'AM' | 'PM',
+      ) => {
+        createCalls.push({ key, block, recurrence, ampm });
+        (calData[key] as DayData).timeBlocks.push({
+          id: 'new-block', startMin: block.startMin, endMin: block.endMin, label: block.label,
+          color: '#000000', ampm, completed: false, subtasks: [],
+        });
+      },
+      updateBlock: async () => {},
+      deleteBlock: async () => {},
+    },
+  } as unknown as RuntimeWindow;
+
+  try {
+    const { createBlockFromTask } = await import('../src/react/store/inboxActions');
+    await createBlockFromTask('t1', '2026-06-19', { startMin: 540, endMin: 600, label: 'Edited label' }, 'weekly', 'AM');
+    assert.equal(createCalls.length, 1);
+    assert.deepEqual(createCalls[0].block, { startMin: 540, endMin: 600, label: 'Edited label' });
+    assert.equal(createCalls[0].recurrence, 'weekly');
+    assert.equal(createCalls[0].ampm, 'AM');
+    assert.equal((calData['2026-06-19'] as DayData).timeBlocks.length, 1);
+    assert.equal(calData._tasks?.length, 0);
+    assert.ok(saves >= 1);
   } finally {
     runtime.window = original;
   }

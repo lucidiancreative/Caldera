@@ -21,8 +21,8 @@ declare global {
       cornerRadius(): number;
     };
     calderaSchedule?: {
-      createBlock(key: string, block: { startMin: number; endMin: number; label: string }, recurrence: string, ampm: 'AM' | 'PM'): Promise<void>;
-      updateBlock(key: string, id: string, label: string, recurrence: string, scope: string, ampm: 'AM' | 'PM'): Promise<void>;
+      createBlock(key: string, block: { startMin: number; endMin: number; label: string; deadline?: boolean }, recurrence: string, ampm: 'AM' | 'PM'): Promise<void>;
+      updateBlock(key: string, id: string, label: string, recurrence: string, scope: string, ampm: 'AM' | 'PM', startMin: number, endMin: number): Promise<void>;
       deleteBlock(key: string, id: string, scope?: string): Promise<void>;
     };
     calderaView?: {
@@ -50,6 +50,8 @@ declare global {
       shaderPref(): 'auto' | 'on' | 'off';
       setShaderPref(pref: 'auto' | 'on' | 'off'): void;
       shaderHint(): { lowPower: boolean; reducedMotion: boolean };
+      showRecurring(): boolean;
+      setShowRecurring(show: boolean): void;
       subscribe(listener: () => void): () => void;
       notify(): void;
     };

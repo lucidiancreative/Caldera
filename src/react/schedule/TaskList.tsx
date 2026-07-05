@@ -40,7 +40,7 @@ export function TaskList({ date, selectedBlockId, onSelect, onEdit }: TaskListPr
         return (
           <div key={block.id} className="task-entry">
             <div
-              className={'task-item' + (selected ? ' selected' : '') + (block.completed ? ' completed' : '') + (past ? ' past' : '')}
+              className={'task-item' + (selected ? ' selected' : '') + (block.completed ? ' completed' : '') + (past ? ' past' : '') + (block.deadline ? ' deadline' : '')}
               onClick={() => onSelect(block.id)}
             >
               <div className="task-color-swatch" style={{ background: appearance?.gradientCss(block) ?? block.color }} />

@@ -5,7 +5,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 // Browser-style tab bar: each tab is an independent project. Click to switch,
 // double-click to rename inline, × to delete (kept hidden when only one remains),
 // drag to reorder, + to add. Tabs persist across restarts via the workspace file.
-export function TabBar({ onOpenAi }: { onOpenAi: () => void }) {
+export function TabBar() {
   const { tabs, activeId, setActive, create, rename, close, reorder } = useCalderaTabs();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -81,17 +81,6 @@ export function TabBar({ onOpenAi }: { onOpenAi: () => void }) {
         ))}
       </div>
       <button className="tabbar-add" title="New project" onClick={() => create()}>+</button>
-      <button className="tabbar-add tabbar-import" title="Event Import" aria-label="Event Import" onClick={onOpenAi}>
-        {/* Lucide calendar-plus — opens the AI event import */}
-        <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M8 2v4" />
-          <path d="M16 2v4" />
-          <path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6" />
-          <path d="M3 10h18" />
-          <path d="M16 19h6" />
-          <path d="M19 16v6" />
-        </svg>
-      </button>
 
       {pendingClose && (
         <ConfirmDialog

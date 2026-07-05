@@ -9,7 +9,7 @@ const SKINS: Array<{ id: SkinId; label: string }> = [
 ];
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
-  const { theme, setTheme, skin, setSkin, shaderPref, setShaderPref, shaderHint } = useCalderaPrefs();
+  const { theme, setTheme, skin, setSkin, shaderPref, setShaderPref, shaderHint, showRecurring, setShowRecurring } = useCalderaPrefs();
   const glassSkin = skin !== 'default';
 
   return (
@@ -24,6 +24,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <button className={'theme-opt' + (theme === 'light' ? ' active' : '')} onClick={() => setTheme('light')}>Light</button>
             <button className={'theme-opt' + (theme === 'dark' ? ' active' : '')} onClick={() => setTheme('dark')}>Dark</button>
           </div>
+        </div>
+
+        <div id="recurring-toggle-section" className="settings-section">
+          <label className="settings-label">Recurring tasks</label>
+          <div id="recurring-toggle-row">
+            <button className={'theme-opt' + (showRecurring ? ' active' : '')} onClick={() => setShowRecurring(true)}>Show</button>
+            <button className={'theme-opt' + (!showRecurring ? ' active' : '')} onClick={() => setShowRecurring(false)}>Hide</button>
+          </div>
+          <p className="settings-hint">Hides recurring blocks from the Month calendar only.</p>
         </div>
 
         <div id="skin-section" className="settings-section">

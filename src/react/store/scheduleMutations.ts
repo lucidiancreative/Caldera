@@ -48,6 +48,7 @@ export function detachRecurringOccurrenceToOneOff(
     ...(recurring.paletteSlot !== undefined ? { paletteSlot: recurring.paletteSlot } : {}),
     ampm: times.ampm,
     completed,
+    deadline: recurring.deadline,
     subtasks: (recurring.subtasks || []).map((subtask) => ({ ...subtask })),
   };
 

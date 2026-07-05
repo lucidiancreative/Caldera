@@ -110,7 +110,7 @@ export function App() {
         </div>
       </div>
 
-      <TabBar onOpenAi={() => setAiOpen(true)} />
+      <TabBar />
 
       <div id="schedule-view">
         <ProjectWorkspace
@@ -119,6 +119,7 @@ export function App() {
           onModeChange={setMode}
           onOpenDay={openDay}
           onHoverDateChange={setPasteTargetDate}
+          onOpenAi={() => setAiOpen(true)}
         />
       </div>
 

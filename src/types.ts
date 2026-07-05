@@ -4,7 +4,7 @@
 export type DateKey = string;
 
 export type AmPm = 'AM' | 'PM';
-export type RecurrenceType = 'daily' | 'weekly' | 'monthly';
+export type RecurrenceType = 'daily' | 'weekly' | 'monthly' | 'weekdays' | 'weekends';
 export type SkinId = 'default' | 'arctic' | 'glacier' | 'teal';
 export type ScheduleViewMode = 'daily' | 'schedule';
 export type ScheduleTimelineScale = 'day';
@@ -37,6 +37,8 @@ export interface InboxTask {
   id: string;
   label: string;
   completed: boolean;
+  /** Flagged as a deadline in the sidebar; rides along to the block it schedules into. */
+  deadline?: boolean;
 }
 
 export interface TimeBlock {
@@ -51,6 +53,8 @@ export interface TimeBlock {
   color: string;
   ampm: AmPm;
   completed: boolean;
+  /** Drawn with a red outline across all schedule views to grab attention. */
+  deadline?: boolean;
   subtasks: BlockSubtask[];
 }
 
@@ -68,6 +72,8 @@ export interface RecurringBlock {
   dayOfWeek: number;
   /** 1–31 */
   dayOfMonth: number;
+  /** Drawn with a red outline across all schedule views to grab attention. */
+  deadline?: boolean;
   completedDates: DateKey[];
   /** Days where the recurring block is skipped or overridden */
   excludedDates: DateKey[];

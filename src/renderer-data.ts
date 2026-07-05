@@ -306,6 +306,8 @@ function getRecurringBlocksForDate(key: string): RecurringBlock[] {
     if (block.excludedDates?.includes(key)) return false;
     if (block.recurrence === 'daily') return true;
     if (block.recurrence === 'weekly') return date.getDay() === block.dayOfWeek;
+    if (block.recurrence === 'weekdays') return date.getDay() >= 1 && date.getDay() <= 5;
+    if (block.recurrence === 'weekends') return date.getDay() === 0 || date.getDay() === 6;
     if (block.recurrence === 'monthly') return day === block.dayOfMonth;
     return false;
   });

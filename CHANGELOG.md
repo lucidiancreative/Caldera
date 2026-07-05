@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.33.1] - 2026-07-05
+
+### Fixed
+- **Day-view clock arcs always render with rounded corners again.** Removed the boundary-rounding logic that squared the shared edge between time-adjacent blocks (and could square corners incorrectly since it ignored AM/PM). Every block arc is now fully rounded regardless of its neighbors.
+
+## [1.33.0] - 2026-07-05
+
+### Added
+- **Year picker dropdown.** A calendar-icon button on the left of the date nav opens a dropdown of years for quickly jumping to a different year (keeping the current month and clamping the day, so Feb 29 lands on Feb 28 in non-leap years).
+
+### Changed
+- **"Return to today" icon.** The jump-to-today button now uses a circular return (rotate) icon instead of the calendar-dot icon, making its "go back to now" purpose clearer.
+- **Centered the month/year label.** The date-nav label is now centered between the two arrows instead of hugging the left.
+
+## [1.32.0] - 2026-07-05
+
+### Changed
+- **Reworked the Month control strip.** The day-cell toggle now reads **Tasks / Events** (the old "Images" button is renamed to "Events") with Tasks on the left, and the **Event Import** button has moved out of the tab bar to sit just right of the Events toggle. Event Import now appears only in Month view alongside that toggle.
+
+## [1.31.0] - 2026-07-05
+
+### Added
+- **Weekday and weekend repeat options for time blocks.** The block editor's Repeat dropdown now offers "Weekdays (Mon–Fri)" and "Weekends (Sat–Sun)" alongside daily/weekly/monthly, so a recurring block can be scheduled to appear only on working days or only on the weekend.
+
+## [1.30.0] - 2026-07-05
+
+### Changed
+- **The block editor now uses explicit start + end times in both modes.** Editing an existing block exposes start and end time fields (replacing the old AM/PM-only choice), and creating a block now uses the same start + end fields instead of a start + duration picker. The header shows the resolved range live as you type. Time changes persist through the same save as the label and recurrence, so recurring "just today" edits detach a single re-timed occurrence while "all occurrences" re-times the whole series — all in one undo step.
+
+## [1.29.0] - 2026-07-04
+
+### Added
+- **Deadline tasks.** A flag toggle on each sidebar task marks it as a deadline. When the task is scheduled onto the calendar (dragged to the Week timeline or dropped on a Month day-cell), the flag rides along to the block and draws a red outline everywhere it appears — the Month cell task pill (in Tasks view), the Week timeline, the Day clock arc and legend, and the sidebar task list — so deadlines stand out. The flag is preserved when a block is moved across days or converted to/from recurring.
+- **Show/Hide recurring tasks.** A new Settings toggle hides recurring blocks from the Month calendar (Week, Day, and the sidebar list still show them). The preference persists across sessions and defaults to shown.
+
+## [1.28.0] - 2026-07-04
+
+### Added
+- **Drag inbox tasks onto Month day-cards.** Dropping a task from the sidebar onto a day in the Month view opens the block editor pre-filled with the task's label, where you set a start time and duration before saving. Saving turns the task into a scheduled block on that day; a single undo reverts both the new block and the removed task. Cancelling leaves the task in the inbox.
+- **Images ⇄ Tasks toggle for Month cells.** A single toggle in the calendar control strip flips every day-cell between its cover-image identity and a compact list of that day's scheduled blocks. The choice persists across sessions, and dropping a task automatically switches all cells to Tasks view so the new block is visible where it landed.
+
+### Changed
+- **The block editor's create mode now sets an explicit time.** Creating a block (from a Month task drop or a Week/Day drag) offers a start-time field plus a duration selector instead of only an AM/PM choice.
+
 ## [1.27.1] - 2026-06-21
 
 ### Changed

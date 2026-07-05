@@ -3,13 +3,24 @@ import type { CalData, CalendarEvent, DayData } from '../../types';
 import { useMinuteTick } from '../hooks/useMinuteTick';
 import { useCalData } from '../store/calStore';
 import { addEventFromPath, resolveCalendarImageUrl } from '../store/calendarActions';
-import { MONTH_LABELS, WEEKDAY_LABELS, dateKey, formatTime12h, getTodayKey } from '../util/format';
+import { getSortedScheduleBlocks } from '../store/selectors';
+import { useCalderaPrefs } from '../hooks/useCalderaPrefs';
+import { isTaskDrag, TASK_DND_MIME } from '../schedule/taskDnd';
+import { MONTH_LABELS, WEEKDAY_LABELS, dateKey, formatBlockTimeRange, formatTime12h, getTodayKey } from '../util/format';
+
+// How many scheduled blocks a Month cell lists in task view before collapsing the rest into
+// a "+N" row — enough to be useful without overflowing the small cell.
+const MAX_CELL_TASKS = 3;
+
+export type CellView = 'image' | 'task';
 
 interface CalendarViewProps {
   month: number;
   year: number;
+  cellView: CellView;
   onOpenDay: (key: string) => void;
   onHoverDateChange: (key: string | null) => void;
+  onTaskDrop: (dateKey: string, taskId: string) => void;
 }
 
 function getDayData(calData: CalData, key: string): DayData | undefined {
@@ -32,8 +43,9 @@ function measureImageNaturalDimensions(url: string): Promise<{ w: number; h: num
   });
 }
 
-export function CalendarView({ month, year, onOpenDay, onHoverDateChange }: CalendarViewProps) {
+export function CalendarView({ month, year, cellView, onOpenDay, onHoverDateChange, onTaskDrop }: CalendarViewProps) {
   const calData = useCalData();
+  const { showRecurring } = useCalderaPrefs();
   useMinuteTick();
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -56,8 +68,11 @@ export function CalendarView({ month, year, onOpenDay, onHoverDateChange }: Cale
               calData={calData}
               day={day}
               dateKeyValue={key}
+              cellView={cellView}
+              showRecurring={showRecurring}
               onHoverDateChange={onHoverDateChange}
               onOpenDay={onOpenDay}
+              onTaskDrop={onTaskDrop}
             />
           );
         })}
@@ -70,18 +85,30 @@ function CalendarCell({
   calData,
   day,
   dateKeyValue,
+  cellView,
+  showRecurring,
   onHoverDateChange,
   onOpenDay,
+  onTaskDrop,
 }: {
   calData: CalData;
   day: number;
   dateKeyValue: string;
+  cellView: CellView;
+  showRecurring: boolean;
   onHoverDateChange: (key: string | null) => void;
   onOpenDay: (key: string) => void;
+  onTaskDrop: (dateKey: string, taskId: string) => void;
 }) {
   const todayKey = getTodayKey();
   const dayData = getDayData(calData, dateKeyValue);
   const featured = getFeaturedEvent(dayData);
+  const taskMode = cellView === 'task';
+  // Pills shown in Task view, after the Month-only recurring filter. Deadlines are marked on
+  // the individual pill (.cell-task.deadline), not as a ring around the whole day-cell.
+  const blocks = taskMode
+    ? getSortedScheduleBlocks(calData, dateKeyValue).filter((block) => showRecurring || !block.recurring)
+    : [];
   const [featuredUrl, setFeaturedUrl] = useState('');
   const [hovered, setHovered] = useState(false);
   const [stripUrls, setStripUrls] = useState<Array<{ url: string; height: number }>>([]);
@@ -107,7 +134,7 @@ function CalendarCell({
 
   useEffect(() => {
     let cancelled = false;
-    if (!hovered) {
+    if (!hovered || taskMode) {
       setStripUrls([]);
       return;
     }
@@ -142,7 +169,7 @@ function CalendarCell({
     return () => {
       cancelled = true;
     };
-  }, [hovered, dayData, dateKeyValue]);
+  }, [hovered, dayData, dateKeyValue, taskMode]);
 
   const stripDistance = useMemo(
     () => stripUrls.reduce((sum, item) => sum + item.height, 0),
@@ -156,6 +183,13 @@ function CalendarCell({
   async function onDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragCount(0);
+    // An inbox task drop turns into a scheduled block (via the block editor); an image file
+    // drop stays the existing add-event path. The two never overlap on one drop.
+    const taskId = event.dataTransfer.getData(TASK_DND_MIME);
+    if (taskId) {
+      onTaskDrop(dateKeyValue, taskId);
+      return;
+    }
     const file = event.dataTransfer.files[0];
     if (!file || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return;
     await addEventFromPath(calData, dateKeyValue, window.calAPI.getPathForFile(file));
@@ -165,9 +199,10 @@ function CalendarCell({
     <div
       className={[
         'day-cell',
+        taskMode ? 'task-mode' : '',
         dateKeyValue === todayKey ? 'today' : '',
         dateKeyValue < todayKey ? 'past' : '',
-        featured?.image ? 'has-image' : '',
+        !taskMode && featured?.image ? 'has-image' : '',
         dragCount > 0 ? 'drag-over' : '',
       ].filter(Boolean).join(' ')}
       data-date={dateKeyValue}
@@ -184,12 +219,15 @@ function CalendarCell({
         event.preventDefault();
         setDragCount((value) => value + 1);
       }}
-      onDragOver={(event) => event.preventDefault()}
+      onDragOver={(event) => {
+        event.preventDefault();
+        if (isTaskDrag(event.dataTransfer)) event.dataTransfer.dropEffect = 'move';
+      }}
       onDragLeave={() => setDragCount((value) => Math.max(0, value - 1))}
       onDrop={onDrop}
     >
-      {featuredUrl && <div className="cell-bg" style={{ backgroundImage: `url("${featuredUrl}")` }} />}
-      {stripUrls.length > 1 && (
+      {!taskMode && featuredUrl && <div className="cell-bg" style={{ backgroundImage: `url("${featuredUrl}")` }} />}
+      {!taskMode && stripUrls.length > 1 && (
         <div
           className="cell-scroll-strip"
           style={{
@@ -208,8 +246,35 @@ function CalendarCell({
       )}
 
       <span className="day-num">{day}</span>
-      {(dayData?.events?.length || 0) > 1 && <span className="cell-count">{dayData!.events.length}</span>}
-      {featured?.time && <span className="cell-time">{formatTime12h(featured.time)}</span>}
+
+      {taskMode ? (
+        blocks.length > 0 && (
+          <div className="cell-task-list">
+            {blocks.slice(0, MAX_CELL_TASKS).map((block) => (
+              <div
+                key={block.id}
+                className={'cell-task' + (block.completed ? ' completed' : '') + (block.deadline ? ' deadline' : '')}
+                title={`${block.label} - ${formatBlockTimeRange(block)}`}
+              >
+                <span
+                  className="cell-task-swatch"
+                  style={{ background: window.calderaAppearance?.gradientCss(block) ?? block.color }}
+                />
+                <span className="cell-task-label">{block.label}</span>
+                <span className="cell-task-time">{formatBlockTimeRange(block)}</span>
+              </div>
+            ))}
+            {blocks.length > MAX_CELL_TASKS && (
+              <div className="cell-task-more">+{blocks.length - MAX_CELL_TASKS} more</div>
+            )}
+          </div>
+        )
+      ) : (
+        <>
+          {(dayData?.events?.length || 0) > 1 && <span className="cell-count">{dayData!.events.length}</span>}
+          {featured?.time && <span className="cell-time">{formatTime12h(featured.time)}</span>}
+        </>
+      )}
     </div>
   );
 }

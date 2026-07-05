@@ -225,7 +225,7 @@ window.calderaAppearance = {
 // shared block domain logic (palette slots, recurring conversion, scope handling) and persist
 // through saveCalendarData → notify so a React edit repaints the mirror. React always passes an
 // explicit ampm, so there is no clock meridian to track here.
-async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMin: number; endMin: number; label: string }, recurrence: string, ampm: AmPm): Promise<void> {
+async function saveTimeBlock(key: string, { startMin, endMin, label, deadline }: { startMin: number; endMin: number; label: string; deadline?: boolean }, recurrence: string, ampm: AmPm): Promise<void> {
   pushCalendarSnapshot();
   if (recurrence === 'none') {
     const day = getOrInitDayData(key);
@@ -238,6 +238,7 @@ async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMi
       ...getBlockStorageAppearance({ paletteSlot }),
       ampm,
       completed: false,
+      deadline,
       subtasks: [],
     });
   } else {
@@ -250,6 +251,7 @@ async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMi
       recurrence: recurrence as RecurringBlock['recurrence'],
       dayOfWeek: date.getDay(),
       dayOfMonth: d,
+      deadline,
       completedDates: [],
       excludedDates: [],
       subtasks: [],
@@ -258,7 +260,7 @@ async function saveTimeBlock(key: string, { startMin, endMin, label }: { startMi
   await saveCalendarDataAndRefresh(key, { renderSchedule: true });
 }
 
-async function updateTimeBlock(key: string, blockId: string, label: string, recurrence: string, scope: string, ampm: AmPm): Promise<void> {
+async function updateTimeBlock(key: string, blockId: string, label: string, recurrence: string, scope: string, ampm: AmPm, startMin: number, endMin: number): Promise<void> {
   pushCalendarSnapshot();
   const recurring = calData._recurring || [];
   const rIdx = recurring.findIndex(b => b.id === blockId);
@@ -272,19 +274,21 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
       block.excludedDates.push(key);
       const day = getOrInitDayData(key);
       day.timeBlocks.push({
-        id: generateCalendarEntryId(), startMin: block.startMin, endMin: block.endMin,
-        label, ...appearance, ampm, completed: false, subtasks: [...(block.subtasks || [])],
+        id: generateCalendarEntryId(), startMin, endMin,
+        label, ...appearance, ampm, completed: false, deadline: block.deadline, subtasks: [...(block.subtasks || [])],
       });
     } else {
       block.label = label;
       block.ampm = ampm;
+      block.startMin = startMin;
+      block.endMin = endMin;
       if (recurrence === 'none') {
         recurring.splice(rIdx, 1);
         const day = getOrInitDayData(key);
         const completed = block.completedDates?.includes(key) || false;
         day.timeBlocks.push({
           id: block.id, startMin: block.startMin, endMin: block.endMin,
-          label, ...appearance, ampm, completed, subtasks: [...(block.subtasks || [])],
+          label, ...appearance, ampm, completed, deadline: block.deadline, subtasks: [...(block.subtasks || [])],
         });
       } else {
         block.recurrence = recurrence as RecurringBlock['recurrence'];
@@ -300,6 +304,8 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
     const appearance = getBlockStorageAppearance(block);
     block.label = label;
     block.ampm = ampm;
+    block.startMin = startMin;
+    block.endMin = endMin;
     if (recurrence !== 'none') {
       const day = getDayData(key)!;
       day.timeBlocks = day.timeBlocks.filter(b => b.id !== blockId);
@@ -312,6 +318,7 @@ async function updateTimeBlock(key: string, blockId: string, label: string, recu
         recurrence: recurrence as RecurringBlock['recurrence'],
         dayOfWeek: date.getDay(),
         dayOfMonth: d,
+        deadline: block.deadline,
         completedDates: block.completed ? [key] : [],
         excludedDates: [],
         subtasks: [...(block.subtasks || [])],
@@ -347,7 +354,7 @@ async function deleteTimeBlock(key: string, blockId: string, scope?: string): Pr
 // of re-implementing it. Each persists via saveCalendarData → notify, updating the mirror.
 window.calderaSchedule = {
   createBlock: (key, block, recurrence, ampm) => saveTimeBlock(key, block, recurrence, ampm),
-  updateBlock: (key, id, label, recurrence, scope, ampm) => updateTimeBlock(key, id, label, recurrence, scope, ampm),
+  updateBlock: (key, id, label, recurrence, scope, ampm, startMin, endMin) => updateTimeBlock(key, id, label, recurrence, scope, ampm, startMin, endMin),
   deleteBlock: (key, id, scope) => deleteTimeBlock(key, id, scope),
 };
 
@@ -384,6 +391,8 @@ window.calderaPrefs = {
     lowPower: _shaderDisabledByLowPower,
     reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   }),
+  showRecurring: () => getShowRecurring(),
+  setShowRecurring: (show) => setShowRecurring(show),
   subscribe(listener) {
     calderaPrefListeners.add(listener);
     return () => { calderaPrefListeners.delete(listener); };
@@ -477,6 +486,17 @@ function getShaderPref(): ShaderPref {
 
 function setShaderPref(pref: ShaderPref): void {
   localStorage.setItem('shaderPref', pref);
+  notifyCalendarPrefsChanged();
+}
+
+// Whether recurring blocks are shown in the Month grid (default on). Stored like the other
+// view prefs; React reads it via calderaPrefs and filters the Month cells when off.
+function getShowRecurring(): boolean {
+  return localStorage.getItem('showRecurring') !== 'false';
+}
+
+function setShowRecurring(show: boolean): void {
+  localStorage.setItem('showRecurring', show ? 'true' : 'false');
   notifyCalendarPrefsChanged();
 }
 

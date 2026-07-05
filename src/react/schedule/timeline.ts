@@ -33,12 +33,14 @@ export function makeTimelineOccurrenceKey(date: string, blockId: string): string
   return `${date}::${blockId}`;
 }
 
-function blockEndAmPm(block: ScheduleBlock): 'AM' | 'PM' {
+type BlockTimes = Pick<ScheduleBlock, 'startMin' | 'endMin' | 'ampm'>;
+
+function blockEndAmPm(block: BlockTimes): 'AM' | 'PM' {
   return block.endMin < block.startMin ? (block.ampm === 'AM' ? 'PM' : 'AM') : block.ampm;
 }
 
 /** Absolute minutes from midnight, unwrapping ends that cross into the next half/day. */
-export function getAbsoluteMinutes(block: ScheduleBlock): { start: number; end: number } {
+export function getAbsoluteMinutes(block: BlockTimes): { start: number; end: number } {
   const start = (block.ampm === 'PM' ? 720 : 0) + block.startMin;
   let end = (blockEndAmPm(block) === 'PM' ? 720 : 0) + block.endMin;
   if (end <= start) end += DAY_MINUTES;
@@ -66,6 +68,23 @@ export function absoluteMinutesToBlockTimes(startAbs: number, endAbs: number): {
     startMin: clampedStart % HALF_DAY_MINUTES,
     endMin: clampedEnd % HALF_DAY_MINUTES,
   };
+}
+
+/** Parse a 24-hour `<input type="time">` value ("HH:MM") into minutes-since-midnight (0–1439). */
+export function clockInputToAbsMinutes(value: string): number {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return 0;
+  const hours = Math.max(0, Math.min(23, Number(match[1])));
+  const minutes = Math.max(0, Math.min(59, Number(match[2])));
+  return hours * 60 + minutes;
+}
+
+/** Format minutes-since-midnight back into the "HH:MM" value an `<input type="time">` expects. */
+export function absMinutesToClockInput(abs: number): string {
+  const clamped = Math.max(0, Math.min(DAY_MINUTES - 1, Math.round(abs)));
+  const hours = Math.floor(clamped / 60);
+  const minutes = clamped % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 function snapTimelineMinutes(value: number): number {

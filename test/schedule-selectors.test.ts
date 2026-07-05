@@ -45,6 +45,21 @@ test('should match weekly recurring blocks only on the configured weekday', () =
   assert.equal(getRecurringBlocksForDate(calData, '2026-03-13').length, 0);
 });
 
+test('should match weekday recurring blocks Monday through Friday only', () => {
+  // 2026-03-12 is a Thursday (weekday); 2026-03-14 is a Saturday (weekend).
+  const calData: CalData = { _recurring: [recurring({ recurrence: 'weekdays' })] };
+  assert.equal(getRecurringBlocksForDate(calData, '2026-03-12').length, 1);
+  assert.equal(getRecurringBlocksForDate(calData, '2026-03-14').length, 0);
+});
+
+test('should match weekend recurring blocks Saturday and Sunday only', () => {
+  // 2026-03-14 is a Saturday, 2026-03-15 a Sunday; 2026-03-12 a Thursday.
+  const calData: CalData = { _recurring: [recurring({ recurrence: 'weekends' })] };
+  assert.equal(getRecurringBlocksForDate(calData, '2026-03-14').length, 1);
+  assert.equal(getRecurringBlocksForDate(calData, '2026-03-15').length, 1);
+  assert.equal(getRecurringBlocksForDate(calData, '2026-03-12').length, 0);
+});
+
 test('should match monthly recurring blocks only on the configured day of month', () => {
   const calData: CalData = { _recurring: [recurring({ recurrence: 'monthly', dayOfMonth: 12 })] };
   assert.equal(getRecurringBlocksForDate(calData, '2026-03-12').length, 1);
@@ -73,6 +88,20 @@ test('should merge one-off and recurring blocks and derive recurring completion 
   assert.equal(recur.recurring, true);
   assert.equal(recur.completed, true); // completedDates includes the date
   assert.equal(recur.subtasks[0]?.notes, 'Review cadence');
+});
+
+test('should surface the deadline flag on one-off and recurring schedule blocks', () => {
+  const calData: CalData = {
+    _recurring: [recurring({ id: 'r1', deadline: true })],
+    '2026-03-12': {
+      events: [], featuredId: null,
+      timeBlocks: [oneOff({ id: 'b1', deadline: true }), oneOff({ id: 'b2' })],
+    },
+  };
+  const blocks = getScheduleBlocksForDate(calData, '2026-03-12');
+  assert.equal(blocks.find((b) => b.id === 'b1')!.deadline, true);
+  assert.equal(blocks.find((b) => b.id === 'b2')!.deadline, false); // absent → false
+  assert.equal(blocks.find((b) => b.id === 'r1')!.deadline, true);
 });
 
 test('should sort blocks by start time treating PM as twelve hours later', () => {

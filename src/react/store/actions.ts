@@ -23,7 +23,7 @@ type RendererWindow = typeof globalThis & {
   calderaSchedule?: {
     createBlock(
       key: string,
-      block: { startMin: number; endMin: number; label: string },
+      block: { startMin: number; endMin: number; label: string; deadline?: boolean },
       recurrence: string,
       ampm: 'AM' | 'PM',
     ): Promise<void>;
@@ -34,6 +34,8 @@ type RendererWindow = typeof globalThis & {
       recurrence: string,
       scope: string,
       ampm: 'AM' | 'PM',
+      startMin: number,
+      endMin: number,
     ): Promise<void>;
     deleteBlock(key: string, id: string, scope?: string): Promise<void>;
   };
@@ -198,7 +200,7 @@ function getCreateBlockRequestKey(
 
 export function createBlock(
   key: string,
-  block: { startMin: number; endMin: number; label: string },
+  block: { startMin: number; endMin: number; label: string; deadline?: boolean },
   recurrence: string,
   ampm: 'AM' | 'PM',
 ): Promise<void> {
@@ -229,7 +231,9 @@ export const updateBlock = (
   recurrence: string,
   scope: string,
   ampm: 'AM' | 'PM',
-): Promise<void> => window.calderaSchedule?.updateBlock(key, id, label, recurrence, scope, ampm) ?? NOOP;
+  startMin: number,
+  endMin: number,
+): Promise<void> => window.calderaSchedule?.updateBlock(key, id, label, recurrence, scope, ampm, startMin, endMin) ?? NOOP;
 
 export const deleteBlock = (key: string, id: string, scope?: string): Promise<void> =>
   window.calderaSchedule?.deleteBlock(key, id, scope) ?? NOOP;

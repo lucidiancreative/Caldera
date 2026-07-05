@@ -5,12 +5,17 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ScheduleBlock } from '../store/selectors';
 import { createBlock, updateBlock, deleteBlock } from '../store/actions';
+import { createBlockFromTask } from '../store/inboxActions';
 import { formatBlockTimeRange } from '../util/format';
 import { canSaveBlockEditorDraft } from './blockEditorValidation';
+import { absMinutesToClockInput, absoluteMinutesToBlockTimes, clockInputToAbsMinutes, getAbsoluteMinutes } from './timeline';
 
+// `label`/`sourceTaskId` are set when the create was seeded from an inbox task drop: the label
+// pre-fills the field, and sourceTaskId routes the save through createBlockFromTask so the task
+// is consumed in the same undo step as the new block.
 export type EditorTarget =
   | { mode: 'edit'; date: string; block: ScheduleBlock }
-  | { mode: 'create'; date: string; startMin: number; endMin: number; ampm: 'AM' | 'PM' };
+  | { mode: 'create'; date: string; startMin: number; endMin: number; ampm: 'AM' | 'PM'; label?: string; sourceTaskId?: string };
 
 interface BlockEditorProps {
   target: EditorTarget;
@@ -22,13 +27,21 @@ export function BlockEditor({ target, onClose }: BlockEditorProps) {
   const block = target.mode === 'edit' ? target.block : null;
   const isRecurring = !!block?.recurring;
 
-  const [label, setLabel] = useState(block?.label ?? '');
-  const [ampm, setAmpm] = useState<'AM' | 'PM'>(target.mode === 'edit' ? target.block.ampm : target.ampm);
+  const [label, setLabel] = useState(target.mode === 'edit' ? target.block.label : (target.label ?? ''));
   const [recurrence, setRecurrence] = useState<string>(block?.recurring ? block.recurrence ?? 'daily' : 'none');
   const [scope, setScope] = useState<'all' | 'today'>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const submitLockRef = useRef(false);
+
+  // Unwrap the seed's stored 12h + AM/PM times into absolute day-minutes so the AM/PM boundary is
+  // derived by absoluteMinutesToBlockTimes on save (no separate AM/PM toggle). Both modes drive an
+  // explicit start + end.
+  const seed = target.mode === 'edit'
+    ? getAbsoluteMinutes(target.block)
+    : getAbsoluteMinutes({ startMin: target.startMin, endMin: target.endMin, ampm: target.ampm });
+  const [startTime, setStartTime] = useState(() => absMinutesToClockInput(seed.start));
+  const [endTime, setEndTime] = useState(() => absMinutesToClockInput(seed.end));
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !isSubmitting) onClose(); };
@@ -36,9 +49,9 @@ export function BlockEditor({ target, onClose }: BlockEditorProps) {
     return () => document.removeEventListener('keydown', onKey);
   }, [isSubmitting, onClose]);
 
-  const timeRange = target.mode === 'edit'
-    ? formatBlockTimeRange(target.block)
-    : formatBlockTimeRange({ startMin: target.startMin, endMin: target.endMin, ampm });
+  // Both modes resolve to the same on-disk shape ({ startMin, endMin, ampm }); the header shows it live.
+  const resolvedTimes = absoluteMinutesToBlockTimes(clockInputToAbsMinutes(startTime), clockInputToAbsMinutes(endTime));
+  const timeRange = formatBlockTimeRange(resolvedTimes);
   const createSaveEnabled = canSaveBlockEditorDraft(target.mode, label);
 
   async function save() {
@@ -59,9 +72,14 @@ export function BlockEditor({ target, onClose }: BlockEditorProps) {
         return;
       }
       if (target.mode === 'edit') {
-        await updateBlock(target.date, target.block.id, trimmed, recurrence, scope, ampm);
+        await updateBlock(target.date, target.block.id, trimmed, recurrence, scope, resolvedTimes.ampm, resolvedTimes.startMin, resolvedTimes.endMin);
       } else {
-        await createBlock(target.date, { startMin: target.startMin, endMin: target.endMin, label: trimmed }, recurrence, ampm);
+        const draft = { startMin: resolvedTimes.startMin, endMin: resolvedTimes.endMin, label: trimmed };
+        if (target.sourceTaskId) {
+          await createBlockFromTask(target.sourceTaskId, target.date, draft, recurrence, resolvedTimes.ampm);
+        } else {
+          await createBlock(target.date, draft, recurrence, resolvedTimes.ampm);
+        }
       }
       onClose();
     } catch (err) {
@@ -114,16 +132,33 @@ export function BlockEditor({ target, onClose }: BlockEditorProps) {
           />
 
           <div className="rblock-editor-row">
-            <label>AM/PM
-              <select disabled={isSubmitting} value={ampm} onChange={(event) => setAmpm(event.target.value as 'AM' | 'PM')}>
-                <option value="AM">AM</option>
-                <option value="PM">PM</option>
-              </select>
+            <label>Start
+              <input
+                type="time"
+                className="rblock-editor-time-input"
+                disabled={isSubmitting}
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+              />
             </label>
+            <label>End
+              <input
+                type="time"
+                className="rblock-editor-time-input"
+                disabled={isSubmitting}
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="rblock-editor-row">
             <label>Repeat
               <select disabled={isSubmitting} value={recurrence} onChange={(event) => setRecurrence(event.target.value)}>
                 <option value="none">No repeat</option>
                 <option value="daily">Every day</option>
+                <option value="weekdays">Weekdays (Mon–Fri)</option>
+                <option value="weekends">Weekends (Sat–Sun)</option>
                 <option value="weekly">Every week</option>
                 <option value="monthly">Every month</option>
               </select>

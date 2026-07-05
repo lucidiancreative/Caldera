@@ -14,6 +14,7 @@ button:focus, [role="button"]:focus { outline: none; }
   --calendar-today-number: #e03030;
   --calendar-today-number-bg: rgba(224, 48, 48, 0.75);
   --today-ring:  #e03030;
+  --deadline:    #ff3b30;
   --star:        #f0a500;
   --accent-shadow: rgba(108, 110, 126, 0.18);
   --today-ring-bg: rgba(224, 48, 48, 0.75);
@@ -338,7 +339,7 @@ body.skin-frost .app-tooltip {
   content: '';
   position: absolute;
   inset: 0;
-  border: 1px solid var(--calendar-today-outline);
+  border: 2px solid var(--calendar-today-outline);
   border-radius: inherit;
   pointer-events: none;
   z-index: 1;
@@ -456,6 +457,84 @@ body.skin-frost .app-tooltip {
 .day-cell.today.has-image .day-num {
   background: var(--calendar-today-number-bg);
   color: #fff;
+}
+
+/* ── Month cell – Task view ──────────────────────────────── */
+/* In task view the cell drops its cover image and lists the day's scheduled blocks below the
+   day number. Keep the today number the normal size here so the list layout is predictable. */
+.day-cell.task-mode.today .day-num { font-size: 1.3rem; }
+
+.cell-task-list {
+  position: absolute;
+  inset: 26px 5px 5px 5px;   /* start below the pinned day number */
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+  z-index: 2;
+  pointer-events: none;      /* keep drags/clicks landing on the cell itself */
+}
+
+.cell-task {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+  line-height: 1.2;
+  min-height: 0;
+}
+
+.cell-task-swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.cell-task-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.cell-task-time {
+  flex: none;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.cell-task.completed .cell-task-label {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.cell-task-more {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  padding-left: 5px;
+}
+
+/* ── Deadline highlight ──────────────────────────────────── */
+/* A red outline on every schedule surface so deadline blocks grab attention. `outline`
+   is used (not border) so it never shifts layout and layers over each surface's own border. */
+.cell-task.deadline,
+.task-item.deadline,
+.timeline-bar.is-deadline,
+.block-chip.is-deadline {
+  outline: 2px solid var(--deadline);
+  outline-offset: -2px;
+}
+
+/* Day-view clock arc — stroke the filled wedge red. */
+.clock-block-arc.is-deadline {
+  stroke: var(--deadline);
+  stroke-width: 4;
 }
 
 /* ── Modal overlay ────────────────────────────────────── */
@@ -951,8 +1030,6 @@ body.dark .card-toolbar .card-action-btn:hover {
   transition: color 0.12s, border-color 0.12s;
 }
 .tabbar-add:hover { color: var(--accent); border-color: var(--accent); }
-/* Event-import button sits beside the add-tab +; smaller font sizes its Lucide SVG (1em). */
-.tabbar-import { font-size: 1.5rem; }
 
 /* ── Confirm dialog (themed replacement for window.confirm) ── */
 /* Mirrors the .rblock-editor treatment: blurred overlay + color-mix surface, so it
@@ -1249,8 +1326,10 @@ body.dark .task-sidebar::-webkit-scrollbar-thumb { background: #48484a; }
 .inbox-item:active { cursor: grabbing; }
 .inbox-item.completed { opacity: 0.45; }
 .inbox-item.completed .inbox-label { text-decoration: line-through; }
+.inbox-item.deadline { outline: 2px solid var(--deadline); outline-offset: -2px; }
 .inbox-label { flex: 1; min-width: 0; font-size: 1em; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .inbox-check,
+.inbox-deadline,
 .inbox-del {
   background: none;
   border: 1px solid var(--border);
@@ -1264,6 +1343,8 @@ body.dark .task-sidebar::-webkit-scrollbar-thumb { background: #48484a; }
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 .inbox-check:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.inbox-deadline:hover { color: var(--deadline); border-color: var(--deadline); }
+.inbox-deadline.active { color: var(--deadline); border-color: var(--deadline); }
 .inbox-del:hover   { background: #fdf0ef; color: var(--today-ring); border-color: var(--today-ring); }
 body.dark .inbox-del:hover { background: #3a1a1a; }
 
@@ -1349,9 +1430,59 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
 .react-schedule-datecopy {
   display: flex;
   align-items: center;
+  justify-content: center;  /* centre the label between the two arrows */
   min-width: 7em;  /* just wide enough for the month label so the arrows hug it */
 }
-.react-schedule-datelabel { font-size: 1.17em; font-weight: 600; line-height: 1.2; }
+.react-schedule-datelabel { font-size: 1.17em; font-weight: 600; line-height: 1.2; text-align: center; }
+
+/* Year picker: a calendar-icon button on the far left of the nav that drops a list
+   of years. Button mirrors the .react-schedule-today icon treatment; the menu reuses
+   the shared --surface/--border so it adapts to light/dark and every skin. */
+.react-schedule-yearpicker { position: relative; display: inline-flex; }
+.react-schedule-yearbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1em;
+  padding: 0.3em;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.react-schedule-yearbtn:hover { color: var(--accent); background: var(--accent-soft); }
+.react-schedule-yearmenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px var(--accent-shadow);
+}
+.react-schedule-yearopt {
+  display: block;
+  width: 100%;
+  padding: 0.32em 1.4em;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.95em;
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.react-schedule-yearopt:hover { background: var(--accent-soft); color: var(--accent); }
+.react-schedule-yearopt.active { color: var(--accent); font-weight: 700; }
 /* Discrete icon button (replaces the old "Today" text): borderless, muted, accent on hover.
    font-size sets the SVG size since the icon is width/height 1em. */
 .react-schedule-today {
@@ -1400,7 +1531,22 @@ body.dark .task-btn-del:hover { background: #3a1a1a; }
   min-width: 0;
 }
 .react-schedule-stripspacer { min-width: 0; }
+.react-schedule-cellview { display: flex; align-items: center; gap: 0.25em; justify-self: start; }
 .react-schedule-modetoggle { display: flex; align-items: center; gap: 0.25em; justify-self: end; }
+.schedule-import-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.15em;
+  padding: 0.25em;
+  font-size: 1.05em;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.12s;
+}
+.schedule-import-btn:hover { color: var(--accent); }
 .react-schedule-topbar .react-schedule-datenav { justify-self: center; }
 .react-schedule-monthtabs {
   display: flex;
@@ -1793,7 +1939,8 @@ body.dark .schedule-subtask-section-body::-webkit-scrollbar-thumb { background: 
 .rblock-editor-time { font-size: 1.2rem; color: var(--text-muted); }
 .rblock-editor-form { display: flex; flex-direction: column; gap: 12px; }
 .rblock-editor-input,
-.rblock-editor-row select {
+.rblock-editor-row select,
+.rblock-editor-row input[type="time"] {
   font: inherit; border: 1px solid var(--border); border-radius: 8px;
   background: transparent; color: inherit;
 }
@@ -1801,6 +1948,7 @@ body.dark .schedule-subtask-section-body::-webkit-scrollbar-thumb { background: 
 .rblock-editor-row { display: flex; gap: 12px; }
 .rblock-editor-row label { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 1.1rem; color: var(--text-muted); }
 .rblock-editor-row select { font-size: 1.2rem; padding: 6px 8px; }
+.rblock-editor-row input[type="time"] { font-size: 1.2rem; padding: 6px 8px; }
 .rblock-editor-scope { display: flex; flex-direction: column; gap: 4px; font-size: 1.2rem; }
 .rblock-editor-note { min-height: 16px; font-size: 1.1rem; color: var(--text-muted); }
 .rblock-editor-note.is-error { color: var(--today-ring); }
@@ -2996,9 +3144,15 @@ body.skin-glass #settings-modal-close:hover { background: rgba(255,255,255,0.26)
 }
 
 /* Theme toggle */
-#theme-toggle-row {
+#theme-toggle-row,
+#recurring-toggle-row {
   display: flex;
   gap: 6px;
+}
+.settings-hint {
+  margin: 8px 0 0;
+  font-size: 1.1rem;
+  color: var(--text-muted);
 }
 .theme-opt {
   flex: 1;

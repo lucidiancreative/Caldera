@@ -45,6 +45,14 @@ export function withMonth(key: string, monthIndex: number): string {
   return dateKey(year, monthIndex, Math.min(day, daysInTarget));
 }
 
+// Jump to a specific year, keeping the same month and clamping the day (e.g. Feb 29 →
+// Feb 28 in a non-leap year). Backs the year-picker dropdown next to the date nav.
+export function withYear(key: string, year: number): string {
+  const [, month, day] = key.split('-').map(Number);
+  const daysInTarget = new Date(year, month, 0).getDate();
+  return dateKey(year, month - 1, Math.min(day, daysInTarget));
+}
+
 export function getWeekStartKey(key: string): string {
   const dt = parseDateKey(key);
   dt.setDate(dt.getDate() - dt.getDay());

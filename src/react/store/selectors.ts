@@ -15,9 +15,10 @@ export interface ScheduleBlock {
   paletteSlot?: number;
   ampm: 'AM' | 'PM';
   completed: boolean;
+  deadline: boolean;
   subtasks: { id: string; label: string; completed: boolean; notes: string }[];
   recurring: boolean;
-  recurrence?: 'daily' | 'weekly' | 'monthly';
+  recurrence?: 'daily' | 'weekly' | 'monthly' | 'weekdays' | 'weekends';
 }
 
 /** The per-calendar inbox of un-timed tasks. Empty when the calendar has none yet. */
@@ -39,6 +40,8 @@ export function getRecurringBlocksForDate(calData: CalData, key: string): Recurr
     if (block.excludedDates?.includes(key)) return false;
     if (block.recurrence === 'daily') return true;
     if (block.recurrence === 'weekly') return date.getDay() === block.dayOfWeek;
+    if (block.recurrence === 'weekdays') return date.getDay() >= 1 && date.getDay() <= 5;
+    if (block.recurrence === 'weekends') return date.getDay() === 0 || date.getDay() === 6;
     if (block.recurrence === 'monthly') return day === block.dayOfMonth;
     return false;
   });
@@ -54,6 +57,7 @@ function fromOneOff(block: TimeBlock): ScheduleBlock {
     paletteSlot: block.paletteSlot,
     ampm: block.ampm,
     completed: block.completed,
+    deadline: block.deadline ?? false,
     subtasks: block.subtasks || [],
     recurring: false,
   };
@@ -69,6 +73,7 @@ function fromRecurring(block: RecurringBlock, key: string): ScheduleBlock {
     paletteSlot: block.paletteSlot,
     ampm: block.ampm,
     completed: block.completedDates?.includes(key) || false,
+    deadline: block.deadline ?? false,
     subtasks: block.subtasks || [],
     recurring: true,
     recurrence: block.recurrence,

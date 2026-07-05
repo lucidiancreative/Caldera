@@ -12,6 +12,7 @@ export function useCalderaPrefs() {
   const [shaderHint, setShaderHint] = useState(() =>
     bridge?.shaderHint() ?? { lowPower: false, reducedMotion: false },
   );
+  const [showRecurring, setShowRecurringState] = useState<boolean>(bridge?.showRecurring() ?? true);
 
   useEffect(() => {
     if (!bridge) return;
@@ -20,6 +21,7 @@ export function useCalderaPrefs() {
       setSkinState(bridge.skin());
       setShaderPrefState(bridge.shaderPref());
       setShaderHint(bridge.shaderHint());
+      setShowRecurringState(bridge.showRecurring());
     };
     sync();
     return bridge.subscribe(sync);
@@ -30,8 +32,10 @@ export function useCalderaPrefs() {
     skin,
     shaderPref,
     shaderHint,
+    showRecurring,
     setTheme: (next: ThemeMode) => bridge?.setTheme(next),
     setSkin: (next: SkinId) => bridge?.setSkin(next),
     setShaderPref: (next: ShaderPref) => bridge?.setShaderPref(next),
+    setShowRecurring: (next: boolean) => bridge?.setShowRecurring(next),
   };
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCalData } from '../store/calStore';
 import { getInboxTasks } from '../store/selectors';
-import { addInboxTask, toggleInboxTask, deleteInboxTask } from '../store/inboxActions';
+import { addInboxTask, toggleInboxTask, toggleInboxTaskDeadline, deleteInboxTask } from '../store/inboxActions';
 import { TASK_DND_MIME } from './taskDnd';
 
 // The quick-add inbox above the day's scheduled blocks. Typing a name and pressing
@@ -38,7 +38,7 @@ export function TaskInbox() {
           {tasks.map((task) => (
             <div
               key={task.id}
-              className={'inbox-item' + (task.completed ? ' completed' : '')}
+              className={'inbox-item' + (task.completed ? ' completed' : '') + (task.deadline ? ' deadline' : '')}
               draggable
               onDragStart={(event) => {
                 event.dataTransfer.setData(TASK_DND_MIME, task.id);
@@ -53,6 +53,13 @@ export function TaskInbox() {
                 {task.completed ? <>&#8634;</> : <>&#10003;</>}
               </button>
               <div className="inbox-label">{task.label}</div>
+              <button
+                className={'inbox-deadline' + (task.deadline ? ' active' : '')}
+                title={task.deadline ? 'Remove deadline' : 'Mark as deadline'}
+                onClick={() => void toggleInboxTaskDeadline(calData, task.id)}
+              >
+                {task.deadline ? <>&#9873;</> : <>&#9872;</>}
+              </button>
               <button
                 className="inbox-del"
                 title="Delete task"

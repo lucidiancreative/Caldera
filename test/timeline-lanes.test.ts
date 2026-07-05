@@ -6,6 +6,8 @@ import {
   packTimelineDay,
   getAbsoluteMinutes,
   absoluteMinutesToBlockTimes,
+  absMinutesToClockInput,
+  clockInputToAbsMinutes,
   clientXToTimelineMinutes,
   getTimelineZoomScrollLeft,
   getTimelineResizePlan,
@@ -17,7 +19,7 @@ import type { ScheduleBlock } from '../src/react/store/selectors';
 function block(over: Partial<ScheduleBlock>): ScheduleBlock {
   return {
     id: 'x', startMin: 0, endMin: 60, label: 'x', color: '#000',
-    ampm: 'AM', completed: false, subtasks: [], recurring: false, ...over,
+    ampm: 'AM', completed: false, deadline: false, subtasks: [], recurring: false, ...over,
   };
 }
 
@@ -173,4 +175,27 @@ test('should clamp moved blocks to the day bounds', () => {
     start: 1350,
     end: 1440,
   });
+});
+
+test('should parse an HH:MM time input into minutes since midnight', () => {
+  assert.equal(clockInputToAbsMinutes('09:00'), 540);
+  assert.equal(clockInputToAbsMinutes('13:30'), 810);
+  assert.equal(clockInputToAbsMinutes('00:00'), 0);
+});
+
+test('should clamp and default malformed time inputs', () => {
+  assert.equal(clockInputToAbsMinutes(''), 0);
+  assert.equal(clockInputToAbsMinutes('not-a-time'), 0);
+  assert.equal(clockInputToAbsMinutes('25:99'), 23 * 60 + 59);
+});
+
+test('should format minutes since midnight back into a padded HH:MM value', () => {
+  assert.equal(absMinutesToClockInput(540), '09:00');
+  assert.equal(absMinutesToClockInput(810), '13:30');
+  assert.equal(absMinutesToClockInput(5), '00:05');
+});
+
+test('should clamp out-of-range minutes when formatting a time input', () => {
+  assert.equal(absMinutesToClockInput(-30), '00:00');
+  assert.equal(absMinutesToClockInput(2000), '23:59');
 });

@@ -9,7 +9,7 @@ import { createBlock } from './actions';
 import { getDayData } from './selectors';
 
 type BridgeWindow = typeof globalThis & {
-  calderaBridge?: { pushSnapshot(): void };
+  calderaBridge?: { getData(): CalData; pushSnapshot(): void };
 };
 
 declare const window: BridgeWindow;
@@ -32,6 +32,16 @@ export async function toggleInboxTask(calData: CalData, taskId: string): Promise
   if (!task) return;
   window.calderaBridge?.pushSnapshot();
   task.completed = !task.completed;
+  await saveCalData();
+}
+
+// Flag/unflag an inbox task as a deadline. The flag rides along to the block the task
+// schedules into (see scheduleInboxTask / createBlockFromTask), which draws a red outline.
+export async function toggleInboxTaskDeadline(calData: CalData, taskId: string): Promise<void> {
+  const task = (calData._tasks ?? []).find((entry) => entry.id === taskId);
+  if (!task) return;
+  window.calderaBridge?.pushSnapshot();
+  task.deadline = !task.deadline;
   await saveCalData();
 }
 
@@ -58,9 +68,31 @@ export async function scheduleInboxTask(
   const task = (calData._tasks ?? []).find((entry) => entry.id === taskId);
   if (!task) return null;
   const before = new Set((getDayData(calData, date)?.timeBlocks ?? []).map((block) => block.id));
-  await createBlock(date, { startMin, endMin, label: task.label }, 'none', ampm);
+  await createBlock(date, { startMin, endMin, label: task.label, ...(task.deadline ? { deadline: true } : {}) }, 'none', ampm);
   const created = (getDayData(calData, date)?.timeBlocks ?? []).find((block) => !before.has(block.id));
   calData._tasks = (calData._tasks ?? []).filter((entry) => entry.id !== taskId);
   await saveCalData();
   return created?.id ?? null;
+}
+
+// Turn an inbox task into a scheduled block using an explicit label/time/recurrence — the
+// drop-onto-Month-cell path, where the block editor collects those details first. Same
+// single-undo contract as scheduleInboxTask: createBlock snapshots the "task present, no
+// block" state, so removing the task here without a second snapshot means one undo reverts
+// the whole drop. calData is read from the bridge so the editor needn't hold a reference.
+export async function createBlockFromTask(
+  taskId: string,
+  date: string,
+  block: { startMin: number; endMin: number; label: string },
+  recurrence: string,
+  ampm: 'AM' | 'PM',
+): Promise<void> {
+  const calData = window.calderaBridge?.getData();
+  if (!calData) return;
+  const task = (calData._tasks ?? []).find((entry) => entry.id === taskId);
+  await createBlock(date, { ...block, ...(task?.deadline ? { deadline: true } : {}) }, recurrence, ampm);
+  if (task) {
+    calData._tasks = (calData._tasks ?? []).filter((entry) => entry.id !== taskId);
+  }
+  await saveCalData();
 }

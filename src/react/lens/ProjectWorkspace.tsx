@@ -13,12 +13,14 @@ export function ProjectWorkspace({
   onModeChange,
   onOpenDay,
   onHoverDateChange,
+  onOpenAi,
 }: {
   externalDate?: string;
   mode: CalMode;
   onModeChange: (mode: CalMode) => void;
   onOpenDay: (key: string) => void;
   onHoverDateChange: (key: string | null) => void;
+  onOpenAi: () => void;
 }) {
   const [lens, setLens] = useState<LensId>('time');
 
@@ -30,6 +32,7 @@ export function ProjectWorkspace({
         onModeChange={onModeChange}
         onOpenDay={onOpenDay}
         onHoverDateChange={onHoverDateChange}
+        onOpenAi={onOpenAi}
         lens={lens}
         onSelectLens={setLens}
       />

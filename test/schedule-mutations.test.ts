@@ -93,6 +93,22 @@ test('should detach one recurring occurrence into a one-off block', () => {
   assert.notEqual(oneOffBlocks[0].subtasks, calData._recurring[0].subtasks);
 });
 
+test('should preserve the deadline flag when detaching a recurring occurrence', () => {
+  const calData: CalData = { _recurring: [recurring({ id: 'r3', deadline: true })] };
+
+  const detached = detachRecurringOccurrenceToOneOff(
+    calData,
+    '2026-06-10',
+    'r3',
+    '2026-06-11',
+    { startMin: 180, endMin: 240, ampm: 'PM' },
+  );
+
+  assert.ok(detached);
+  assert.equal(detached.deadline, true);
+  assert.equal((calData['2026-06-11'] as { timeBlocks: TimeBlock[] }).timeBlocks[0]?.deadline, true);
+});
+
 test('should ignore an already excluded recurring occurrence', () => {
   const calData: CalData = { _recurring: [recurring({ excludedDates: ['2026-06-10'] })] };
 

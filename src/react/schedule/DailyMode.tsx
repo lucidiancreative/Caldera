@@ -104,17 +104,15 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
   const previewSlot = palette.length
     ? (getDayData(calData, date)?.timeBlocks?.length ?? 0) % palette.length
     : 0;
-  const boundaryRounding = getBoundaryRoundingMap(allBlocks);
-
   function renderArc(block: ScheduleBlock) {
     const spanMin = (block.endMin - block.startMin + 720) % 720;
     const past = isBlockPast(block, date, now, todayKey);
     const arcClass =
       'clock-block-arc' +
       (block.recurring ? ' recurring-arc' : '') +
+      (block.deadline ? ' is-deadline' : '') +
       (block.id === selectedBlockId ? ' is-selected' : '');
     const labelId = `react-arc-label-${block.id}`;
-    const rounding = boundaryRounding.get(block.id) ?? { roundStart: true, roundEnd: true };
     return (
       <g
         key={block.id}
@@ -124,11 +122,7 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
       >
         <path
           className={arcClass}
-          d={arcPath(cx, cy, r1, r2, block.startMin, block.endMin, {
-            radius: rnd,
-            roundStart: rounding.roundStart,
-            roundEnd: rounding.roundEnd,
-          })}
+          d={arcPath(cx, cy, r1, r2, block.startMin, block.endMin, rnd)}
           fill={fillOf(block)}
         />
         {spanMin >= 30 && block.label && (
@@ -222,6 +216,7 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
               className={
                 'block-chip' +
                 (block.id === selectedBlockId ? ' is-selected' : '') +
+                (block.deadline ? ' is-deadline' : '') +
                 (isBlockPast(block, date, now, todayKey) ? ' is-past' : '')
               }
               style={{ background: appearance?.gradientCss(block) ?? block.color }}
@@ -235,23 +230,4 @@ export function DailyMode({ date, selectedBlockId, onSelect, onCreate }: DailyMo
       </div>
     </div>
   );
-}
-
-function getBoundaryRoundingMap(blocks: ScheduleBlock[]): Map<string, { roundStart: boolean; roundEnd: boolean }> {
-  const sorted = [...blocks].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin || a.label.localeCompare(b.label));
-  const map = new Map<string, { roundStart: boolean; roundEnd: boolean }>();
-
-  sorted.forEach((block) => {
-    map.set(block.id, { roundStart: true, roundEnd: true });
-  });
-
-  for (let index = 0; index < sorted.length - 1; index += 1) {
-    const current = sorted[index];
-    const next = sorted[index + 1];
-    if (current.endMin !== next.startMin) continue;
-    map.set(current.id, { ...(map.get(current.id) ?? { roundStart: true, roundEnd: true }), roundEnd: false });
-    map.set(next.id, { ...(map.get(next.id) ?? { roundStart: true, roundEnd: true }), roundStart: false });
-  }
-
-  return map;
 }

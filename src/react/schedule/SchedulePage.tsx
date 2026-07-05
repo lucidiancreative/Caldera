@@ -6,19 +6,39 @@ import { SubtaskSection } from './SubtaskSection';
 import { DailyMode } from './DailyMode';
 import { BlockEditor, type EditorTarget } from './BlockEditor';
 import { ScheduleNav, type CalMode } from './ScheduleNav';
-import { CalendarView } from '../calendar/CalendarView';
+import { CalendarView, type CellView } from '../calendar/CalendarView';
 import { LensLayout } from '../lens/LensLayout';
 import type { LensId } from '../lens/lenses';
 import { useCalData } from '../store/calStore';
 import { scheduleInboxTask } from '../store/inboxActions';
-import { getScheduleBlocksForDate } from '../store/selectors';
+import { getInboxTasks, getScheduleBlocksForDate } from '../store/selectors';
+import { absoluteMinutesToBlockTimes } from './timeline';
 import { useCalderaTabs } from '../tabs/useCalderaTabs';
 import { MONTH_TAB_LABELS, getTodayKey, withMonth } from '../util/format';
 
 type SelectedOccurrence = { date: string; blockId: string };
 
 const SELECTION_STORAGE_KEY = 'caldera.schedule.selectedBlock.v1';
+const CELL_VIEW_STORAGE_KEY = 'caldera.calendar.cellView.v1';
 const DEFAULT_SELECTION_SCOPE = 'default';
+
+// The Month grid's Images/Tasks toggle is a single global preference (all cells share it),
+// so it lives in one localStorage key rather than being scoped per tab like the selection.
+function readStoredCellView(): CellView {
+  try {
+    return window.localStorage.getItem(CELL_VIEW_STORAGE_KEY) === 'task' ? 'task' : 'image';
+  } catch {
+    return 'image';
+  }
+}
+
+function writeStoredCellView(view: CellView): void {
+  try {
+    window.localStorage.setItem(CELL_VIEW_STORAGE_KEY, view);
+  } catch {
+    // Cell-view persistence is a convenience; the calendar works without storage.
+  }
+}
 
 function selectionScope(activeId: string): string {
   return activeId || window.calderaTabs?.activeId() || DEFAULT_SELECTION_SCOPE;
@@ -62,6 +82,7 @@ export function SchedulePage({
   onModeChange,
   onOpenDay,
   onHoverDateChange,
+  onOpenAi,
   lens,
   onSelectLens,
 }: {
@@ -71,6 +92,7 @@ export function SchedulePage({
   onModeChange: (mode: CalMode) => void;
   onOpenDay: (key: string) => void;
   onHoverDateChange: (key: string | null) => void;
+  onOpenAi: () => void;
   lens: LensId;
   onSelectLens: (lens: LensId) => void;
 }) {
@@ -79,6 +101,7 @@ export function SchedulePage({
   const [internalDate, setInternalDate] = useState(externalDate ?? initialDate ?? getTodayKey());
   const [selection, setSelectionState] = useState<SelectedOccurrence | null>(() => readStoredSelection(activeId));
   const [editor, setEditor] = useState<EditorTarget | null>(null);
+  const [cellView, setCellViewState] = useState<CellView>(() => readStoredCellView());
   const date = externalDate ?? internalDate;
   const [year, month] = date.split('-').map(Number);
   const selectionIsValid = !!selection && getScheduleBlocksForDate(calData, selection.date).some((block) => block.id === selection.blockId);
@@ -133,6 +156,31 @@ export function SchedulePage({
     setSelection({ date: draft.date, blockId }); // select the new block so it can be adjusted right away
   }
 
+  function setCellView(next: CellView) {
+    setCellViewState(next);
+    writeStoredCellView(next);
+  }
+
+  // Dropping an inbox task on a Month day-cell: flip every cell to Task view (so the new block
+  // is visible where it landed), focus that day, and open the block editor seeded with the
+  // task's label and a default 9-10 AM slot. Saving consumes the task; cancelling keeps it.
+  function handleTaskDropOnDay(dropDate: string, taskId: string) {
+    const task = getInboxTasks(calData).find((entry) => entry.id === taskId);
+    if (!task) return;
+    setCellView('task');
+    focusDate(dropDate);
+    const seed = absoluteMinutesToBlockTimes(9 * 60, 10 * 60);
+    setEditor({
+      mode: 'create',
+      date: dropDate,
+      startMin: seed.startMin,
+      endMin: seed.endMin,
+      ampm: seed.ampm,
+      label: task.label,
+      sourceTaskId: taskId,
+    });
+  }
+
   return (
     <LensLayout
       lens={lens}
@@ -157,7 +205,25 @@ export function SchedulePage({
               <ScheduleNav mode={mode} date={date} onChange={(key) => focusDate(key)} />
             </div>
             <div className="react-schedule-striprow">
-              <span className="react-schedule-stripspacer" aria-hidden="true" />
+              {mode === 'month' ? (
+                <div className="react-schedule-cellview" role="group" aria-label="Day cell contents">
+                  <button className={'schedule-mode-btn' + (cellView === 'task' ? ' active' : '')} onClick={() => setCellView('task')}>Tasks</button>
+                  <button className={'schedule-mode-btn' + (cellView === 'image' ? ' active' : '')} onClick={() => setCellView('image')}>Events</button>
+                  <button className="schedule-import-btn" title="Event Import" aria-label="Event Import" onClick={onOpenAi}>
+                    {/* Lucide calendar-plus — opens the AI event import */}
+                    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M8 2v4" />
+                      <path d="M16 2v4" />
+                      <path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6" />
+                      <path d="M3 10h18" />
+                      <path d="M16 19h6" />
+                      <path d="M19 16v6" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <span className="react-schedule-stripspacer" aria-hidden="true" />
+              )}
               <div className="react-schedule-monthtabs" role="group" aria-label="Month quick jump">
                 {MONTH_TAB_LABELS.map((label, index) => (
                   <button
@@ -183,8 +249,10 @@ export function SchedulePage({
               <CalendarView
                 month={month - 1}
                 year={year}
+                cellView={cellView}
                 onOpenDay={onOpenDay}
                 onHoverDateChange={onHoverDateChange}
+                onTaskDrop={handleTaskDropOnDay}
               />
             ) : mode === 'week' ? (
               <div className="react-schedule-week">

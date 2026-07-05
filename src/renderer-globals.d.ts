@@ -10,7 +10,7 @@
 
 type DateKey = string;
 type AmPm = 'AM' | 'PM';
-type RecurrenceType = 'daily' | 'weekly' | 'monthly';
+type RecurrenceType = 'daily' | 'weekly' | 'monthly' | 'weekdays' | 'weekends';
 type SkinId = 'default' | 'arctic' | 'glacier' | 'teal';
 
 interface CalendarEvent {
@@ -38,6 +38,7 @@ interface InboxTask {
   id: string;
   label: string;
   completed: boolean;
+  deadline?: boolean;
 }
 
 interface TimeBlock {
@@ -49,6 +50,7 @@ interface TimeBlock {
   color: string;
   ampm: AmPm;
   completed: boolean;
+  deadline?: boolean;
   subtasks: BlockSubtask[];
 }
 
@@ -63,6 +65,7 @@ interface RecurringBlock {
   recurrence: RecurrenceType;
   dayOfWeek: number;
   dayOfMonth: number;
+  deadline?: boolean;
   completedDates: DateKey[];
   excludedDates: DateKey[];
   subtasks: BlockSubtask[];
@@ -157,8 +160,8 @@ interface CalderaAppearance {
 // Schedule write operations, exposed so the React view edits blocks through the same
 // vanilla domain logic (palette slots, recurring conversion, scope handling).
 interface CalderaSchedule {
-  createBlock(key: string, block: { startMin: number; endMin: number; label: string }, recurrence: string, ampm: AmPm): Promise<void>;
-  updateBlock(key: string, id: string, label: string, recurrence: string, scope: string, ampm: AmPm): Promise<void>;
+  createBlock(key: string, block: { startMin: number; endMin: number; label: string; deadline?: boolean }, recurrence: string, ampm: AmPm): Promise<void>;
+  updateBlock(key: string, id: string, label: string, recurrence: string, scope: string, ampm: AmPm, startMin: number, endMin: number): Promise<void>;
   deleteBlock(key: string, id: string, scope?: string): Promise<void>;
 }
 
@@ -194,6 +197,8 @@ interface CalderaPrefs {
   shaderPref(): 'auto' | 'on' | 'off';
   setShaderPref(pref: 'auto' | 'on' | 'off'): void;
   shaderHint(): { lowPower: boolean; reducedMotion: boolean };
+  showRecurring(): boolean;
+  setShowRecurring(show: boolean): void;
   subscribe(listener: () => void): () => void;
   notify(): void;
 }

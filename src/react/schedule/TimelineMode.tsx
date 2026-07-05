@@ -611,6 +611,7 @@ export function TimelineMode({ date, selection, onFocusDate, onSelect, onClearSe
                           (selected ? ' is-selected' : '') +
                           (segment.block.completed ? ' is-complete' : '') +
                           (segment.block.recurring ? ' is-recurring' : '') +
+                          (segment.block.deadline ? ' is-deadline' : '') +
                           (past ? ' is-past' : '') +
                           (movingAway ? ' is-moving-away' : '') +
                           (widthPx < 84 ? ' is-compact' : '') +

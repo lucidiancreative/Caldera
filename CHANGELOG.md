@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.35.0] - 2026-07-18
+
+### Changed
+- **Themed date pickers on the Event Import modal.** The date-range fields now open a mini popup calendar styled to the app skin (frosted-glass surface, accent hover/selected states, greyed other-month days) instead of the OS's native date picker. Each field has a "Clear" and "Today" shortcut, and the popup flips above / shifts inward to stay on-screen. The range still saves as `YYYY-MM-DD`, so imports behave exactly as before.
+
+## [1.34.0] - 2026-07-18
+
+### Added
+- **Event thumbnails on task-view day cells.** In the Month grid's Tasks view, each day now shows a row of small circular image thumbnails along its bottom-left corner — one per event assigned to that day (capped at 6, then a "+N" chip). Events without an image render as a plain accent dot so the count still matches. The scheduled-block list lifts to make room when a day has both.
+
 ## [1.33.1] - 2026-07-05
 
 ### Fixed

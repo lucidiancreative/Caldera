@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AiConfig, AiEvent } from '../../types';
+import { DatePicker } from './DatePicker';
 
 const EMPTY_CONFIG: AiConfig = {
   provider: 'claude',
@@ -290,9 +291,17 @@ export function AiImportModal({
         <div className="ai-field-group">
           <label className="ai-label">Date Range <span className="ai-label-hint">(optional)</span></label>
           <div className="ai-date-range-row">
-            <input className="ai-input" type="date" value={config.dateRangeStart} onChange={(event) => setConfig((current) => ({ ...current, dateRangeStart: event.target.value }))} />
+            <DatePicker
+              value={config.dateRangeStart}
+              placeholder="Start date"
+              onChange={(next) => setConfig((current) => ({ ...current, dateRangeStart: next }))}
+            />
             <span className="ai-date-sep">to</span>
-            <input className="ai-input" type="date" value={config.dateRangeEnd} onChange={(event) => setConfig((current) => ({ ...current, dateRangeEnd: event.target.value }))} />
+            <DatePicker
+              value={config.dateRangeEnd}
+              placeholder="End date"
+              onChange={(next) => setConfig((current) => ({ ...current, dateRangeEnd: next }))}
+            />
           </div>
         </div>
 

@@ -12,6 +12,10 @@ import { MONTH_LABELS, WEEKDAY_LABELS, dateKey, formatBlockTimeRange, formatTime
 // a "+N" row — enough to be useful without overflowing the small cell.
 const MAX_CELL_TASKS = 3;
 
+// One circular image thumbnail per event sits along the bottom-left of a task-view cell.
+// Capped so a busy day can't overflow the small cell; the rest collapse into a "+N" chip.
+const MAX_EVENT_DOTS = 6;
+
 export type CellView = 'image' | 'task';
 
 interface CalendarViewProps {
@@ -112,6 +116,7 @@ function CalendarCell({
   const [featuredUrl, setFeaturedUrl] = useState('');
   const [hovered, setHovered] = useState(false);
   const [stripUrls, setStripUrls] = useState<Array<{ url: string; height: number }>>([]);
+  const [eventDots, setEventDots] = useState<Array<{ id: string; url: string }>>([]);
   const [dragCount, setDragCount] = useState(0);
 
   useEffect(() => {
@@ -131,6 +136,34 @@ function CalendarCell({
       cancelled = true;
     };
   }, [featured?.image]);
+
+  // Task view only: resolve a thumbnail URL for each of the day's events so they can be shown
+  // as circular dots. Featured event leads the row; events without an image get an empty url
+  // (rendered as a plain accent dot) so the dot count still matches the event count.
+  useEffect(() => {
+    let cancelled = false;
+    const events = taskMode ? dayData?.events ?? [] : [];
+    if (!events.length) {
+      setEventDots([]);
+      return;
+    }
+    const ordered = [...events].sort((a, b) => {
+      if (a.id === dayData?.featuredId) return -1;
+      if (b.id === dayData?.featuredId) return 1;
+      return 0;
+    });
+    Promise.all(
+      ordered.map(async (event) => ({
+        id: event.id,
+        url: event.image ? await resolveCalendarImageUrl(event.image).catch(() => '') : '',
+      })),
+    ).then((dots) => {
+      if (!cancelled) setEventDots(dots);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [taskMode, dayData]);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,27 +281,43 @@ function CalendarCell({
       <span className="day-num">{day}</span>
 
       {taskMode ? (
-        blocks.length > 0 && (
-          <div className="cell-task-list">
-            {blocks.slice(0, MAX_CELL_TASKS).map((block) => (
-              <div
-                key={block.id}
-                className={'cell-task' + (block.completed ? ' completed' : '') + (block.deadline ? ' deadline' : '')}
-                title={`${block.label} - ${formatBlockTimeRange(block)}`}
-              >
+        <>
+          {blocks.length > 0 && (
+            <div className={'cell-task-list' + (eventDots.length ? ' has-event-dots' : '')}>
+              {blocks.slice(0, MAX_CELL_TASKS).map((block) => (
+                <div
+                  key={block.id}
+                  className={'cell-task' + (block.completed ? ' completed' : '') + (block.deadline ? ' deadline' : '')}
+                  title={`${block.label} - ${formatBlockTimeRange(block)}`}
+                >
+                  <span
+                    className="cell-task-swatch"
+                    style={{ background: window.calderaAppearance?.gradientCss(block) ?? block.color }}
+                  />
+                  <span className="cell-task-label">{block.label}</span>
+                  <span className="cell-task-time">{formatBlockTimeRange(block)}</span>
+                </div>
+              ))}
+              {blocks.length > MAX_CELL_TASKS && (
+                <div className="cell-task-more">+{blocks.length - MAX_CELL_TASKS} more</div>
+              )}
+            </div>
+          )}
+          {eventDots.length > 0 && (
+            <div className="cell-event-dots">
+              {eventDots.slice(0, MAX_EVENT_DOTS).map((dot) => (
                 <span
-                  className="cell-task-swatch"
-                  style={{ background: window.calderaAppearance?.gradientCss(block) ?? block.color }}
+                  key={dot.id}
+                  className={'cell-event-dot' + (dot.url ? '' : ' no-image')}
+                  style={dot.url ? { backgroundImage: `url("${dot.url}")` } : undefined}
                 />
-                <span className="cell-task-label">{block.label}</span>
-                <span className="cell-task-time">{formatBlockTimeRange(block)}</span>
-              </div>
-            ))}
-            {blocks.length > MAX_CELL_TASKS && (
-              <div className="cell-task-more">+{blocks.length - MAX_CELL_TASKS} more</div>
-            )}
-          </div>
-        )
+              ))}
+              {eventDots.length > MAX_EVENT_DOTS && (
+                <span className="cell-event-dot-more">+{eventDots.length - MAX_EVENT_DOTS}</span>
+              )}
+            </div>
+          )}
+        </>
       ) : (
         <>
           {(dayData?.events?.length || 0) > 1 && <span className="cell-count">{dayData!.events.length}</span>}

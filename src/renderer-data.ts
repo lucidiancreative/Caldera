@@ -245,10 +245,16 @@ function migrateCalendarDataFormat(raw: Record<string, unknown>): CalData {
       continue;
     }
 
-    // The per-calendar inbox is its own top-level array, not a day; without this branch
+    // The per-project inbox is its own top-level array, not a day; without this branch
     // it would fall through to the legacy-day wrapper below and be destroyed on load.
     if (key === '_tasks') {
       out._tasks = Array.isArray(value) ? value : [];
+      continue;
+    }
+
+    // The Money lens's budgets are likewise a top-level array, not a day.
+    if (key === '_budgets') {
+      out._budgets = Array.isArray(value) ? value : [];
       continue;
     }
 

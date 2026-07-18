@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { SchedulePage } from '../schedule/SchedulePage';
 import type { CalMode } from '../schedule/ScheduleNav';
 import { PlaceholderLens } from './PlaceholderLens';
+import { MoneyLens } from './money/MoneyLens';
 import type { LensId } from './lenses';
 
 // Owns which framework lens the active project is being viewed through. The Time lens is
@@ -37,6 +38,10 @@ export function ProjectWorkspace({
         onSelectLens={setLens}
       />
     );
+  }
+
+  if (lens === 'money') {
+    return <MoneyLens lens={lens} onSelectLens={setLens} />;
   }
 
   return <PlaceholderLens lens={lens} onSelectLens={setLens} />;

@@ -1310,6 +1310,119 @@ body.dark .card-toolbar .card-action-btn:hover {
 .lens-placeholder-title { font-size: 1.4rem; font-weight: 700; color: var(--text); }
 .lens-placeholder-note { font-size: 1rem; }
 
+/* ── Money lens (budget grid) ─────────────────────────── */
+/* Sidebar: the project's budgets (a project can hold several). */
+.budget-list-head { font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 700; padding: 2px 2px 5px; }
+.budget-list { display: flex; flex-direction: column; gap: 3px; }
+.budget-list-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: 7px; cursor: pointer;
+  border: 1px solid transparent; background: var(--surface);
+}
+.budget-list-item:hover { border-color: var(--border); }
+.budget-list-item.active { border-color: var(--accent); background: var(--accent-soft); }
+.budget-list-name { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.budget-list-del { border: none; background: none; color: var(--text-muted); cursor: pointer; opacity: 0; font-size: 0.85em; padding: 0 2px; }
+.budget-list-item:hover .budget-list-del { opacity: 1; }
+.budget-list-del:hover { color: #e0524d; }
+.budget-list-input { width: 100%; box-sizing: border-box; border: 1px solid var(--accent); border-radius: 5px; padding: 3px 6px; background: var(--surface); color: inherit; font: inherit; font-weight: 600; outline: none; }
+.budget-add {
+  margin-top: 8px; width: 100%; box-sizing: border-box;
+  border: 1px dashed var(--border); background: none; color: var(--text-muted);
+  border-radius: 7px; padding: 6px; cursor: pointer; font: inherit; font-size: 0.9em;
+}
+.budget-add:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Main: the active budget as a draggable snap-to-grid dashboard (react-grid-layout). */
+.budget-main { flex: 1; min-height: 0; display: flex; }
+.budget-canvas-wrap { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; position: relative; }
+.budget-card { overflow: visible; }
+
+/* react-grid-layout base rules (inlined — see BudgetCanvas note). Only the drag/transition
+   bits are needed; RGL sets each item's absolute position inline, and resize is disabled. */
+.react-grid-layout { position: relative; transition: height 200ms ease; }
+.react-grid-item { transition: all 200ms ease; transition-property: left, top, width, height; }
+.react-grid-item.cssTransforms { transition-property: transform, width, height; }
+.react-grid-item.react-draggable-dragging { transition: none; z-index: 4; will-change: transform; box-shadow: 0 12px 30px var(--accent-shadow); }
+.react-grid-item.dropping { visibility: hidden; }
+/* Drop-target placeholder, themed to the accent. */
+.react-grid-item.react-grid-placeholder { background: var(--accent-soft); border: 1px dashed var(--accent); border-radius: 10px; opacity: 0.9; z-index: 2; user-select: none; }
+
+.budget-drag-grip { cursor: grab; color: var(--text-muted); line-height: 1; padding: 0 3px; user-select: none; }
+.budget-drag-grip:active,
+.react-draggable-dragging .budget-drag-grip { cursor: grabbing; }
+
+.budget-add-row { width: 100%; text-align: left; border: none; background: none; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 0.85em; padding: 3px 5px; border-radius: 5px; margin: 2px 0; }
+.budget-add-row:hover { color: var(--accent); background: var(--bg); }
+
+/* Right-click menu (canvas: add section · section: row/duplicate/collapse/delete). */
+.budget-ctx-menu { position: fixed; z-index: 1000; min-width: 190px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.25); padding: 5px; display: flex; flex-direction: column; backdrop-filter: blur(12px); }
+.budget-ctx-item { display: block; width: 100%; text-align: left; border: none; background: none; color: inherit; font: inherit; font-size: 0.9em; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
+.budget-ctx-item:hover { background: var(--accent-soft); color: var(--accent); }
+.budget-ctx-item.danger { color: #e0524d; }
+.budget-ctx-item.danger:hover { background: rgba(224, 82, 77, 0.12); }
+.budget-ctx-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+
+.budget-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 0.92rem; }
+.budget-section-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px; border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+}
+.budget-collapse { border: none; background: none; cursor: pointer; color: var(--text-muted); font-size: 0.9em; padding: 0 2px; line-height: 1; }
+.budget-section-title { flex: 1; min-width: 0; font-weight: 700; }
+.budget-summary-heading { padding: 2px 5px; }
+.budget-section-actions { display: flex; gap: 4px; }
+.budget-head-btn { border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); border-radius: 6px; padding: 2px 7px; font-size: 0.8em; cursor: pointer; white-space: nowrap; }
+.budget-head-btn:hover { border-color: var(--accent); color: var(--accent); }
+.budget-del:hover { border-color: #e0524d; color: #e0524d; }
+.budget-section-body { padding: 5px 8px 8px; }
+
+/* Per-kind accent stripe on the section header. */
+.budget-section-income .budget-section-head,
+.budget-section-assets .budget-section-head { border-left-color: #3fa46a; }
+.budget-section-liabilities .budget-section-head { border-left-color: #e0524d; }
+.budget-section-bills .budget-section-head { border-left-color: #e08a3c; }
+.budget-section-funds .budget-section-head { border-left-color: #7a6cf0; }
+.budget-section-goals .budget-section-head { border-left-color: #3c7ae0; }
+
+/* Rows share a flex skeleton so label / value / date / action columns line up. */
+.budget-row { display: flex; align-items: center; gap: 4px; min-height: 26px; }
+.budget-c-label { flex: 1; min-width: 0; }
+.budget-c-val { width: 88px; flex-shrink: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.budget-c-date { width: 66px; flex-shrink: 0; }
+.budget-c-actions { width: 46px; flex-shrink: 0; display: flex; gap: 2px; justify-content: flex-end; opacity: 0; transition: opacity 0.12s; }
+.budget-row:hover .budget-c-actions { opacity: 1; }
+.budget-colhead { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); padding-bottom: 3px; border-bottom: 1px solid var(--border); }
+.budget-empty-row { color: var(--text-muted); font-size: 0.85em; padding: 5px 4px; }
+.budget-total { margin-top: 3px; border-top: 1px solid var(--border); font-weight: 700; padding-top: 2px; }
+.budget-total .budget-c-label { padding-left: 5px; }
+.budget-total .budget-c-val { padding-right: 5px; }
+
+/* Click-to-edit cell: reads as text, becomes an input on click. */
+.budget-cell {
+  display: block; width: 100%; border: 1px solid transparent; background: none; color: inherit; font: inherit;
+  text-align: left; padding: 2px 5px; border-radius: 5px; cursor: text;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.budget-cell.right { text-align: right; }
+.budget-cell.empty { color: var(--text-muted); }
+.budget-cell:hover { border-color: var(--border); background: var(--bg); }
+.budget-cell-input { width: 100%; box-sizing: border-box; border: 1px solid var(--accent); border-radius: 5px; padding: 2px 5px; background: var(--surface); color: inherit; font: inherit; outline: none; }
+.budget-cell-input.right { text-align: right; }
+.budget-row-btn { border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); border-radius: 5px; width: 20px; height: 20px; font-size: 0.8em; line-height: 1; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.budget-row-btn:hover { border-color: var(--accent); color: var(--accent); }
+.budget-row-btn.budget-del:hover { border-color: #e0524d; color: #e0524d; }
+
+/* Computed summary card. */
+.budget-summary .budget-section-head { border-left-color: var(--accent); }
+.budget-summary-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 4px; font-size: 0.9em; }
+.budget-summary-row.strong { font-weight: 700; border-top: 1px solid var(--border); margin-top: 2px; padding-top: 5px; }
+.budget-summary-label { color: var(--text-muted); }
+.budget-summary-row.strong .budget-summary-label { color: var(--text); }
+.budget-summary-value { font-variant-numeric: tabular-nums; }
+.budget-summary-value.negative { color: #e0524d; }
+
 /* ── Task list sidebar ────────────────────────────────── */
 /* Inner scroll area of the Time lens — the quick-add inbox + scheduled blocks. Sits
    below the lens bar and owns the left side's scroll. */

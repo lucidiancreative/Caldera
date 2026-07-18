@@ -71,9 +71,42 @@ interface RecurringBlock {
   subtasks: BlockSubtask[];
 }
 
+type BudgetSectionKind = 'income' | 'assets' | 'liabilities' | 'bills' | 'funds' | 'goals';
+
+interface BudgetItem {
+  id: string;
+  label: string;
+  values: Record<string, number>;
+  date?: string;
+  children?: BudgetItem[];
+}
+
+interface SectionLayout {
+  x: number;
+  y: number;
+  w: number;
+}
+
+interface BudgetSection {
+  id: string;
+  kind: BudgetSectionKind;
+  title: string;
+  items: BudgetItem[];
+  collapsed?: boolean;
+  layout?: SectionLayout;
+}
+
+interface Budget {
+  id: string;
+  name: string;
+  sections: BudgetSection[];
+  summaryLayout?: SectionLayout;
+}
+
 interface CalData {
   _recurring: RecurringBlock[];
   _tasks?: InboxTask[];
+  _budgets?: Budget[];
   _aiConfig?: unknown;
   [dateKey: string]: DayData | RecurringBlock[] | unknown;
 }

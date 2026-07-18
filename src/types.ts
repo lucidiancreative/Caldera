@@ -80,6 +80,51 @@ export interface RecurringBlock {
   subtasks: BlockSubtask[];
 }
 
+// ── Money lens (budgets) ─────────────────────────────────────────────────────
+
+/** Which built-in budget section a row group is; sets its value columns + accent. */
+export type BudgetSectionKind = 'income' | 'assets' | 'liabilities' | 'bills' | 'funds' | 'goals';
+
+/**
+ * A budget line item. `values` is keyed by the section kind's column ids (e.g. `monthly`).
+ * `children` nest purely for organization — a header row simply carries no values and
+ * contributes 0 to totals.
+ */
+export interface BudgetItem {
+  id: string;
+  label: string;
+  values: Record<string, number>;
+  /** Goals only: a target date (free text like `2027` or a `1-Sep` style label). */
+  date?: string;
+  children?: BudgetItem[];
+}
+
+/** A section's placement on the Money dashboard canvas, in 12-col grid units (height is
+ *  derived from content, so it isn't stored). Absent until the section is first placed. */
+export interface SectionLayout {
+  x: number;
+  y: number;
+  w: number;
+}
+
+export interface BudgetSection {
+  id: string;
+  kind: BudgetSectionKind;
+  title: string;
+  items: BudgetItem[];
+  collapsed?: boolean;
+  layout?: SectionLayout;
+}
+
+/** One named budget in a project's Money lens — a project can hold several. */
+export interface Budget {
+  id: string;
+  name: string;
+  sections: BudgetSection[];
+  /** Canvas placement of the computed Summary card (it isn't a section). */
+  summaryLayout?: SectionLayout;
+}
+
 /**
  * Top-level on-disk data shape. YYYY-MM-DD keys map to DayData.
  * The special keys `_recurring` and `_aiConfig` are also present.
@@ -87,8 +132,10 @@ export interface RecurringBlock {
  */
 export interface CalData {
   _recurring: RecurringBlock[];
-  /** Per-calendar inbox of un-timed tasks, shown on every day until scheduled. */
+  /** Per-project inbox of un-timed tasks, shown on every day until scheduled. */
   _tasks?: InboxTask[];
+  /** Per-project budgets for the Money lens. */
+  _budgets?: Budget[];
   /** Owned by ai-import; opaque to the renderer */
   _aiConfig?: unknown;
   [dateKey: string]: DayData | RecurringBlock[] | unknown;

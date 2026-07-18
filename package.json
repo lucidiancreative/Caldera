@@ -1,6 +1,6 @@
 {
   "name": "caldera",
-  "version": "1.35.0",
+  "version": "1.37.1",
   "description": "A proprietary freeware visual event calendar with local-first event import functionality",
   "main": "dist/main.js",
   "scripts": {
@@ -58,6 +58,7 @@
   "dependencies": {
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-grid-layout": "^2.2.3",
     "zustand": "^5.0.14"
   }
 }

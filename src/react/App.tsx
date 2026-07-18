@@ -139,7 +139,7 @@ export function App() {
         </div>
       )}
 
-      <div id="app-copyright" aria-hidden="true">&copy; 2026 Z3n Studio.</div>
+      <div id="app-copyright" aria-hidden="true">&copy; 2026 Z3n.</div>
 
       <button id="btn-settings" title="Settings" aria-label="Settings" onClick={() => setSettingsOpen(true)}>
         {/* Lucide settings (gear) */}

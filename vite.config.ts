@@ -14,6 +14,10 @@ export default defineConfig({
   // selects React's prod code path, and shrinks the bundle.
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
+    // react-draggable's debug log() reads process.env.DRAGGABLE_DEBUG; left unreplaced it
+    // throws `process is not defined` in the sandboxed renderer the instant a drag starts
+    // (breaks the Money dashboard drag). Fold it to a constant so the check dead-codes away.
+    'process.env.DRAGGABLE_DEBUG': 'false',
   },
   build: {
     outDir: 'dist/react',

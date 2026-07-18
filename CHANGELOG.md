@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.37.1] - 2026-07-18
+
+### Fixed
+- **Money dashboard sections now drag.** Cards showed the grab cursor but wouldn't move. **Root cause:** react-draggable's debug `log()` reads `process.env.DRAGGABLE_DEBUG`, which the vite build left unreplaced — so it threw `ReferenceError: process is not defined` in the sandboxed renderer the instant a drag started (`handleDragStart`). It's now defined away in `vite.config.ts` next to `process.env.NODE_ENV`. Two correctness hardenings landed alongside: react-grid-layout's `layout` is held in controlled React state (updated on drop, so a mid-drag re-render — height measurement or the async persist — can't hand RGL a conflicting array and revert the drop), and RGL's base positioning CSS is inlined into `styles.css` (this IIFE renderer bundle can't emit/link a separate stylesheet). Positions persist per budget across restarts.
+
+## [1.37.0] - 2026-07-18
+
+### Added
+- **Money lens — drag-to-place dashboard + right-click menus.** Budget sections are now cards on a snap-to-grid canvas: grab a card by the **⠿ grip** in its header to move it, and it snaps to a 12-column grid while the others reflow (powered by `react-grid-layout`). **Right-click** the empty canvas to **add a section** (dropped where you clicked); right-click a section for **Add row / Duplicate / Collapse / Delete**. Card positions are saved per budget (the computed Summary is placeable too); section width/height stays automatic for now (move-only). Each card's height auto-fits its content. Positions persist across restarts.
+
+### Notes
+- `react-grid-layout@2.2.3` is added and loaded via `React.lazy`, so it only evaluates when the Money lens is opened. (The renderer ships as a single CSP-safe IIFE bundle, which can't code-split a separate chunk, so its ~22 kB gzip rides along in the main bundle; its base CSS is inlined into `styles.css` rather than importing the library stylesheet, since the bundle can't emit a separately-linked CSS file.)
+
+## [1.36.0] - 2026-07-18
+
+### Added
+- **Money lens — a customizable planning budget.** The Money framework lens is now live. It re-creates a personal-budget spreadsheet as an editable grid of section cards — **Income · Assets · Liabilities · Bills · Other Expenses · Goals** — plus a computed **Summary** (Net Total, Total Monthly Expenses, Net Monthly Surplus, Goals Total, …). Each project can hold several **budgets** (e.g. Personal / Business), listed in the sidebar with add / inline-rename (double-click) / delete; a project's first budget auto-seeds from the reference sheet so it's useful immediately, and everything is editable afterward. Rows use **click-to-edit** cells (click a number or label, Enter/Tab to commit, Esc to cancel), nest to any depth for organization, and can be added, deleted, or given sub-items; sections can be added (from the fixed kinds), renamed, collapsed, or deleted. Column totals sum each column across the whole tree; the cross-section Summary is derived, never edited. Every change snapshots for undo/redo and persists per project. (New `src/react/lens/money/` — `budgetKinds`, `defaultBudget` seed, `MoneyLens`, `BudgetsSidebar`, `BudgetSection` engine, `EditableCell`, `BudgetSummary` — plus pure `moneySelectors` + `moneyActions`, a `_budgets` slice on `CalData` with its migration branch, and `formatMoney`. Rollup + action tests lock the reference figures: 1442 / 550 / 11,273.91 / 5,842.91 / 2,108 / 49,131.)
+
 ## [1.35.0] - 2026-07-18
 
 ### Changed

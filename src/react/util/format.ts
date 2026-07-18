@@ -126,3 +126,10 @@ function getBlockEndAmPm(block: { startMin: number; endMin: number; ampm: AmPm }
 export function formatBlockTimeRange(block: { startMin: number; endMin: number; ampm: AmPm }): string {
   return `${formatClockMinutes(block.startMin, block.ampm)} – ${formatClockMinutes(block.endMin, getBlockEndAmPm(block))}`;
 }
+
+// Grouped number for the Money lens (e.g. 1273.91 → "1,273.91", 4100 → "4,100"). No
+// currency symbol — the budget's column headers already carry the "$" context.
+const moneyFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+export function formatMoney(value: number): string {
+  return Number.isFinite(value) ? moneyFormatter.format(value) : '';
+}

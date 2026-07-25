@@ -82,8 +82,9 @@ export interface RecurringBlock {
 
 // ── Money lens (budgets) ─────────────────────────────────────────────────────
 
-/** Which built-in budget section a row group is; sets its value columns + accent. */
-export type BudgetSectionKind = 'income' | 'assets' | 'liabilities' | 'bills' | 'funds' | 'goals';
+/** Which budget section a row group is; sets its value columns + default accent. `custom`
+ *  is a blank, user-added panel (single Amount column). */
+export type BudgetSectionKind = 'income' | 'assets' | 'liabilities' | 'bills' | 'funds' | 'goals' | 'custom';
 
 /**
  * A budget line item. `values` is keyed by the section kind's column ids (e.g. `monthly`).
@@ -114,6 +115,8 @@ export interface BudgetSection {
   items: BudgetItem[];
   collapsed?: boolean;
   layout?: SectionLayout;
+  /** Header stripe colour override (hex). Falls back to the kind's default accent. */
+  color?: string;
 }
 
 /** One named budget in a project's Money lens — a project can hold several. */
@@ -171,7 +174,11 @@ export interface AiConfig {
   mode: 'fetch' | 'websearch';
   ollamaUrl: string;
   ollamaModel: string;
+  /** API key for Ollama's hosted web-search endpoint (web search mode only) */
+  ollamaApiKey: string;
   interests: string;
+  /** Free-text location used to bias web-search results (e.g. "Austin, TX, USA") */
+  location: string;
   sites: string[];
   keywords: string[];
   /** Optional start of date range filter (YYYY-MM-DD) */

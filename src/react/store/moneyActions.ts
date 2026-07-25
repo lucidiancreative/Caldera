@@ -126,8 +126,19 @@ export async function duplicateSection(calData: CalData, budgetId: string, secti
     items: cloneItems(original.items),
     collapsed: original.collapsed,
   };
+  if (original.color) copy.color = original.color;
   if (original.layout) copy.layout = { x: original.layout.x + 1, y: original.layout.y + 1, w: original.layout.w };
   budget.sections.push(copy);
+  await saveCalData();
+}
+
+/** Set (or clear, with null) a section's header-stripe colour. */
+export async function setSectionColor(calData: CalData, budgetId: string, sectionId: string, color: string | null): Promise<void> {
+  const section = findSection(calData, budgetId, sectionId);
+  if (!section) return;
+  snapshot();
+  if (color) section.color = color;
+  else delete section.color;
   await saveCalData();
 }
 

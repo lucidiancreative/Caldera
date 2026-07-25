@@ -8,7 +8,9 @@ const EMPTY_CONFIG: AiConfig = {
   mode: 'fetch',
   ollamaUrl: 'http://localhost:11434',
   ollamaModel: '',
+  ollamaApiKey: '',
   interests: '',
+  location: '',
   sites: [],
   keywords: [],
   dateRangeStart: '',
@@ -104,6 +106,10 @@ export function AiImportModal({
       setStatus({ message: 'Please enter the Ollama endpoint URL.', type: 'error' });
       return;
     }
+    if (config.provider === 'ollama' && config.mode === 'websearch' && !config.ollamaApiKey) {
+      setStatus({ message: 'Enter an Ollama web-search API key (from your ollama.com account) first.', type: 'error' });
+      return;
+    }
 
     setRunning(true);
     setStatus({ message: 'Running import… this may take up to 30 seconds.', type: 'loading' });
@@ -125,7 +131,6 @@ export function AiImportModal({
     }
   }
 
-  const showModeSelector = config.provider === 'claude';
   const fetchMode = config.mode === 'fetch';
 
   return (
@@ -143,11 +148,7 @@ export function AiImportModal({
                   type="radio"
                   name="ai-provider"
                   checked={config.provider === provider}
-                  onChange={() => setConfig((current) => ({
-                    ...current,
-                    provider,
-                    mode: provider === 'claude' ? current.mode : 'fetch',
-                  }))}
+                  onChange={() => setConfig((current) => ({ ...current, provider }))}
                 />
                 <span>{provider === 'claude' ? 'Claude (Haiku)' : provider === 'openai' ? 'OpenAI' : 'Ollama (local)'}</span>
               </label>
@@ -199,10 +200,20 @@ export function AiImportModal({
                 </button>
               </div>
             </div>
+            <div className="ai-field-group">
+              <label className="ai-label">Web Search API Key <span className="ai-label-hint">(for Web Search mode)</span></label>
+              <input
+                type="password"
+                className="ai-input"
+                value={config.ollamaApiKey}
+                placeholder="ollama.com API key"
+                onChange={(event) => setConfig((current) => ({ ...current, ollamaApiKey: event.target.value }))}
+              />
+            </div>
           </div>
         )}
 
-        {showModeSelector && (
+        {(
           <div id="ai-mode-group" className="ai-field-group">
             <label className="ai-label">Import Mode</label>
             <div className="ai-radio-row">
@@ -283,6 +294,16 @@ export function AiImportModal({
                 placeholder="jazz concerts, FC Barcelona matches, local tech meetups…"
                 value={config.interests}
                 onChange={(event) => setConfig((current) => ({ ...current, interests: event.target.value }))}
+              />
+            </div>
+            <div className="ai-field-group">
+              <label className="ai-label">Your location <span className="ai-label-hint">(bias results to nearby events)</span></label>
+              <input
+                className="ai-input"
+                type="text"
+                placeholder="Austin, TX, USA"
+                value={config.location}
+                onChange={(event) => setConfig((current) => ({ ...current, location: event.target.value }))}
               />
             </div>
           </div>

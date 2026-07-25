@@ -71,7 +71,7 @@ interface RecurringBlock {
   subtasks: BlockSubtask[];
 }
 
-type BudgetSectionKind = 'income' | 'assets' | 'liabilities' | 'bills' | 'funds' | 'goals';
+type BudgetSectionKind = 'income' | 'assets' | 'liabilities' | 'bills' | 'funds' | 'goals' | 'custom';
 
 interface BudgetItem {
   id: string;
@@ -94,6 +94,7 @@ interface BudgetSection {
   items: BudgetItem[];
   collapsed?: boolean;
   layout?: SectionLayout;
+  color?: string;
 }
 
 interface Budget {
@@ -129,7 +130,9 @@ interface AiConfig {
   mode: 'fetch' | 'websearch';
   ollamaUrl: string;
   ollamaModel: string;
+  ollamaApiKey: string;
   interests: string;
+  location: string;
   sites: string[];
   keywords: string[];
   dateRangeStart: string;

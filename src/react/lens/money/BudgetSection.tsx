@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BudgetColumn } from './budgetKinds';
 import type { BudgetItem, BudgetSection as BudgetSectionType, CalData } from '../../../types';
-import { BUDGET_KINDS } from './budgetKinds';
+import { BUDGET_ACCENT_PRESETS, BUDGET_KINDS, sectionTotalTone } from './budgetKinds';
 import { sectionColumnTotals } from '../../store/moneySelectors';
 import {
   addItem,
@@ -11,6 +11,7 @@ import {
   renameSection,
   setItemDate,
   setItemValue,
+  setSectionColor,
   toggleSectionCollapsed,
   updateItemLabel,
 } from '../../store/moneyActions';
@@ -38,6 +39,8 @@ export function BudgetSection({
 }) {
   const def = BUDGET_KINDS[section.kind];
   const totals = sectionColumnTotals(section);
+  const totalTone = sectionTotalTone(section.kind);
+  const stripe = section.color ?? def.accent;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const rootRef = useCardHeight(section.id, onMeasure);
@@ -55,7 +58,7 @@ export function BudgetSection({
       className={'budget-section budget-section-' + section.kind}
       onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY }); }}
     >
-      <header className="budget-section-head">
+      <header className="budget-section-head" style={{ borderLeftColor: stripe }}>
         <span className="budget-drag-grip" title="Drag to move" aria-hidden="true">&#10303;</span>
         <div className="budget-section-title">
           <EditableCell display={section.title} onCommit={(value) => void renameSection(calData, budgetId, section.id, value)} />
@@ -88,14 +91,29 @@ export function BudgetSection({
 
           <div className="budget-row budget-total">
             <div className="budget-c-label">Total</div>
-            {def.columns.map((col) => <div className="budget-c-val" key={col.id}>{formatMoney(totals[col.id])}</div>)}
+            {def.columns.map((col) => (
+              <div className={'budget-c-val' + (totalTone ? ' budget-tone-' + totalTone : '')} key={col.id}>{formatMoney(totals[col.id])}</div>
+            ))}
             {def.hasDate && <div className="budget-c-date" />}
             <div className="budget-c-actions" />
           </div>
         </div>
       )}
 
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems}
+          footer={
+            <>
+              <div className="budget-ctx-label">Panel color</div>
+              <ColorSwatches current={section.color} onPick={(color) => void setSectionColor(calData, budgetId, section.id, color)} />
+            </>
+          }
+          onClose={() => setMenu(null)}
+        />
+      )}
 
       {confirmingDelete && (
         <ConfirmDialog
@@ -180,5 +198,37 @@ function BudgetRow({
         />
       ))}
     </>
+  );
+}
+
+// Preset stripe colours + a native custom picker, shown in a section's right-click menu.
+// Picking applies live and leaves the menu open, so several colours can be tried. Presets
+// commit instantly; the native picker fires onChange continuously while dragging, so its
+// commit is debounced (and the input is uncontrolled) to avoid a burst of disk writes.
+function ColorSwatches({ current, onPick }: { current?: string; onPick: (color: string) => void }) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  function pickDebounced(color: string) {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => onPick(color), 150);
+  }
+
+  return (
+    <div className="budget-ctx-colors">
+      {BUDGET_ACCENT_PRESETS.map((color) => (
+        <button
+          key={color}
+          type="button"
+          className={'budget-color-swatch' + (current?.toLowerCase() === color.toLowerCase() ? ' active' : '')}
+          style={{ background: color }}
+          title={color}
+          onClick={() => onPick(color)}
+        />
+      ))}
+      <label className="budget-color-swatch budget-color-custom" title="Custom color">
+        <input key={current ?? 'none'} type="color" defaultValue={current || '#8e8e93'} onChange={(event) => pickDebounced(event.target.value)} />
+      </label>
+    </div>
   );
 }

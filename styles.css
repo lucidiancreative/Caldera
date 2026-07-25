@@ -1363,7 +1363,18 @@ body.dark .card-toolbar .card-action-btn:hover {
 .budget-ctx-item.danger:hover { background: rgba(224, 82, 77, 0.12); }
 .budget-ctx-sep { height: 1px; background: var(--border); margin: 4px 6px; }
 
-.budget-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 0.92rem; }
+/* Panel-colour picker in the section right-click menu: preset swatches + a native custom picker. */
+.budget-ctx-label { font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); padding: 3px 8px 2px; }
+.budget-ctx-colors { display: flex; flex-wrap: wrap; gap: 5px; padding: 3px 8px 6px; max-width: 200px; }
+.budget-color-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); cursor: pointer; padding: 0; position: relative; overflow: hidden; transition: transform 0.1s ease; }
+.budget-color-swatch:hover { transform: scale(1.15); }
+.budget-color-swatch.active { border-color: var(--text); }
+.budget-color-custom { background: conic-gradient(from 0deg, #e0524d, #e08a3c, #e5e54a, #3fa46a, #3c7ae0, #7a6cf0, #d94f9c, #e0524d); }
+.budget-color-custom input[type="color"] { position: absolute; inset: -4px; opacity: 0; cursor: pointer; border: none; padding: 0; background: none; }
+
+/* Larger, easier-to-read budget text (Money page only); the tight budget-row/summary
+   spacing below compensates for the extra height. This one value scales the whole grid. */
+.budget-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 1.12rem; }
 .budget-section-head {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 10px; border-bottom: 1px solid var(--border);
@@ -1376,18 +1387,13 @@ body.dark .card-toolbar .card-action-btn:hover {
 .budget-head-btn { border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); border-radius: 6px; padding: 2px 7px; font-size: 0.8em; cursor: pointer; white-space: nowrap; }
 .budget-head-btn:hover { border-color: var(--accent); color: var(--accent); }
 .budget-del:hover { border-color: #e0524d; color: #e0524d; }
-.budget-section-body { padding: 5px 8px 8px; }
+.budget-section-body { padding: 3px 8px 5px; }
 
-/* Per-kind accent stripe on the section header. */
-.budget-section-income .budget-section-head,
-.budget-section-assets .budget-section-head { border-left-color: #3fa46a; }
-.budget-section-liabilities .budget-section-head { border-left-color: #e0524d; }
-.budget-section-bills .budget-section-head { border-left-color: #e08a3c; }
-.budget-section-funds .budget-section-head { border-left-color: #7a6cf0; }
-.budget-section-goals .budget-section-head { border-left-color: #3c7ae0; }
+/* The header accent stripe colour is applied inline per section (section.color ?? the
+   kind's default accent) so it can be recoloured from the section's right-click menu. */
 
 /* Rows share a flex skeleton so label / value / date / action columns line up. */
-.budget-row { display: flex; align-items: center; gap: 4px; min-height: 26px; }
+.budget-row { display: flex; align-items: center; gap: 4px; min-height: 19px; }
 .budget-c-label { flex: 1; min-width: 0; }
 .budget-c-val { width: 88px; flex-shrink: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .budget-c-date { width: 66px; flex-shrink: 0; }
@@ -1397,7 +1403,14 @@ body.dark .card-toolbar .card-action-btn:hover {
 .budget-empty-row { color: var(--text-muted); font-size: 0.85em; padding: 5px 4px; }
 .budget-total { margin-top: 3px; border-top: 1px solid var(--border); font-weight: 700; padding-top: 2px; }
 .budget-total .budget-c-label { padding-left: 5px; }
-.budget-total .budget-c-val { padding-right: 5px; }
+.budget-total .budget-c-val { padding-right: 5px; font-size: 1.22em; font-weight: 800; }
+
+/* Semantic tones for total numbers — section Total rows + Summary (green in, red owed,
+   orange out, blue goals). */
+.budget-tone-positive { color: #3fa46a; }
+.budget-tone-negative { color: #e0524d; }
+.budget-tone-expense  { color: #e08a3c; }
+.budget-tone-goals    { color: #3c7ae0; }
 
 /* Click-to-edit cell: reads as text, becomes an input on click. */
 .budget-cell {
@@ -1414,14 +1427,17 @@ body.dark .card-toolbar .card-action-btn:hover {
 .budget-row-btn:hover { border-color: var(--accent); color: var(--accent); }
 .budget-row-btn.budget-del:hover { border-color: #e0524d; color: #e0524d; }
 
-/* Computed summary card. */
+/* Computed summary card: big colored KPI tiles + supporting totals. */
 .budget-summary .budget-section-head { border-left-color: var(--accent); }
-.budget-summary-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 4px; font-size: 0.9em; }
-.budget-summary-row.strong { font-weight: 700; border-top: 1px solid var(--border); margin-top: 2px; padding-top: 5px; }
+.budget-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(86px, 1fr)); gap: 7px; margin-bottom: 9px; }
+.budget-kpi { border-radius: 10px; padding: 8px 8px 6px; text-align: center; background: color-mix(in srgb, currentColor 12%, var(--surface)); border: 1px solid color-mix(in srgb, currentColor 34%, transparent); }
+.budget-kpi-value { font-size: 1.6em; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.budget-kpi-label { font-size: 0.68em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-top: 3px; }
+.budget-summary-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 1.5px 4px; font-size: 0.96em; }
+.budget-summary-row.strong { border-top: 1px solid var(--border); margin-top: 2px; padding-top: 5px; }
 .budget-summary-label { color: var(--text-muted); }
-.budget-summary-row.strong .budget-summary-label { color: var(--text); }
-.budget-summary-value { font-variant-numeric: tabular-nums; }
-.budget-summary-value.negative { color: #e0524d; }
+.budget-summary-row.strong .budget-summary-label { color: var(--text); font-weight: 700; }
+.budget-summary-value { font-variant-numeric: tabular-nums; font-weight: 700; }
 
 /* ── Task list sidebar ────────────────────────────────── */
 /* Inner scroll area of the Time lens — the quick-add inbox + scheduled blocks. Sits

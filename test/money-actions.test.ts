@@ -182,3 +182,26 @@ test('setSectionsLayout persists positions (incl. summary) and only saves on cha
     restore();
   }
 });
+
+test('addSection custom, setSectionColor set/clear, and duplicate copies the colour', async () => {
+  const calData = oneBudget();
+  const { restore } = withStubbedBridge(calData);
+  try {
+    const { addSection, setSectionColor, duplicateSection } = await import('../src/react/store/moneyActions');
+    await addSection(calData, 'b1', 'custom', { x: 0, y: 0, w: 4 });
+    const panel = calData._budgets![0].sections[1];
+    assert.equal(panel.kind, 'custom');
+    assert.deepEqual(panel.layout, { x: 0, y: 0, w: 4 });
+
+    await setSectionColor(calData, 'b1', panel.id, '#ff8800');
+    assert.equal(panel.color, '#ff8800');
+
+    await duplicateSection(calData, 'b1', panel.id);
+    assert.equal(calData._budgets![0].sections[2].color, '#ff8800');
+
+    await setSectionColor(calData, 'b1', panel.id, null);
+    assert.equal('color' in panel, false);
+  } finally {
+    restore();
+  }
+});

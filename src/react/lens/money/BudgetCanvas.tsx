@@ -3,9 +3,9 @@ import RGL, { WidthProvider, type Layout } from 'react-grid-layout/legacy';
 // RGL's base positioning rules live in styles.css (the renderer's single, CSP-linked
 // stylesheet) rather than importing the library CSS — this IIFE bundle can't emit/link a
 // separate CSS file, and we only need the drag/transition rules (resize is disabled).
-import type { Budget, BudgetSectionKind, CalData } from '../../../types';
+import type { Budget, CalData } from '../../../types';
 import { addSection, setSectionsLayout } from '../../store/moneyActions';
-import { BUDGET_KINDS, BUDGET_KIND_ORDER, SUMMARY_CARD_ID } from './budgetKinds';
+import { SUMMARY_CARD_ID } from './budgetKinds';
 import { BudgetSection } from './BudgetSection';
 import { BudgetSummary } from './BudgetSummary';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
@@ -91,7 +91,7 @@ export default function BudgetCanvas({ calData, budget }: { calData: CalData; bu
     void setSectionsLayout(calData, budget.id, next.map((entry) => ({ id: entry.i, x: entry.x, y: entry.y, w: entry.w })));
   }
 
-  function addSectionAtCursor(kind: BudgetSectionKind) {
+  function addPanelAtCursor() {
     const rect = wrapRef.current?.getBoundingClientRect();
     let placement: { x: number; y: number; w: number } | undefined;
     if (rect && canvasMenu) {
@@ -103,13 +103,10 @@ export default function BudgetCanvas({ calData, budget }: { calData: CalData; bu
         w: DEFAULT_W,
       };
     }
-    void addSection(calData, budget.id, kind, placement);
+    void addSection(calData, budget.id, 'custom', placement); // a blank, customizable panel
   }
 
-  const canvasMenuItems: ContextMenuItem[] = BUDGET_KIND_ORDER.map((kind) => ({
-    label: `Add ${BUDGET_KINDS[kind].defaultTitle}`,
-    onClick: () => addSectionAtCursor(kind),
-  }));
+  const canvasMenuItems: ContextMenuItem[] = [{ label: 'Add panel', onClick: addPanelAtCursor }];
 
   function openCanvasMenu(event: MouseEvent) {
     event.preventDefault();

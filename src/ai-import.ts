@@ -6,7 +6,9 @@ import {
   listOllamaModels,
   runFetchImport,
   runOllamaFetchImport,
+  runOllamaWebSearchImport,
   runOpenAIFetchImport,
+  runOpenAIWebSearchImport,
   runWebSearchImport,
 } from './ai/model';
 
@@ -16,6 +18,7 @@ const debugLog = (...args: unknown[]) => {
 
 interface StoredAiConfig extends AiConfig {
   _apiKeyEncrypted?: boolean;
+  _ollamaApiKeyEncrypted?: boolean;
 }
 
 function isValidStoredAiConfig(stored: unknown): stored is StoredAiConfig {
@@ -45,35 +48,48 @@ function writeCalendarDataFile(data: Record<string, unknown>): void {
   fs.writeFileSync(calendarDataFilePath(), JSON.stringify(data, null, 2), 'utf8');
 }
 
-function encryptApiKey(plaintext: string): { value: string; encrypted: boolean } {
+function encryptSecret(plaintext: string): { value: string; encrypted: boolean } {
   if (plaintext && safeStorage.isEncryptionAvailable()) {
     return { value: safeStorage.encryptString(plaintext).toString('base64'), encrypted: true };
   }
   return { value: plaintext, encrypted: false };
 }
 
-function decryptApiKey(stored: StoredAiConfig): string {
-  if (stored._apiKeyEncrypted && stored.apiKey && safeStorage.isEncryptionAvailable()) {
+function decryptSecret(value: string | undefined, encrypted: boolean | undefined): string {
+  if (encrypted && value && safeStorage.isEncryptionAvailable()) {
     try {
-      return safeStorage.decryptString(Buffer.from(stored.apiKey, 'base64'));
+      return safeStorage.decryptString(Buffer.from(value, 'base64'));
     } catch {
       return '';
     }
   }
-  return stored.apiKey ?? '';
+  return value ?? '';
 }
 
 function loadStoredAiConfig(): AiConfig | null {
   const data = readCalendarDataFile();
   const stored = data._aiConfig;
   if (!isValidStoredAiConfig(stored)) return null;
-  return { ...stored, apiKey: decryptApiKey(stored), _apiKeyEncrypted: undefined } as AiConfig;
+  return {
+    ...stored,
+    apiKey: decryptSecret(stored.apiKey, stored._apiKeyEncrypted),
+    ollamaApiKey: decryptSecret(stored.ollamaApiKey, stored._ollamaApiKeyEncrypted),
+    _apiKeyEncrypted: undefined,
+    _ollamaApiKeyEncrypted: undefined,
+  } as AiConfig;
 }
 
 ipcMain.handle('ai-save-config', async (_event, config: AiConfig) => {
   const data = readCalendarDataFile();
-  const { value, encrypted } = encryptApiKey(config.apiKey);
-  data._aiConfig = { ...config, apiKey: value, _apiKeyEncrypted: encrypted } satisfies StoredAiConfig;
+  const apiKey = encryptSecret(config.apiKey);
+  const ollamaApiKey = encryptSecret(config.ollamaApiKey ?? '');
+  data._aiConfig = {
+    ...config,
+    apiKey: apiKey.value,
+    _apiKeyEncrypted: apiKey.encrypted,
+    ollamaApiKey: ollamaApiKey.value,
+    _ollamaApiKeyEncrypted: ollamaApiKey.encrypted,
+  } satisfies StoredAiConfig;
   writeCalendarDataFile(data);
 });
 
@@ -85,16 +101,25 @@ ipcMain.handle('ai-run-import', async (): Promise<AiImportResult> => {
   const aiConfig = loadStoredAiConfig();
   if (!aiConfig) return { error: 'No AI config found. Save settings first.' };
 
+  const webSearch = aiConfig.mode === 'websearch';
+
   if (aiConfig.provider === 'ollama') {
     if (!aiConfig.ollamaUrl) return { error: 'No Ollama endpoint configured.' };
+    if (webSearch && !aiConfig.ollamaApiKey) {
+      return { error: 'An Ollama API key is required for web search. Create one in your ollama.com account settings.' };
+    }
   } else if (!aiConfig.apiKey) {
     return { error: 'No API key configured.' };
   }
 
   try {
+    if (webSearch) {
+      if (aiConfig.provider === 'ollama') return await runOllamaWebSearchImport(aiConfig, { debugLog });
+      if (aiConfig.provider === 'openai') return await runOpenAIWebSearchImport(aiConfig, { debugLog });
+      return await runWebSearchImport(aiConfig, { debugLog });
+    }
     if (aiConfig.provider === 'ollama') return await runOllamaFetchImport(aiConfig, { debugLog });
     if (aiConfig.provider === 'openai') return await runOpenAIFetchImport(aiConfig, { debugLog });
-    if (aiConfig.mode === 'websearch') return await runWebSearchImport(aiConfig, { debugLog });
     return await runFetchImport(aiConfig, { debugLog });
   } catch (err) {
     console.error('[ai-run-import]', err);

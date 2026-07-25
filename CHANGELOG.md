@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.41.0] - 2026-07-19
+
+### Added
+- **Location-aware event import.** Web Search mode now has a **"Your location"** field (e.g. `Austin, TX, USA`). It's injected into the search prompt as a hard constraint ("only include events in or near …") for every provider, and passed to OpenAI's `web_search_options.user_location` so the search itself is geographically biased. Fetch mode honors it too when it's set.
+- **Web Search now works with OpenAI and Ollama, not just Claude.** The Import Mode selector (Fetch / Web Search) is available for all three providers:
+  - **OpenAI** uses the `gpt-5-search-api` model, which searches the web before answering (Chat Completions + `web_search_options`).
+  - **Ollama** uses its hosted web-search API (`ollama.com/api/web_search`), then hands the results to your local model to extract events. This needs an Ollama API key — a new **"Web Search API Key"** field in the Ollama panel, stored encrypted at rest via `safeStorage` like the other keys.
+
+### Notes
+- Both new API paths were implemented against the providers' current documented request/response shapes (OpenAI's `gpt-4o-*-search-preview` models are retired on 2026-07-23, so `gpt-5-search-api` is used instead).
+
+### Fixed
+- **Web Search event import now works.** The "Web Search" mode returned "No events found" on every run because its server-side-tool loop was written for client-side tools — it watched for a `tool_use` stop reason (which Anthropic's server-side `web_search` never emits) and fed the model empty `tool_result` blocks, while the real `pause_turn` continuation case fell through and discarded the result. Rewritten to drive the server tool correctly: take the model's answer on `end_turn`, and on `pause_turn` resume by re-sending the assistant turn (no injected tool results). The raw web-search response is now logged in dev for debugging.
+- **Web Search now uses your saved keywords.** The search was seeded only from the free-text "Describe your interests" box and ignored saved keywords, so anyone who'd configured keywords (but not interests) searched for an empty string and got nothing. The search now falls back to the saved keywords when interests is blank, and running a web search with neither set returns a clear "Add some interests or keywords" message instead of a silent empty list.
+
+### Changed
+- **Bigger, colorful Money totals.** Each panel's **Total** row is now larger and tinted by financial meaning — green for income/assets, red for liabilities, orange for bills/expenses, blue for goals (custom panels stay neutral). The **Summary** card leads with three big colored **KPI tiles** — Net Worth, Surplus / mo, and Goals (surplus/net worth turn red when negative) — over a compact list of the supporting totals, each in the same semantic colors. (New `.budget-tone-*` classes + a `sectionTotalTone` helper; `BudgetSummary` reworked into tiles + rows.)
+
+### Changed
+- **"Add panel" replaces the per-type add menu.** Right-clicking the Money canvas now offers a single **Add panel** that drops a blank, customizable panel (a new `custom` section kind with one **Amount** column) instead of the six "Add Income / Add Goals / …" options. Rename it, recolor it, and add rows to make it whatever you need. The seeded default budget keeps its typed sections.
+
+### Added
+- **Recolor a panel's header stripe.** Each panel's right-click menu now has a **Panel color** picker — eight preset swatches plus a native custom-color picker — that live-updates the colored tab on its header. Applies to every panel (custom and seeded); the choice persists per budget and is carried along when a panel is duplicated. Section accent colors are now data-driven (`section.color ?? the kind's default accent`) rather than fixed per-kind CSS.
+
+## [1.37.2] - 2026-07-19
+
+### Changed
+- **Larger, tighter Money budget text.** Bumped the budget grid's font size (`.budget-section` 0.92rem → 1.12rem) so it reads more easily on small screens, and roughly halved the vertical spacing to compensate (row min-height and section/summary padding). Scoped to the Money page only — the rest of the app is unchanged.
+
 ## [1.37.1] - 2026-07-18
 
 ### Fixed

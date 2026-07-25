@@ -39,9 +39,13 @@ export function buildFetchPrompt(
   pageDumps: string[],
   dateRangeStart?: string,
   dateRangeEnd?: string,
+  location?: string,
 ): string {
   const keywordRule = keywords.length
     ? `- IMPORTANT: Only include events where the title or description contains at least one of these keywords (case-insensitive): ${keywords.join(', ')}. If no events match these keywords, return []\n`
+    : '';
+  const locationRule = location
+    ? `- Only include events physically located in or near ${location}. Skip events in other cities or regions.\n`
     : '';
   const rangeStart = dateRangeStart || today;
   const rangeEnd = dateRangeEnd || '';
@@ -62,6 +66,7 @@ export function buildFetchPrompt(
     `  - Only fall back to the SOURCE header URL if no specific event link exists.\n` +
     `- Convert all dates to YYYY-MM-DD format.\n` +
     dateRangeRule +
+    locationRule +
     keywordRule +
     `- If a page says it is empty or JS-rendered, skip it\n` +
     `- If no events are found at all, return []\n\n` +
@@ -71,6 +76,10 @@ export function buildFetchPrompt(
 
 function buildWebSearchPrompt(aiConfig: AiConfig, today: string): string {
   const keywords = aiConfig.keywords ?? [];
+  // Seed the search from the interests box, falling back to the saved keywords
+  // so the search terms the user saved actually drive the web search.
+  const searchTerms = aiConfig.interests?.trim() || keywords.join(', ');
+  const location = aiConfig.location?.trim();
   const keywordRule = keywords.length
     ? `\nIMPORTANT: Only include events where the title or description contains at least one of these keywords (case-insensitive): ${keywords.join(', ')}. If no events match these keywords, return [].`
     : '';
@@ -81,7 +90,8 @@ function buildWebSearchPrompt(aiConfig: AiConfig, today: string): string {
     : `Look for specific events on or after ${rangeStart}.\n`;
 
   return (
-    `Today is ${today}. Search the web to find upcoming events matching these interests: "${aiConfig.interests}".\n` +
+    `Today is ${today}. Search the web to find upcoming events matching these interests: "${searchTerms}".\n` +
+    (location ? `IMPORTANT: Only include events physically located in or near ${location}. Ignore events in other cities or regions.\n` : '') +
     dateRangeRule +
     `After searching, return ONLY a JSON array with these keys per event:\n` +
     `  title (string), date (YYYY-MM-DD), time (HH:MM or null), notes (string), sourceUrl (string)\n\n` +
@@ -107,6 +117,7 @@ export async function runFetchImport(
     pageDumps,
     aiConfig.dateRangeStart,
     aiConfig.dateRangeEnd,
+    aiConfig.location?.trim(),
   );
   const response = await callClaude(aiConfig.apiKey, [{ role: 'user', content: prompt }]);
   const rawText = response.content.filter(block => block.type === 'text').map(block => block.text ?? '').join('');
@@ -124,6 +135,15 @@ export async function runWebSearchImport(
   options: { debugLog?: DebugLogger } = {},
 ): Promise<AiImportResult> {
   const today = getTodayIsoDate();
+  if (!aiConfig.interests?.trim() && !(aiConfig.keywords ?? []).length) {
+    return { error: 'Add some interests or keywords before running a web search.' };
+  }
+
+  // web_search is a server-side tool: Anthropic runs the search loop itself and
+  // returns the finished answer. A normal turn ends with stop_reason 'end_turn';
+  // if the server hits its internal iteration limit it returns 'pause_turn', which
+  // we resume by re-sending the assistant turn (no extra user message, no tool
+  // results — those are only for client-side tools).
   const tools = [{ type: 'web_search_20250305', name: 'web_search' }];
   const messages: ClaudeMessage[] = [{
     role: 'user',
@@ -133,21 +153,12 @@ export async function runWebSearchImport(
   let finalText = '';
   for (let attempt = 0; attempt < 5; attempt++) {
     const response = await callClaude(aiConfig.apiKey, messages, tools);
-    if (response.stop_reason === 'end_turn') {
-      finalText = response.content.filter(block => block.type === 'text').map(block => block.text ?? '').join('');
-      break;
-    }
-    if (response.stop_reason === 'tool_use') {
-      messages.push({ role: 'assistant', content: response.content });
-      const toolResults = response.content
-        .filter((block): block is ClaudeContentBlock & { id: string } => block.type === 'tool_use' && block.id !== undefined)
-        .map(block => ({ type: 'tool_result' as const, tool_use_id: block.id, content: '' }));
-      messages.push({ role: 'user', content: toolResults });
-      continue;
-    }
-    break;
+    finalText = response.content.filter(block => block.type === 'text').map(block => block.text ?? '').join('');
+    if (response.stop_reason !== 'pause_turn') break;
+    messages.push({ role: 'assistant', content: response.content });
   }
 
+  options.debugLog?.('[ai-import] Claude web-search raw response:', finalText.slice(0, 500));
   return filterEventsByDateRange(
     parseEventText(finalText, 'Claude', options),
     aiConfig.dateRangeStart,
@@ -169,6 +180,7 @@ export async function runOllamaFetchImport(
     pageDumps,
     aiConfig.dateRangeStart,
     aiConfig.dateRangeEnd,
+    aiConfig.location?.trim(),
   );
   const text = await callOllama(aiConfig.ollamaUrl, aiConfig.ollamaModel, prompt);
   options.debugLog?.('[ai-import] Ollama raw response:', text.slice(0, 500));
@@ -193,11 +205,62 @@ export async function runOpenAIFetchImport(
     pageDumps,
     aiConfig.dateRangeStart,
     aiConfig.dateRangeEnd,
+    aiConfig.location?.trim(),
   );
   const text = await callOpenAI(aiConfig.apiKey, prompt);
   options.debugLog?.('[ai-import] OpenAI raw response:', text.slice(0, 500));
   return filterEventsByDateRange(
     parseEventText(text, 'OpenAI', options),
+    aiConfig.dateRangeStart,
+    aiConfig.dateRangeEnd,
+    options,
+  );
+}
+
+export async function runOpenAIWebSearchImport(
+  aiConfig: AiConfig,
+  options: { debugLog?: DebugLogger } = {},
+): Promise<AiImportResult> {
+  const today = getTodayIsoDate();
+  if (!aiConfig.interests?.trim() && !(aiConfig.keywords ?? []).length) {
+    return { error: 'Add some interests or keywords before running a web search.' };
+  }
+  const prompt = buildWebSearchPrompt(aiConfig, today);
+  const text = await callOpenAIWebSearch(aiConfig.apiKey, prompt, aiConfig.location?.trim());
+  options.debugLog?.('[ai-import] OpenAI web-search raw response:', text.slice(0, 500));
+  return filterEventsByDateRange(
+    parseEventText(text, 'OpenAI', options),
+    aiConfig.dateRangeStart,
+    aiConfig.dateRangeEnd,
+    options,
+  );
+}
+
+export async function runOllamaWebSearchImport(
+  aiConfig: AiConfig,
+  options: { debugLog?: DebugLogger } = {},
+): Promise<AiImportResult> {
+  const today = getTodayIsoDate();
+  const keywords = aiConfig.keywords ?? [];
+  const searchTerms = aiConfig.interests?.trim() || keywords.join(', ');
+  if (!searchTerms) return { error: 'Add some interests or keywords before running a web search.' };
+  if (!aiConfig.ollamaApiKey) {
+    return { error: 'An Ollama API key is required for web search. Create one in your ollama.com account settings.' };
+  }
+
+  const location = aiConfig.location?.trim();
+  const query = [searchTerms, 'events', location].filter(Boolean).join(' ');
+  const results = await ollamaWebSearch(aiConfig.ollamaApiKey, query);
+  options.debugLog?.(`[ai-import] Ollama web search: ${results.length} results for "${query}"`);
+  if (!results.length) return { events: [] };
+
+  // Feed the hosted search results to the local model as page dumps to extract structured events.
+  const pageDumps = results.map(result => `--- SOURCE: ${result.url} ---\n${result.content}`);
+  const prompt = buildFetchPrompt(today, searchTerms, keywords, pageDumps, aiConfig.dateRangeStart, aiConfig.dateRangeEnd, location);
+  const text = await callOllama(aiConfig.ollamaUrl, aiConfig.ollamaModel, prompt);
+  options.debugLog?.('[ai-import] Ollama web-search raw response:', text.slice(0, 500));
+  return filterEventsByDateRange(
+    parseEventText(text, 'Ollama', options),
     aiConfig.dateRangeStart,
     aiConfig.dateRangeEnd,
     options,
@@ -268,6 +331,39 @@ async function callOpenAI(apiKey: string, prompt: string): Promise<string> {
   };
   const data = await postJson<OpenAIResponse>('https://api.openai.com/v1/chat/completions', body, headers, 120_000, true);
   return data.choices?.[0]?.message?.content ?? '';
+}
+
+async function callOpenAIWebSearch(apiKey: string, prompt: string, location?: string): Promise<string> {
+  // gpt-5-search-api always searches the web before responding; temperature is not supported.
+  const body: Record<string, unknown> = {
+    model: 'gpt-5-search-api',
+    messages: [{ role: 'user', content: prompt }],
+    max_completion_tokens: 8192,
+    web_search_options: location
+      ? { user_location: { type: 'approximate', approximate: { city: location } } }
+      : {},
+  };
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  };
+  const data = await postJson<OpenAIResponse>('https://api.openai.com/v1/chat/completions', body, headers, 120_000, true);
+  return data.choices?.[0]?.message?.content ?? '';
+}
+
+async function ollamaWebSearch(
+  apiKey: string,
+  query: string,
+  maxResults = 8,
+): Promise<{ title: string; url: string; content: string }[]> {
+  const data = await postJson<{ results?: { title: string; url: string; content: string }[] }>(
+    'https://ollama.com/api/web_search',
+    { query, max_results: maxResults },
+    { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    60_000,
+    true,
+  );
+  return data.results ?? [];
 }
 
 async function postJson<T = unknown>(
